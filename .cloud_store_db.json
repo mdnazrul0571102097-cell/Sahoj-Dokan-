@@ -1,0 +1,484 @@
+{
+  "1733414031": {
+    "phone": "1733414031",
+    "fullPhone": "01733414031",
+    "shopId": "SD-01733414031",
+    "profile": {
+      "shopName": "বিসমিল্লাহ স্টোর",
+      "phone": "01733414031"
+    },
+    "data": {
+      "products": [
+        {
+          "id": "p1",
+          "name": "টেস্ট পণ্য",
+          "sellPrice": 100
+        }
+      ],
+      "sales": [],
+      "customers": [],
+      "bakiTransactions": [],
+      "purchases": [],
+      "suppliers": [],
+      "supplierTransactions": [],
+      "expenses": [],
+      "bulkPurchases": [],
+      "subscription": null
+    },
+    "lastSyncedAt": "2026-10-28T08:30:21.776Z",
+    "version": 1
+  },
+  "0171102097": {
+    "phone": "0171102097",
+    "fullPhone": "0171102097",
+    "shopId": "SD-0171102097",
+    "profile": {
+      "shopName": "বিসমিল্লাহ জেনারেল স্টোর",
+      "ownerName": "মো: নজরুল ইসলাম",
+      "phone": "0171102097",
+      "email": "mdnazrul0571102097@gmail.com",
+      "address": "সদর রোড, বাজার মোড়",
+      "pin": "",
+      "currency": "৳",
+      "isRegistered": false,
+      "language": "en"
+    },
+    "data": {
+      "products": [
+        {
+          "id": "prod_1792863163336_99q5d",
+          "name": "ব্লুটুত",
+          "nameEn": "",
+          "category": "catVegetables",
+          "costPrice": 100,
+          "sellPrice": 120,
+          "stock": 10,
+          "unit": "piece",
+          "barcode": "200741331340",
+          "isLoose": false,
+          "image": "data:image/jpeg;base64,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",
+          "minStockAlert": 5,
+          "createdAt": "2026-10-24T17:32:43.336Z",
+          "updatedAt": "2026-10-24T17:32:43.336Z"
+        },
+        {
+          "id": "prod_1",
+          "name": "গোল আলু (নতুন/দেশি)",
+          "nameEn": "Potato (Alu)",
+          "barcode": "100001",
+          "category": "catVegetables",
+          "costPrice": 28,
+          "sellPrice": 35,
+          "stock": 50,
+          "unit": "kg",
+          "isLoose": true,
+          "image": "https://images.unsplash.com/photo-1518977676601-b53f82aba655?auto=format&fit=crop&w=400&q=80",
+          "minStockAlert": 10,
+          "createdAt": "2026-10-23T06:08:31.706Z",
+          "updatedAt": "2026-10-23T06:08:31.712Z"
+        },
+        {
+          "id": "prod_2",
+          "name": "দেশি পেঁয়াজ",
+          "nameEn": "Deshi Onion (Peyaj)",
+          "barcode": "100002",
+          "category": "catVegetables",
+          "costPrice": 75,
+          "sellPrice": 90,
+          "stock": 40,
+          "unit": "kg",
+          "isLoose": true,
+          "image": "https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?auto=format&fit=crop&w=400&q=80",
+          "minStockAlert": 8,
+          "createdAt": "2026-10-23T06:08:31.712Z",
+          "updatedAt": "2026-10-23T06:08:31.712Z"
+        },
+        {
+          "id": "prod_3",
+          "name": "দেশি রসুন",
+          "nameEn": "Garlic (Roshun)",
+          "barcode": "100003",
+          "category": "catVegetables",
+          "costPrice": 190,
+          "sellPrice": 230,
+          "stock": 15,
+          "unit": "kg",
+          "isLoose": true,
+          "image": "https://images.unsplash.com/photo-1540148426945-6cf22a6b2383?auto=format&fit=crop&w=400&q=80",
+          "minStockAlert": 4,
+          "createdAt": "2026-10-23T06:08:31.712Z",
+          "updatedAt": "2026-10-23T06:08:31.712Z"
+        },
+        {
+          "id": "prod_4",
+          "name": "দেশি আদা",
+          "nameEn": "Fresh Ginger (Ada)",
+          "barcode": "100004",
+          "category": "catVegetables",
+          "costPrice": 210,
+          "sellPrice": 250,
+          "stock": 12,
+          "unit": "kg",
+          "isLoose": true,
+          "image": "https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&w=400&q=80",
+          "minStockAlert": 3,
+          "createdAt": "2026-10-23T06:08:31.712Z",
+          "updatedAt": "2026-10-23T06:08:31.712Z"
+        },
+        {
+          "id": "prod_5",
+          "name": "দেশি মসুর ডাল (চিকন)",
+          "nameEn": "Red Lentil (Moshur Dal)",
+          "barcode": "100005",
+          "category": "catGrains",
+          "costPrice": 125,
+          "sellPrice": 145,
+          "stock": 30,
+          "unit": "kg",
+          "isLoose": true,
+          "image": "https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=400&q=80",
+          "minStockAlert": 5,
+          "createdAt": "2026-10-23T06:08:31.712Z",
+          "updatedAt": "2026-10-23T06:08:31.712Z"
+        },
+        {
+          "id": "prod_6",
+          "name": "সাদা চিনি (খোলা)",
+          "nameEn": "White Sugar (Chini)",
+          "barcode": "100006",
+          "category": "catGrains",
+          "costPrice": 128,
+          "sellPrice": 138,
+          "stock": 45,
+          "unit": "kg",
+          "isLoose": true,
+          "image": "https://images.unsplash.com/photo-1581441363689-1f3c3c414635?auto=format&fit=crop&w=400&q=80",
+          "minStockAlert": 8,
+          "createdAt": "2026-10-23T06:08:31.712Z",
+          "updatedAt": "2026-10-23T06:08:31.712Z"
+        },
+        {
+          "id": "prod_7",
+          "name": "রূপচাঁদা সয়াবিন তেল ১ লিটার",
+          "nameEn": "Rupchanda Soybean Oil 1L",
+          "barcode": "8941100123456",
+          "category": "catSpices",
+          "costPrice": 168,
+          "sellPrice": 180,
+          "stock": 24,
+          "unit": "liter",
+          "isLoose": false,
+          "image": "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=400&q=80",
+          "minStockAlert": 5,
+          "createdAt": "2026-10-23T06:08:31.712Z",
+          "updatedAt": "2026-10-23T06:08:31.712Z"
+        },
+        {
+          "id": "prod_8",
+          "name": "মিনিকেট চাল (৫০ কেজি বস্তা বা খোলা)",
+          "nameEn": "Miniket Rice (Chal)",
+          "barcode": "100008",
+          "category": "catGrains",
+          "costPrice": 65,
+          "sellPrice": 74,
+          "stock": 80,
+          "unit": "kg",
+          "isLoose": true,
+          "image": "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=400&q=80",
+          "minStockAlert": 15,
+          "createdAt": "2026-10-23T06:08:31.712Z",
+          "updatedAt": "2026-10-23T06:08:31.712Z"
+        },
+        {
+          "id": "prod_9",
+          "name": "লাল ডিম (১ হালি / ৪ পিস)",
+          "nameEn": "Farm Brown Eggs (4 pcs)",
+          "barcode": "100009",
+          "category": "catDairy",
+          "costPrice": 42,
+          "sellPrice": 50,
+          "stock": 35,
+          "unit": "piece",
+          "isLoose": false,
+          "image": "https://images.unsplash.com/photo-1516467508483-a7212febe31a?auto=format&fit=crop&w=400&q=80",
+          "minStockAlert": 8,
+          "createdAt": "2026-10-23T06:08:31.712Z",
+          "updatedAt": "2026-10-23T06:08:31.712Z"
+        },
+        {
+          "id": "prod_10",
+          "name": "ম্যাগি মসলা নুডলস ৪ প্যাক",
+          "nameEn": "Maggi 2-Min Noodles 4-Pack",
+          "barcode": "8901058852331",
+          "category": "catSnacks",
+          "costPrice": 82,
+          "sellPrice": 95,
+          "stock": 18,
+          "unit": "packet",
+          "isLoose": false,
+          "image": "https://images.unsplash.com/photo-1612927601601-6638404737ce?auto=format&fit=crop&w=400&q=80",
+          "minStockAlert": 4,
+          "createdAt": "2026-10-23T06:08:31.712Z",
+          "updatedAt": "2026-10-23T06:08:31.712Z"
+        },
+        {
+          "id": "prod_11",
+          "name": "রাধুনী গুঁড়া মরিচ ১০০ গ্রাম",
+          "nameEn": "Radhuni Chilli Powder 100g",
+          "barcode": "8941100554321",
+          "category": "catSpices",
+          "costPrice": 56,
+          "sellPrice": 68,
+          "stock": 3,
+          "unit": "packet",
+          "isLoose": false,
+          "image": "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=400&q=80",
+          "minStockAlert": 5,
+          "createdAt": "2026-10-23T06:08:31.712Z",
+          "updatedAt": "2026-10-23T06:08:31.712Z"
+        },
+        {
+          "id": "prod_12",
+          "name": "লাক্স বিউটি সাবান ১০০ গ্রাম",
+          "nameEn": "Lux Beauty Soap 100g",
+          "barcode": "8901030383723",
+          "category": "catHousehold",
+          "costPrice": 48,
+          "sellPrice": 58,
+          "stock": 2,
+          "unit": "piece",
+          "isLoose": false,
+          "image": "https://images.unsplash.com/photo-1600857544200-b2f666a9a2ec?auto=format&fit=crop&w=400&q=80",
+          "minStockAlert": 5,
+          "createdAt": "2026-10-23T06:08:31.712Z",
+          "updatedAt": "2026-10-23T06:08:31.712Z"
+        },
+        {
+          "id": "prod_13",
+          "name": "প্রাণ ম্যাঙ্গো ফ্রুট ড্রিংক ২৫০ মি.লি.",
+          "nameEn": "Pran Frooto Mango 250ml",
+          "barcode": "8941100223344",
+          "category": "catDrinks",
+          "costPrice": 24,
+          "sellPrice": 30,
+          "stock": 30,
+          "unit": "piece",
+          "isLoose": false,
+          "image": "https://images.unsplash.com/photo-1546173159-315724a31696?auto=format&fit=crop&w=400&q=80",
+          "minStockAlert": 6,
+          "createdAt": "2026-10-23T06:08:31.712Z",
+          "updatedAt": "2026-10-23T06:08:31.712Z"
+        }
+      ],
+      "sales": [],
+      "customers": [
+        {
+          "id": "cust_1",
+          "name": "রফিকুল ইসলাম",
+          "phone": "01711223344",
+          "address": "বাজার সংলগ্ন, বাড়ি নং ১২",
+          "totalDue": 450,
+          "createdAt": "2026-10-18T06:08:31.712Z"
+        },
+        {
+          "id": "cust_2",
+          "name": "হাজী আব্দুল করিম",
+          "phone": "01819887766",
+          "address": "মেইন রোড, স্কুল গলি",
+          "totalDue": 1200,
+          "createdAt": "2026-10-13T06:08:31.712Z"
+        },
+        {
+          "id": "cust_3",
+          "name": "সালাম ভাই (চা দোকানি)",
+          "phone": "01912334455",
+          "address": "বাজারের মোড়",
+          "totalDue": 320,
+          "createdAt": "2026-10-21T06:08:31.713Z"
+        }
+      ],
+      "bakiTransactions": [
+        {
+          "id": "btx_1",
+          "customerId": "cust_1",
+          "date": "2026-10-18T06:08:31.713Z",
+          "type": "sale_due",
+          "amount": 650,
+          "note": "চাল ও ডাল বাকি নিয়েছিলেন",
+          "balanceAfter": 650
+        },
+        {
+          "id": "btx_2",
+          "customerId": "cust_1",
+          "date": "2026-10-21T06:08:31.713Z",
+          "type": "payment_received",
+          "amount": 200,
+          "note": "নগদ ২০০ টাকা পরিশোধ করেছেন",
+          "balanceAfter": 450
+        },
+        {
+          "id": "btx_3",
+          "customerId": "cust_2",
+          "date": "2026-10-15T06:08:31.713Z",
+          "type": "sale_due",
+          "amount": 1500,
+          "note": "তেল, মসলা ও চিনি বাকি",
+          "balanceAfter": 1500
+        },
+        {
+          "id": "btx_4",
+          "customerId": "cust_2",
+          "date": "2026-10-20T06:08:31.713Z",
+          "type": "payment_received",
+          "amount": 300,
+          "note": "বাকি বাবদ জমা",
+          "balanceAfter": 1200
+        },
+        {
+          "id": "btx_5",
+          "customerId": "cust_3",
+          "date": "2026-10-21T06:08:31.713Z",
+          "type": "sale_due",
+          "amount": 320,
+          "note": "চিনি ও দুধ",
+          "balanceAfter": 320
+        }
+      ],
+      "purchases": [],
+      "suppliers": [
+        {
+          "id": "supp_1",
+          "name": "মেসার্স রহিম রাইস মিল",
+          "contactPerson": "হাজী আব্দুর রহিম",
+          "phone": "01711223344",
+          "address": "বাবুবাজার চাল মোকাম, ঢাকা",
+          "company": "মিনিকেট ও নাজিরশাইল চাল আড়ৎ",
+          "totalDue": 18500,
+          "createdAt": "2026-10-13T07:03:39.481Z"
+        },
+        {
+          "id": "supp_2",
+          "name": "মদিনা ট্রেডিং কর্পোরেশন",
+          "contactPerson": "মোঃ কামরুল হাসান",
+          "phone": "01819556677",
+          "address": "মৌলভীবাজার ভোজ্যতেল ও চিনি মোকাম, ঢাকা",
+          "company": "রূপচাঁদা ও তীর অয়েল ডিলার",
+          "totalDue": 12400,
+          "createdAt": "2026-10-08T07:03:39.481Z"
+        },
+        {
+          "id": "supp_3",
+          "name": "সোনার বাংলা ডাল ভাণ্ডার",
+          "contactPerson": "নুরুল ইসলাম",
+          "phone": "01912889900",
+          "address": "শ্যামবাজার পাইকারি বাজার, ঢাকা",
+          "company": "দেশি ও ক্যাঙ্গারু মসুর ডাল",
+          "totalDue": 0,
+          "createdAt": "2026-09-28T07:03:39.481Z"
+        }
+      ],
+      "supplierTransactions": [
+        {
+          "id": "stx_1",
+          "supplierId": "supp_1",
+          "date": "2026-10-23T07:03:39.481Z",
+          "type": "purchase_due",
+          "amount": 28500,
+          "note": "মিনিকেট চাল ১০ বস্তা ক্রয় চালান #4410",
+          "balanceAfter": 28500
+        },
+        {
+          "id": "stx_2",
+          "supplierId": "supp_1",
+          "date": "2026-10-26T07:03:39.481Z",
+          "type": "payment_made",
+          "amount": 10000,
+          "note": "ব্যাংক / ক্যাশ পরিশোধ",
+          "balanceAfter": 18500
+        },
+        {
+          "id": "stx_3",
+          "supplierId": "supp_2",
+          "date": "2026-10-25T07:03:39.481Z",
+          "type": "purchase_due",
+          "amount": 12400,
+          "note": "রূপচাঁদা তেল ও চিনি চালান #882",
+          "balanceAfter": 12400
+        }
+      ],
+      "expenses": [
+        {
+          "id": "exp_1",
+          "date": "2026-10-28T07:03:39.481Z",
+          "category": "transport",
+          "categoryName": "পরিবহন ও ভ্যান ভাড়া",
+          "amount": 250,
+          "note": "পাইকারি বাজার থেকে দোকানে মালামাল পরিবহন",
+          "paymentMethod": "cash",
+          "createdAt": "2026-10-28T07:03:39.481Z"
+        },
+        {
+          "id": "exp_2",
+          "date": "2026-10-28T07:03:39.481Z",
+          "category": "food",
+          "categoryName": "আপ্যায়ন ও চা-নাস্তা",
+          "amount": 120,
+          "note": "দোকানের চা-বিস্কুট ও আপ্যায়ন",
+          "paymentMethod": "cash",
+          "createdAt": "2026-10-28T07:03:39.481Z"
+        },
+        {
+          "id": "exp_3",
+          "date": "2026-10-27T07:03:39.481Z",
+          "category": "packaging",
+          "categoryName": "পলিথিন ও প্যাকিং ব্যাগ",
+          "amount": 380,
+          "note": "৫০০ গ্রাম ও ১ কেজির পলিথিন প্যাকেট",
+          "paymentMethod": "cash",
+          "createdAt": "2026-10-27T07:03:39.481Z"
+        }
+      ],
+      "bulkPurchases": [
+        {
+          "id": "bp_1",
+          "purchaseNo": "PO-1001",
+          "date": "2026-10-23T07:03:39.481Z",
+          "supplierId": "supp_1",
+          "supplierName": "মেসার্স রহিম রাইস মিল",
+          "supplierPhone": "01711223344",
+          "items": [
+            {
+              "productId": "prod_8",
+              "productName": "মিনিকেট চাল (৫০ কেজি বস্তা)",
+              "category": "catGrains",
+              "quantity": 10,
+              "unit": "piece",
+              "unitCostPrice": 3250,
+              "totalCost": 32500
+            }
+          ],
+          "totalAmount": 32500,
+          "paidAmount": 14000,
+          "dueAmount": 18500,
+          "paymentType": "partial",
+          "note": "মোকাম মেমো #4410",
+          "createdAt": "2026-10-23T07:03:39.481Z"
+        }
+      ],
+      "subscription": {
+        "status": "trial",
+        "plan": "trial",
+        "trialStartDate": "2026-10-25T12:13:37.480Z",
+        "trialEndDate": "2026-12-24T12:13:37.480Z",
+        "lastActiveTimestamp": 1793171021206,
+        "shopId": "SD-0171102097",
+        "isClockTampered": false
+      }
+    },
+    "lastSyncedAt": "2026-10-28T07:03:41.726Z",
+    "version": 1
+  },
+  "__stats": {
+    "totalDownloads": 11
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "appId": "com.sahojdokan.pos",
+  "appName": "Sahoj Dokan - সহজ দোকান",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

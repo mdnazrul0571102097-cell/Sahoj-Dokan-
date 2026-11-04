@@ -1,0 +1,8 @@
+{
+  "name": "Sahoj Dokan POS",
+  "description": "সহজ দোকান POS - সম্পূর্ণ বাংলাদেশী অফলাইন গ্রোসারি ও রিটেল পিওএস, পণ্য স্ক্যানার, বাকি খাতা ও দৈনিক হিসাব অ্যাপ।",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"],
+  "ownerSecretKey": "SD-NAZRUL-OWNER-SEC-992097-MASTER",
+  "adminSecretCode": "sahoj2026admin"
+}

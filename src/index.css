@@ -1,0 +1,91 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.never-dark-mode));
+
+:root {
+  --bg-page: #EDF2F7;
+  --bg-card: #FFFFFF;
+  --text-dark: #102A43;
+  --text-muted: #64748B;
+  --text-placeholder: #9AA5B1;
+  --primary-teal: #0E6B6B;
+  --teal-light: #E0F2F1;
+  --red-pabo: #D32F2F;
+  --green-debo: #2E7D32;
+  --tag-bg: #E3F2FD;
+  --tag-text: #1976D2;
+  --border-card: #E2E8F0;
+}
+
+/* Base Body & App Container strictly matching user's reference: #EDF2F7 */
+html, body {
+  background-color: #EDF2F7 !important;
+  color: #102A43 !important;
+  font-family: 'Hind Siliguri', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Global Card Styling */
+.soothing-card {
+  background-color: #FFFFFF !important;
+  border-radius: 24px !important;
+  box-shadow: 0 4px 16px rgba(16, 42, 67, 0.04) !important;
+  border: 1px solid #E2E8F0 !important;
+  transition: all 0.15s ease-in-out;
+}
+
+/* Standardized Rounded Containers */
+div[class*="rounded-3xl"] {
+  border-radius: 24px !important;
+}
+
+div[class*="rounded-2xl"] {
+  border-radius: 20px !important;
+}
+
+/* Floating Action Button (FAB) */
+.btn-teal-fab {
+  background-color: #0E6B6B !important;
+  color: #FFFFFF !important;
+  border-radius: 18px !important;
+  font-weight: 700;
+  box-shadow: 0 8px 24px rgba(14, 107, 107, 0.28) !important;
+  transition: all 0.15s ease-in-out;
+}
+
+.btn-teal-fab:hover {
+  background-color: #0B5656 !important;
+}
+
+/* Hide scrollbars for clean mobile POS UI while allowing scroll */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media print {
+  @page {
+    size: 58mm auto;
+    margin: 0;
+  }
+  html, body {
+    width: 58mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .receipt-container {
+    width: 58mm !important;
+    padding: 2mm !important;
+    margin: 0 !important;
+    font-size: 11px !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+}
