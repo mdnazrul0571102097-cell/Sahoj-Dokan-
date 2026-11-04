@@ -32,11 +32,10 @@ jobs:
         run: |
           npm run build
 
-      - name: Setup Capacitor Android & Sync
+      - name: Generate Fresh Android Project & Sync
         run: |
-          if [ ! -d "android" ]; then
-            npx cap add android
-          fi
+          rm -rf android
+          npx cap add android
           npx cap sync android
 
       - name: Build Universal APK with Gradle
