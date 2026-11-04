@@ -3,69 +3,43 @@ name: Build Universal Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
 
 jobs:
   build:
-    name: Build & Sign Universal APK
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Install Dependencies & Build Web App
-        run: |
-          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
-          npm run build
-
       - name: Set up Java JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
           java-version: '17'
+          distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Add Capacitor Android Platform & Sync
+      - name: Install Dependencies & Build Web
         run: |
-          npx @capacitor/cli add android || npx @capacitor/cli sync android
+          npm ci || npm install
+          npm run build
 
-      - name: Configure Universal APK in build.gradle
+      - name: Sync Capacitor Android
         run: |
-          node -e "
-            const fs = require('fs');
-            const gradlePath = 'android/app/build.gradle';
-            if (fs.existsSync(gradlePath)) {
-              let content = fs.readFileSync(gradlePath, 'utf8');
-              content = content.replace(/minSdkVersion\s+\d+/g, 'minSdkVersion 21');
-              content = content.replace(/targetSdkVersion\s+\d+/g, 'targetSdkVersion 33');
-              if (!content.includes('abiFilters')) {
-                content = content.replace(/defaultConfig\s*\{/, 'defaultConfig {\n        ndk {\n            abiFilters \'armeabi-v7a\', \'arm64-v8a\', \'x86\', \'x86_64\'\n        }');
-              }
-              if (!content.includes('splits {')) {
-                content = content.replace(/android\s*\{/, 'android {\n    splits {\n        abi {\n            enable false\n        }\n    }');
-              }
-              fs.writeFileSync(gradlePath, content, 'utf8');
-              console.log('Successfully configured Universal APK settings');
-            }
-          "
+          npx cap sync android
 
-      - name: Build Debug APK with Gradle
+      - name: Build Universal APK with Gradle
         run: |
           cd android
-          chmod +x ./gradlew
+          chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
 
       - name: Upload Signed Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug.apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: SahojDokan-Universal-APK
+          path: android/app/build/outputs/apk/debug/*.apk
