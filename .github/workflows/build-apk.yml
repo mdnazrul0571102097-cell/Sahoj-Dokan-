@@ -1,14 +1,15 @@
-
 name: Build Universal Android APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
 
 jobs:
   build:
+    name: Build & Sign Universal APK
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -24,20 +25,67 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Dependencies & Capacitor CLI
+      - name: Install Dependencies & Capacitor 6
         run: |
           npm install --legacy-peer-deps
-          npm install @capacitor/core @capacitor/cli @capacitor/android --save-dev
+          npm install @capacitor/core@6.2.1 @capacitor/cli@6.2.1 @capacitor/android@6.2.3 --save-dev --legacy-peer-deps
 
       - name: Build Web App
         run: |
           npm run build
 
-      - name: Generate Fresh Android Project & Sync
+      - name: Generate Fresh Android Project & Configure Universal APK
         run: |
           rm -rf android
+          node -e '
+            const fs = require("fs");
+            fs.writeFileSync("capacitor.config.json", JSON.stringify({
+              appId: "com.sahojdokan.pos",
+              appName: "Sahoj Dokan",
+              webDir: "dist",
+              android: { allowMixedContent: true }
+            }, null, 2));
+          '
           npx cap add android
           npx cap sync android
+          node -e '
+            const fs = require("fs");
+
+            const varsPath = "android/variables.gradle";
+            if (fs.existsSync(varsPath)) {
+              let vars = fs.readFileSync(varsPath, "utf8");
+              vars = vars.replace(/minSdkVersion\s*=\s*\d+/, "minSdkVersion = 21");
+              vars = vars.replace(/targetSdkVersion\s*=\s*\d+/, "targetSdkVersion = 33");
+              vars = vars.replace(/compileSdkVersion\s*=\s*\d+/, "compileSdkVersion = 34");
+              fs.writeFileSync(varsPath, vars, "utf8");
+            }
+
+            const appGradlePath = "android/app/build.gradle";
+            if (fs.existsSync(appGradlePath)) {
+              let g = fs.readFileSync(appGradlePath, "utf8");
+              g = g.replace(
+                /defaultConfig\s*\{/,
+                "splits {\n        abi {\n            enable false\n        }\n    }\n    defaultConfig {\n        ndk {\n            abiFilters \"armeabi-v7a\", \"arm64-v8a\", \"x86\", \"x86_64\"\n        }"
+              );
+              fs.writeFileSync(appGradlePath, g, "utf8");
+            }
+
+            const manifestPath = "android/app/src/main/AndroidManifest.xml";
+            if (fs.existsSync(manifestPath)) {
+              let m = fs.readFileSync(manifestPath, "utf8");
+              if (!m.includes("xmlns:tools")) {
+                m = m.replace(
+                  "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">",
+                  "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" xmlns:tools=\"http://schemas.android.com/tools\">\n    <uses-sdk tools:overrideLibrary=\"com.getcapacitor.android,org.apache.cordova,androidx.webkit,androidx.activity,androidx.fragment,androidx.core,androidx.appcompat,androidx.coordinatorlayout,androidx.core.splashscreen\" />"
+                );
+              }
+              m = m.replace(
+                "<application",
+                "<application android:usesCleartextTraffic=\"true\""
+              );
+              fs.writeFileSync(manifestPath, m, "utf8");
+            }
+          '
 
       - name: Build Universal APK with Gradle
         run: |
