@@ -33,12 +33,9 @@ jobs:
       - name: Build Web App
         run: |
           npm run build
-          # Remove chat screenshot attachments from dist so APK stays lightweight and fast
           rm -rf dist/assets/aistudio
 
       - name: Generate Android Project, Set Sahoj Dokan Icon & Configure Universal APK
-        env:
-          RUN_NUM: ${{ github.run_number }}
         run: |
           rm -rf android
           node -e '
@@ -53,7 +50,7 @@ jobs:
           npx cap add android
           npx cap sync android
 
-          # Remove Capacitor default blue-X adaptive vector icons so custom PNG icon is always used
+          # Remove Capacitor default blue-X vector launcher icons
           rm -rf android/app/src/main/res/mipmap-anydpi-v26
           rm -rf android/app/src/main/res/drawable-v24
           rm -f android/app/src/main/res/drawable/ic_launcher*
@@ -79,18 +76,9 @@ jobs:
             done
           fi
 
-          # Install permanent backdated keystore (Valid from 2020-01-01 to 2050-01-01, no timezone/future-date conflict)
-          KEYSTORE_B64="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"
-          mkdir -p ~/.android
-          echo "$KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
-          echo "$KEYSTORE_B64" | base64 -d > android/app/debug.keystore
-
           node -e '
             const fs = require("fs");
-            const runNum = parseInt(process.env.RUN_NUM || "1", 10) || 1;
-            const verCode = 300 + runNum;
 
-            // 1. Update variables.gradle
             const varsPath = "android/variables.gradle";
             if (fs.existsSync(varsPath)) {
               let vars = fs.readFileSync(varsPath, "utf8");
@@ -100,20 +88,18 @@ jobs:
               fs.writeFileSync(varsPath, vars, "utf8");
             }
 
-            // 2. Patch generated android/app/build.gradle cleanly
             const appGradlePath = "android/app/build.gradle";
             if (fs.existsSync(appGradlePath)) {
               let g = fs.readFileSync(appGradlePath, "utf8");
-              g = g.replace(/versionCode\s+\d+/, "versionCode " + verCode);
-              g = g.replace(/versionName\s+"[^"]+"/, "versionName \"3.0." + runNum + "\"");
+              g = g.replace(/versionCode\s+\d+/, "versionCode 500");
+              g = g.replace(/versionName\s+"[^"]+"/, "versionName \"5.0.0\"");
               g = g.replace(
                 /defaultConfig\s*\{/,
-                "signingConfigs {\n        debug {\n            storeFile file(\"debug.keystore\")\n            storePassword \"android\"\n            keyAlias \"androiddebugkey\"\n            keyPassword \"android\"\n            v1SigningEnabled true\n            v2SigningEnabled true\n        }\n    }\n    splits {\n        abi {\n            enable false\n        }\n    }\n    defaultConfig {\n        ndk {\n            abiFilters \"armeabi-v7a\", \"arm64-v8a\", \"x86\", \"x86_64\"\n        }"
+                "splits {\n        abi {\n            enable false\n        }\n    }\n    defaultConfig {\n        ndk {\n            abiFilters \"armeabi-v7a\", \"arm64-v8a\", \"x86\", \"x86_64\"\n        }"
               );
               fs.writeFileSync(appGradlePath, g, "utf8");
             }
 
-            // 3. Patch generated AndroidManifest.xml cleanly
             const manifestPath = "android/app/src/main/AndroidManifest.xml";
             if (fs.existsSync(manifestPath)) {
               let m = fs.readFileSync(manifestPath, "utf8");
