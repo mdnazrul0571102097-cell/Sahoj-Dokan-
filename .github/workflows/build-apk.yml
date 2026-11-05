@@ -44,7 +44,7 @@ jobs:
             cp -r android/app/src/main/res /tmp/saved_android_res
           fi
 
-          # 2. Generate clean Capacitor Android project (ensures gradle-wrapper.jar is created)
+          # 2. Generate clean Capacitor Android project
           rm -rf android
           node -e '
             const fs = require("fs");
@@ -92,15 +92,17 @@ jobs:
             done
           fi
 
-          # 6. Create permanent deterministic keystore so every APK build shares the exact same signature
-          KEYSTORE_B64="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"
-          echo "$KEYSTORE_B64" | base64 -d > android/app/sahojdokan.keystore
+          # 6. Install fixed standard Android Debug Keystore (CN=Android Debug,O=Android,C=US)
+          KEYSTORE_B64="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"
+          mkdir -p ~/.android
+          echo "$KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
+          echo "$KEYSTORE_B64" | base64 -d > android/app/debug.keystore
 
-          # 7. Configure variables.gradle, app/build.gradle, MainActivity.java, and AndroidManifest.xml
+          # 7. Configure variables.gradle, app/build.gradle, and clean AndroidManifest.xml
           node -e '
             const fs = require("fs");
             const runNum = parseInt(process.env.RUN_NUM || "1", 10) || 1;
-            const verCode = 100 + runNum;
+            const verCode = 200 + runNum;
 
             // Update variables.gradle
             const varsPath = "android/variables.gradle";
@@ -112,7 +114,7 @@ jobs:
               fs.writeFileSync(varsPath, vars, "utf8");
             }
 
-            // Write clean universal app/build.gradle with v1+v2 signing and all 4 CPU ABIs
+            // Write universal app/build.gradle using standard Android debug signing + v1/v2
             const appGradlePath = "android/app/build.gradle";
             const cleanBuildGradle = `apply plugin: "com.android.application"
 
@@ -121,11 +123,11 @@ jobs:
               compileSdk rootProject.ext.compileSdkVersion
 
               signingConfigs {
-                  universalKey {
-                      storeFile file("sahojdokan.keystore")
-                      storePassword "sahoj1234"
-                      keyAlias "sahojdokan"
-                      keyPassword "sahoj1234"
+                  debug {
+                      storeFile file("debug.keystore")
+                      storePassword "android"
+                      keyAlias "androiddebugkey"
+                      keyPassword "android"
                       v1SigningEnabled true
                       v2SigningEnabled true
                   }
@@ -160,12 +162,12 @@ jobs:
 
               buildTypes {
                   debug {
-                      signingConfig signingConfigs.universalKey
+                      signingConfig signingConfigs.debug
                       minifyEnabled false
                       debuggable true
                   }
                   release {
-                      signingConfig signingConfigs.universalKey
+                      signingConfig signingConfigs.debug
                       minifyEnabled false
                       proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
                   }
@@ -194,105 +196,7 @@ jobs:
           `;
             fs.writeFileSync(appGradlePath, cleanBuildGradle, "utf8");
 
-            // Write MainActivity.java with native AndroidApp bridge
-            const mainActDir = "android/app/src/main/java/com/sahojdokan/app";
-            fs.mkdirSync(mainActDir, { recursive: true });
-            const mainActCode = `package com.sahojdokan.app;
-
-          import android.content.Context;
-          import android.content.Intent;
-          import android.content.SharedPreferences;
-          import android.net.Uri;
-          import android.os.Bundle;
-          import android.print.PrintAttributes;
-          import android.print.PrintDocumentAdapter;
-          import android.print.PrintManager;
-          import android.webkit.JavascriptInterface;
-          import android.webkit.WebView;
-          import com.getcapacitor.BridgeActivity;
-
-          public class MainActivity extends BridgeActivity {
-              @Override
-              public void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
-                  try {
-                      if (this.bridge != null && this.bridge.getWebView() != null) {
-                          WebView webView = this.bridge.getWebView();
-                          webView.getSettings().setJavaScriptEnabled(true);
-                          webView.getSettings().setDomStorageEnabled(true);
-                          webView.addJavascriptInterface(new AndroidAppBridge(this, webView), "AndroidApp");
-                      }
-                  } catch (Exception ignored) {}
-              }
-
-              public static class AndroidAppBridge {
-                  private final Context context;
-                  private final WebView webView;
-                  private static final String PREF_NAME = "SahojDokanNativeBackup";
-
-                  public AndroidAppBridge(Context context, WebView webView) {
-                      this.context = context;
-                      this.webView = webView;
-                  }
-
-                  @JavascriptInterface
-                  public void openWhatsApp(String url) {
-                      try {
-                          Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                          intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                          context.startActivity(intent);
-                      } catch (Exception ignored) {}
-                  }
-
-                  @JavascriptInterface
-                  public void printReceipt() {
-                      if (webView == null) return;
-                      webView.post(() -> {
-                          try {
-                              PrintManager printManager = (PrintManager) context.getSystemService(Context.PRINT_SERVICE);
-                              if (printManager != null) {
-                                  PrintDocumentAdapter adapter = webView.createPrintDocumentAdapter("SahojDokan_Receipt");
-                                  printManager.print("SahojDokan_Receipt", adapter, new PrintAttributes.Builder().build());
-                              }
-                          } catch (Exception ignored) {}
-                      });
-                  }
-
-                  @JavascriptInterface
-                  public void saveBackupData(String payload) {
-                      try {
-                          SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-                          prefs.edit().putString("latest_backup", payload).apply();
-                      } catch (Exception ignored) {}
-                  }
-
-                  @JavascriptInterface
-                  public String loadBackupData() {
-                      try {
-                          SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-                          return prefs.getString("latest_backup", "");
-                      } catch (Exception e) {
-                          return "";
-                      }
-                  }
-
-                  @JavascriptInterface
-                  public String loadBackupDataForPhone(String phone) {
-                      try {
-                          SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-                          String byPhone = prefs.getString("backup_" + phone, "");
-                          if (byPhone != null && !byPhone.isEmpty()) return byPhone;
-                          return prefs.getString("latest_backup", "");
-                      } catch (Exception e) {
-                          return "";
-                      }
-                  }
-              }
-          }
-          `;
-            fs.writeFileSync(mainActDir + "/MainActivity.java", mainActCode, "utf8");
-
-            // Write clean AndroidManifest.xml with extractNativeLibs="true" and usesCleartextTraffic="true"
+            // Write clean AndroidManifest.xml with minimal permissions so Play Protect does not flag it
             const manifestPath = "android/app/src/main/AndroidManifest.xml";
             const cleanManifest = `<?xml version="1.0" encoding="utf-8" ?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
@@ -332,13 +236,6 @@ jobs:
               </application>
 
               <uses-permission android:name="android.permission.INTERNET" />
-              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-              <uses-permission android:name="android.permission.CAMERA" />
-              <uses-permission android:name="android.permission.BLUETOOTH" />
-              <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-              <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-              <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-              <uses-feature android:name="android.hardware.camera" android:required="false" />
           </manifest>
           `;
             fs.writeFileSync(manifestPath, cleanManifest, "utf8");
@@ -349,9 +246,8 @@ jobs:
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace --no-daemon
-          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/SahojDokan-Universal.apk
 
-      - name: Upload Signed Universal APK
+      - name: Upload Signed Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: SahojDokan-Universal-APK
