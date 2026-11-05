@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Build Unstripped Universal Release & Debug APK
+    name: Build & Sign Universal Release APK
     runs-on: ubuntu-latest
 
     steps:
@@ -34,8 +34,15 @@ jobs:
         run: |
           npm run build
 
-      - name: Sync Full Web Assets & Configure Unstripped Universal APK
+      - name: Sync Web Assets, Set App Icon & Configure Unstripped Universal APK
         run: |
+          # Backup existing pre-resized mipmap icons if present in repo
+          rm -rf /tmp/saved_mipmaps
+          mkdir -p /tmp/saved_mipmaps
+          if [ -d "android/app/src/main/res" ]; then
+            cp -r android/app/src/main/res/mipmap-* /tmp/saved_mipmaps/ 2>/dev/null || true
+          fi
+
           rm -rf android
           node -e '
             const fs = require("fs");
@@ -49,35 +56,33 @@ jobs:
           npx cap add android
           npx cap sync android
 
-          # Remove Capacitor default blue-X vector launcher icons
+          # Remove Capacitor default blue-X vector launcher icons completely
           rm -rf android/app/src/main/res/mipmap-anydpi-v26
           rm -rf android/app/src/main/res/drawable-v24
           rm -f android/app/src/main/res/drawable/ic_launcher*
 
-          # Generate all mipmap launcher icons directly from Sahoj Dokan logo
-          ICON_SRC=""
-          if [ -f "public/assets/icon.png" ]; then
-            ICON_SRC="public/assets/icon.png"
-          elif [ -f "assets/icon.png" ]; then
-            ICON_SRC="assets/icon.png"
-          elif [ -f "public/icon.png" ]; then
-            ICON_SRC="public/icon.png"
-          fi
+          # Restore backed-up mipmap folders
+          cp -r /tmp/saved_mipmaps/mipmap-* android/app/src/main/res/ 2>/dev/null || true
+          rm -rf android/app/src/main/res/mipmap-anydpi-v26
 
-          if [ -n "$ICON_SRC" ] && command -v convert >/dev/null 2>&1; then
-            for pair in "mipmap-mdpi:48" "mipmap-hdpi:72" "mipmap-xhdpi:96" "mipmap-xxhdpi:144" "mipmap-xxxhdpi:192"; do
-              dir="android/app/src/main/res/${pair%%:*}"
-              sz="${pair##*:}"
-              mkdir -p "$dir"
-              convert "$ICON_SRC" -resize "${sz}x${sz}" "$dir/ic_launcher.png"
-              convert "$ICON_SRC" -resize "${sz}x${sz}" "$dir/ic_launcher_round.png"
-              convert "$ICON_SRC" -resize "${sz}x${sz}" "$dir/ic_launcher_foreground.png"
-            done
-          fi
-
+          # Guaranteed Node.js icon copy fallback (no external tools required)
           node -e '
             const fs = require("fs");
+            const path = require("path");
+            const iconCandidates = ["public/assets/icon.png", "assets/icon.png", "public/icon.png"];
+            const srcIcon = iconCandidates.find(p => fs.existsSync(p));
+            if (srcIcon) {
+              const densities = ["mipmap-mdpi", "mipmap-hdpi", "mipmap-xhdpi", "mipmap-xxhdpi", "mipmap-xxxhdpi"];
+              for (const d of densities) {
+                const dir = path.join("android/app/src/main/res", d);
+                fs.mkdirSync(dir, { recursive: true });
+                fs.copyFileSync(srcIcon, path.join(dir, "ic_launcher.png"));
+                fs.copyFileSync(srcIcon, path.join(dir, "ic_launcher_round.png"));
+                fs.copyFileSync(srcIcon, path.join(dir, "ic_launcher_foreground.png"));
+              }
+            }
 
+            // Configure variables.gradle
             const varsPath = "android/variables.gradle";
             if (fs.existsSync(varsPath)) {
               let vars = fs.readFileSync(varsPath, "utf8");
@@ -87,22 +92,79 @@ jobs:
               fs.writeFileSync(varsPath, vars, "utf8");
             }
 
-            const appGradlePath = "android/app/build.gradle";
-            if (fs.existsSync(appGradlePath)) {
-              let g = fs.readFileSync(appGradlePath, "utf8");
-              g = g.replace(/versionCode\s+\d+/, "versionCode 500");
-              g = g.replace(/versionName\s+"[^"]+"/, "versionName \"5.0.0\"");
-              g = g.replace(
-                /defaultConfig\s*\{/,
-                "splits {\n        abi {\n            enable false\n            universalApk true\n        }\n    }\n    packagingOptions {\n        doNotStrip \"**/*.so\"\n        jniLibs {\n            useLegacyPackaging true\n        }\n    }\n    defaultConfig {\n        ndk {\n            abiFilters \"arm64-v8a\", \"armeabi-v7a\", \"x86\", \"x86_64\"\n        }"
-              );
-              g = g.replace(
-                /buildTypes\s*\{[\s\S]*?\n    \}/,
-                "buildTypes {\n        debug {\n            signingConfig signingConfigs.debug\n            minifyEnabled false\n            shrinkResources false\n            debuggable true\n        }\n        release {\n            signingConfig signingConfigs.debug\n            minifyEnabled false\n            shrinkResources false\n            debuggable false\n        }\n    }"
-              );
-              fs.writeFileSync(appGradlePath, g, "utf8");
-            }
+            // Write complete unstripped Universal build.gradle (minifyEnabled false, shrinkResources false)
+            const gradleContent = `apply plugin: "com.android.application"
 
+          android {
+              namespace "com.sahojdokan.pos"
+              compileSdk rootProject.ext.compileSdkVersion
+
+              defaultConfig {
+                  applicationId "com.sahojdokan.pos"
+                  minSdkVersion 21
+                  targetSdkVersion 33
+                  versionCode 500
+                  versionName "5.0.0"
+                  testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+                  ndk {
+                      abiFilters "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
+                  }
+                  aaptOptions {
+                      ignoreAssetsPattern "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
+                  }
+              }
+
+              splits {
+                  abi {
+                      enable false
+                      universalApk true
+                  }
+              }
+
+              packagingOptions {
+                  doNotStrip "**/*.so"
+                  jniLibs {
+                      useLegacyPackaging true
+                  }
+              }
+
+              buildTypes {
+                  debug {
+                      minifyEnabled false
+                      shrinkResources false
+                      debuggable true
+                  }
+                  release {
+                      minifyEnabled false
+                      shrinkResources false
+                      debuggable false
+                  }
+              }
+          }
+
+          repositories {
+              flatDir {
+                  dirs "../capacitor-cordova-android-plugins/src/main/libs", "libs"
+              }
+          }
+
+          dependencies {
+              implementation fileTree(include: ["*.jar"], dir: "libs")
+              implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+              implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+              implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+              implementation project(":capacitor-android")
+              testImplementation "junit:junit:$junitVersion"
+              androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+              androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+              implementation project(":capacitor-cordova-android-plugins")
+          }
+
+          apply from: "capacitor.build.gradle"
+          `;
+            fs.writeFileSync("android/app/build.gradle", gradleContent, "utf8");
+
+            // Update AndroidManifest.xml
             const manifestPath = "android/app/src/main/AndroidManifest.xml";
             if (fs.existsSync(manifestPath)) {
               let m = fs.readFileSync(manifestPath, "utf8");
@@ -120,17 +182,51 @@ jobs:
             }
           '
 
-      - name: Build Unstripped Universal Release & Debug APK with Gradle
+      - name: Build Unstripped Universal Release APK & Digitally Sign with apksigner
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease assembleDebug --stacktrace --no-daemon
-          mkdir -p app/build/outputs/apk/universal
-          cp app/build/outputs/apk/release/*.apk app/build/outputs/apk/universal/SahojDokan-Universal-Release.apk
-          cp app/build/outputs/apk/debug/*.apk app/build/outputs/apk/universal/app-debug.apk
+          ./gradlew assembleRelease --stacktrace --no-daemon
 
-      - name: Upload Unstripped Universal APKs
+          # 1. Auto-generate standard Debug Keystore using JDK keytool
+          rm -f debug-signing.keystore
+          keytool -genkeypair -v \
+            -keystore debug-signing.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+          # 2. Locate zipalign and apksigner from Android SDK build-tools
+          BUILD_TOOLS_DIR=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          ZIPALIGN="$BUILD_TOOLS_DIR/zipalign"
+          APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
+
+          # 3. Find the built release APK and zipalign it
+          RAW_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          "$ZIPALIGN" -p -f -v 4 "$RAW_APK" aligned-universal.apk
+
+          # 4. Digitally sign with apksigner (v1 + v2 + v3 schemes enabled) into single SahojDokan-Signed-Universal.apk
+          mkdir -p signed-output
+          "$APKSIGNER" sign \
+            --ks debug-signing.keystore \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --out signed-output/SahojDokan-Signed-Universal.apk \
+            aligned-universal.apk
+
+          # 5. Verify signature
+          "$APKSIGNER" verify --verbose signed-output/SahojDokan-Signed-Universal.apk
+
+      - name: Upload Single Signed Universal APK
         uses: actions/upload-artifact@v4
         with:
-          name: SahojDokan-Universal-APK
-          path: android/app/build/outputs/apk/universal/*.apk
+          name: SahojDokan-Signed-Universal-APK
+          path: android/signed-output/SahojDokan-Signed-Universal.apk
