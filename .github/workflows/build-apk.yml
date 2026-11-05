@@ -33,18 +33,13 @@ jobs:
       - name: Build Web App
         run: |
           npm run build
+          # Remove chat screenshot attachments from dist so APK stays lightweight and fast
+          rm -rf dist/assets/aistudio
 
-      - name: Generate Android Project, Restore Sahoj Dokan Icons & Configure Universal APK
+      - name: Generate Android Project, Set Sahoj Dokan Icon & Configure Universal APK
         env:
           RUN_NUM: ${{ github.run_number }}
         run: |
-          # 1. Backup existing custom Sahoj Dokan icons & resources if present
-          rm -rf /tmp/saved_android_res
-          if [ -d "android/app/src/main/res" ]; then
-            cp -r android/app/src/main/res /tmp/saved_android_res
-          fi
-
-          # 2. Generate clean Capacitor Android project
           rm -rf android
           node -e '
             const fs = require("fs");
@@ -58,20 +53,12 @@ jobs:
           npx cap add android
           npx cap sync android
 
-          # 3. Remove Capacitor default blue-X vector launcher icons so custom PNG icon is always shown
+          # Remove Capacitor default blue-X adaptive vector icons so custom PNG icon is always used
           rm -rf android/app/src/main/res/mipmap-anydpi-v26
           rm -rf android/app/src/main/res/drawable-v24
           rm -f android/app/src/main/res/drawable/ic_launcher*
 
-          # 4. Restore backed-up Sahoj Dokan icons & splash screens
-          if [ -d "/tmp/saved_android_res" ]; then
-            cp -r /tmp/saved_android_res/* android/app/src/main/res/ || true
-            rm -rf android/app/src/main/res/mipmap-anydpi-v26
-            rm -rf android/app/src/main/res/drawable-v24
-            rm -f android/app/src/main/res/drawable/ic_launcher*
-          fi
-
-          # 5. Also generate all mipmap densities directly from Sahoj Dokan logo using ImageMagick
+          # Generate all mipmap launcher icons directly from Sahoj Dokan logo
           ICON_SRC=""
           if [ -f "public/assets/icon.png" ]; then
             ICON_SRC="public/assets/icon.png"
@@ -92,19 +79,18 @@ jobs:
             done
           fi
 
-          # 6. Install fixed standard Android Debug Keystore (CN=Android Debug,O=Android,C=US)
-          KEYSTORE_B64="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"
+          # Install permanent backdated keystore (Valid from 2020-01-01 to 2050-01-01, no timezone/future-date conflict)
+          KEYSTORE_B64="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"
           mkdir -p ~/.android
           echo "$KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
           echo "$KEYSTORE_B64" | base64 -d > android/app/debug.keystore
 
-          # 7. Configure variables.gradle, app/build.gradle, and clean AndroidManifest.xml
           node -e '
             const fs = require("fs");
             const runNum = parseInt(process.env.RUN_NUM || "1", 10) || 1;
-            const verCode = 200 + runNum;
+            const verCode = 300 + runNum;
 
-            // Update variables.gradle
+            // 1. Update variables.gradle
             const varsPath = "android/variables.gradle";
             if (fs.existsSync(varsPath)) {
               let vars = fs.readFileSync(varsPath, "utf8");
@@ -114,131 +100,35 @@ jobs:
               fs.writeFileSync(varsPath, vars, "utf8");
             }
 
-            // Write universal app/build.gradle using standard Android debug signing + v1/v2
+            // 2. Patch generated android/app/build.gradle cleanly
             const appGradlePath = "android/app/build.gradle";
-            const cleanBuildGradle = `apply plugin: "com.android.application"
+            if (fs.existsSync(appGradlePath)) {
+              let g = fs.readFileSync(appGradlePath, "utf8");
+              g = g.replace(/versionCode\s+\d+/, "versionCode " + verCode);
+              g = g.replace(/versionName\s+"[^"]+"/, "versionName \"3.0." + runNum + "\"");
+              g = g.replace(
+                /defaultConfig\s*\{/,
+                "signingConfigs {\n        debug {\n            storeFile file(\"debug.keystore\")\n            storePassword \"android\"\n            keyAlias \"androiddebugkey\"\n            keyPassword \"android\"\n            v1SigningEnabled true\n            v2SigningEnabled true\n        }\n    }\n    splits {\n        abi {\n            enable false\n        }\n    }\n    defaultConfig {\n        ndk {\n            abiFilters \"armeabi-v7a\", \"arm64-v8a\", \"x86\", \"x86_64\"\n        }"
+              );
+              fs.writeFileSync(appGradlePath, g, "utf8");
+            }
 
-          android {
-              namespace "com.sahojdokan.app"
-              compileSdk rootProject.ext.compileSdkVersion
-
-              signingConfigs {
-                  debug {
-                      storeFile file("debug.keystore")
-                      storePassword "android"
-                      keyAlias "androiddebugkey"
-                      keyPassword "android"
-                      v1SigningEnabled true
-                      v2SigningEnabled true
-                  }
-              }
-
-              defaultConfig {
-                  applicationId "com.sahojdokan.app"
-                  minSdkVersion 21
-                  targetSdkVersion 33
-                  versionCode ${verCode}
-                  versionName "2.0.${runNum}"
-                  testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-                  ndk {
-                      abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
-                  }
-                  aaptOptions {
-                      ignoreAssetsPattern "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
-                  }
-              }
-
-              splits {
-                  abi {
-                      enable false
-                  }
-              }
-
-              packagingOptions {
-                  jniLibs {
-                      useLegacyPackaging true
-                  }
-              }
-
-              buildTypes {
-                  debug {
-                      signingConfig signingConfigs.debug
-                      minifyEnabled false
-                      debuggable true
-                  }
-                  release {
-                      signingConfig signingConfigs.debug
-                      minifyEnabled false
-                      proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
-                  }
-              }
-          }
-
-          repositories {
-              flatDir {
-                  dirs "../capacitor-cordova-android-plugins/src/main/libs", "libs"
-              }
-          }
-
-          dependencies {
-              implementation fileTree(include: ["*.jar"], dir: "libs")
-              implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
-              implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
-              implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
-              implementation project(":capacitor-android")
-              testImplementation "junit:junit:$junitVersion"
-              androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
-              androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
-              implementation project(":capacitor-cordova-android-plugins")
-          }
-
-          apply from: "capacitor.build.gradle"
-          `;
-            fs.writeFileSync(appGradlePath, cleanBuildGradle, "utf8");
-
-            // Write clean AndroidManifest.xml with minimal permissions so Play Protect does not flag it
+            // 3. Patch generated AndroidManifest.xml cleanly
             const manifestPath = "android/app/src/main/AndroidManifest.xml";
-            const cleanManifest = `<?xml version="1.0" encoding="utf-8" ?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
-              <uses-sdk
-                  tools:overrideLibrary="com.getcapacitor.android,org.apache.cordova,androidx.webkit,androidx.activity,androidx.fragment,androidx.core,androidx.appcompat,androidx.coordinatorlayout,androidx.core.splashscreen"
-              />
-
-              <application
-                  android:allowBackup="true"
-                  android:icon="@mipmap/ic_launcher"
-                  android:label="@string/app_name"
-                  android:roundIcon="@mipmap/ic_launcher_round"
-                  android:supportsRtl="true"
-                  android:usesCleartextTraffic="true"
-                  android:extractNativeLibs="true"
-                  android:theme="@style/AppTheme">
-                  <activity
-                      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
-                      android:name=".MainActivity"
-                      android:label="@string/title_activity_main"
-                      android:theme="@style/AppTheme.NoActionBarLaunch"
-                      android:launchMode="singleTask"
-                      android:exported="true">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-
-                  <provider
-                      android:name="androidx.core.content.FileProvider"
-                      android:authorities="\${applicationId}.fileprovider"
-                      android:exported="false"
-                      android:grantUriPermissions="true">
-                      <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
-                  </provider>
-              </application>
-
-              <uses-permission android:name="android.permission.INTERNET" />
-          </manifest>
-          `;
-            fs.writeFileSync(manifestPath, cleanManifest, "utf8");
+            if (fs.existsSync(manifestPath)) {
+              let m = fs.readFileSync(manifestPath, "utf8");
+              if (!m.includes("xmlns:tools")) {
+                m = m.replace(
+                  "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">",
+                  "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" xmlns:tools=\"http://schemas.android.com/tools\">\n    <uses-sdk tools:overrideLibrary=\"com.getcapacitor.android,org.apache.cordova,androidx.webkit,androidx.activity,androidx.fragment,androidx.core,androidx.appcompat,androidx.coordinatorlayout,androidx.core.splashscreen\" />"
+                );
+              }
+              m = m.replace(
+                "<application",
+                "<application android:usesCleartextTraffic=\"true\""
+              );
+              fs.writeFileSync(manifestPath, m, "utf8");
+            }
           '
 
       - name: Build Universal APK with Gradle
