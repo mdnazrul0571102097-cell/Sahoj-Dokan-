@@ -8,8 +8,8 @@ android {
         applicationId "com.sahojdokan.pos"
         minSdkVersion 21
         targetSdkVersion 33
-        versionCode 15
-        versionName "1.5.0"
+        versionCode 500
+        versionName "5.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
@@ -22,6 +22,14 @@ android {
     splits {
         abi {
             enable false
+            universalApk true
+        }
+    }
+
+    packagingOptions {
+        doNotStrip "**/*.so"
+        jniLibs {
+            useLegacyPackaging true
         }
     }
 
@@ -29,12 +37,14 @@ android {
         debug {
             signingConfig signingConfigs.debug
             minifyEnabled false
+            shrinkResources false
             debuggable true
         }
         release {
             signingConfig signingConfigs.debug
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            shrinkResources false
+            debuggable false
         }
     }
 }

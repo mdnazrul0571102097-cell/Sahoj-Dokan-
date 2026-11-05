@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Build & Sign Universal APK
+    name: Build Unstripped Universal Release & Debug APK
     runs-on: ubuntu-latest
 
     steps:
@@ -30,18 +30,17 @@ jobs:
           npm install --legacy-peer-deps
           npm install @capacitor/core@6.2.1 @capacitor/cli@6.2.1 @capacitor/android@6.2.3 --save-dev --legacy-peer-deps
 
-      - name: Build Web App
+      - name: Build Full Web Assets
         run: |
           npm run build
-          rm -rf dist/assets/aistudio
 
-      - name: Generate Android Project, Set Sahoj Dokan Icon & Configure Universal APK
+      - name: Sync Full Web Assets & Configure Unstripped Universal APK
         run: |
           rm -rf android
           node -e '
             const fs = require("fs");
             fs.writeFileSync("capacitor.config.json", JSON.stringify({
-              appId: "com.sahojdokan.app",
+              appId: "com.sahojdokan.pos",
               appName: "Sahoj Dokan",
               webDir: "dist",
               android: { allowMixedContent: true }
@@ -95,7 +94,11 @@ jobs:
               g = g.replace(/versionName\s+"[^"]+"/, "versionName \"5.0.0\"");
               g = g.replace(
                 /defaultConfig\s*\{/,
-                "splits {\n        abi {\n            enable false\n        }\n    }\n    defaultConfig {\n        ndk {\n            abiFilters \"armeabi-v7a\", \"arm64-v8a\", \"x86\", \"x86_64\"\n        }"
+                "splits {\n        abi {\n            enable false\n            universalApk true\n        }\n    }\n    packagingOptions {\n        doNotStrip \"**/*.so\"\n        jniLibs {\n            useLegacyPackaging true\n        }\n    }\n    defaultConfig {\n        ndk {\n            abiFilters \"arm64-v8a\", \"armeabi-v7a\", \"x86\", \"x86_64\"\n        }"
+              );
+              g = g.replace(
+                /buildTypes\s*\{[\s\S]*?\n    \}/,
+                "buildTypes {\n        debug {\n            signingConfig signingConfigs.debug\n            minifyEnabled false\n            shrinkResources false\n            debuggable true\n        }\n        release {\n            signingConfig signingConfigs.debug\n            minifyEnabled false\n            shrinkResources false\n            debuggable false\n        }\n    }"
               );
               fs.writeFileSync(appGradlePath, g, "utf8");
             }
@@ -111,20 +114,23 @@ jobs:
               }
               m = m.replace(
                 "<application",
-                "<application android:usesCleartextTraffic=\"true\""
+                "<application android:usesCleartextTraffic=\"true\" android:extractNativeLibs=\"true\""
               );
               fs.writeFileSync(manifestPath, m, "utf8");
             }
           '
 
-      - name: Build Universal APK with Gradle
+      - name: Build Unstripped Universal Release & Debug APK with Gradle
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace --no-daemon
+          ./gradlew assembleRelease assembleDebug --stacktrace --no-daemon
+          mkdir -p app/build/outputs/apk/universal
+          cp app/build/outputs/apk/release/*.apk app/build/outputs/apk/universal/SahojDokan-Universal-Release.apk
+          cp app/build/outputs/apk/debug/*.apk app/build/outputs/apk/universal/app-debug.apk
 
-      - name: Upload Signed Debug APK
+      - name: Upload Unstripped Universal APKs
         uses: actions/upload-artifact@v4
         with:
           name: SahojDokan-Universal-APK
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/universal/*.apk
