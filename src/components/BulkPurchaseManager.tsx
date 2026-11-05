@@ -494,38 +494,44 @@ export const BulkPurchaseManager: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Modal: New Multi-Item Bulk Purchase */}
+      {/* Modal: New Multi-Item Bulk Purchase (Exact Reference Design) */}
       {showNewPurchaseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-          <div className="w-full max-w-2xl my-auto rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-4 bg-[#0E6B6B] text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <PackagePlus className="w-5 h-5 text-emerald-200" />
-                <h3 className="font-bold text-base">নগদ ক্রয় রসিদ</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2.5 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
+          <div className="w-full max-w-md my-auto rounded-[28px] bg-white shadow-2xl border border-[#CBD5E1] overflow-hidden flex flex-col max-h-[95vh]">
+            {/* Top Dark Green Header */}
+            <div className="px-5 py-4 bg-[#0D5238] text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <PackagePlus className="w-6 h-6 text-[#68B996]" />
+                <h3 className="font-extrabold text-lg sm:text-xl tracking-tight">
+                  নগদ ক্রয় রসিদ
+                </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setShowNewPurchaseModal(false)}
-                className="p-1 rounded-full hover:bg-white/20 text-white cursor-pointer"
+                className="p-1 rounded-full hover:bg-white/15 text-white/90 hover:text-white transition cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-6 h-6" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmitPurchase} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
-              {/* Supplier Manual Input and Meta */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-[#102A43] mb-1">
-                    সাপ্লায়ার / মহাজন বা দোকানের নাম লিখুন
+            <form
+              onSubmit={handleSubmitPurchase}
+              className="flex-1 overflow-y-auto px-4 py-3.5 space-y-3.5"
+            >
+              {/* Row 1: Supplier & Purchase Date side-by-side */}
+              <div className="grid grid-cols-12 gap-2.5">
+                <div className="col-span-7">
+                  <label className="block text-xs sm:text-sm font-extrabold text-[#111827] mb-1.5 truncate">
+                    সাপ্লায়ার / মহাজন ব
                   </label>
                   <input
                     type="text"
                     list="supplier-manual-suggestions"
                     value={supplierNameInput}
                     onChange={(e) => setSupplierNameInput(e.target.value)}
-                    placeholder="মহাজন বা পাইকারি দোকানের নাম লিখুন..."
-                    className="w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs font-semibold text-[#102A43] placeholder-[#9AA5B1] focus:ring-2 focus:ring-[#0E6B6B] focus:outline-none"
+                    placeholder="মহাজন বা পাইকারি দোকানের না..."
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-[#8A949E] bg-[#F1F5F8] text-xs sm:text-sm font-medium text-[#111827] placeholder-[#1F2937] focus:ring-2 focus:ring-[#0D5238] focus:bg-white focus:outline-none"
                   />
                   {suppliers.length > 0 && (
                     <datalist id="supplier-manual-suggestions">
@@ -538,94 +544,95 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-[#102A43] mb-1">
+                <div className="col-span-5">
+                  <label className="block text-xs sm:text-sm font-extrabold text-[#111827] mb-1.5 truncate">
                     ক্রয়ের তারিখ
                   </label>
                   <input
                     type="date"
                     value={purchaseDate}
                     onChange={(e) => setPurchaseDate(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs font-semibold text-[#102A43] focus:ring-2 focus:ring-[#0E6B6B] focus:outline-none"
+                    className="w-full px-2.5 py-2.5 rounded-2xl border border-[#8A949E] bg-[#F1F5F8] text-xs sm:text-sm font-medium text-[#111827] focus:ring-2 focus:ring-[#0D5238] focus:bg-white focus:outline-none"
                   />
                 </div>
               </div>
 
-              {/* Items List Builder */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold text-[#102A43]">
-                    ক্রয়কৃত পণ্যসমূহ ({items.length}টি)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleAddItemRow}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>+ আরও পণ্য যোগ করুন</span>
-                  </button>
-                </div>
+              {/* Section: ক্রয়কৃত পণ্যসমূহ */}
+              <div className="space-y-2.5">
+                <label className="block text-sm sm:text-base font-extrabold text-[#111827]">
+                  ক্রয়কৃত পণ্যসমূহ (
+                  {String(items.length).replace(/\d/g, (d) => '০১২৩৪৫৬৭৮৯'[Number(d)])}
+                  টি)
+                </label>
 
                 <div className="space-y-2.5">
                   {items.map((item, idx) => (
                     <div
                       key={idx}
-                      className="p-3 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-2"
+                      className="p-3.5 rounded-[22px] bg-[#F1F5F8] border border-[#CBD5E1] space-y-2.5"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-bold text-[#64748B]">আইটেম #{idx + 1}</span>
+                        <span className="text-xs sm:text-sm font-semibold text-[#111827]">
+                          আইটেম #{idx + 1}
+                        </span>
                         {items.length > 1 && (
                           <button
                             type="button"
                             onClick={() => handleRemoveItemRow(idx)}
-                            className="text-[#D32F2F] hover:text-red-700 text-xs p-1"
+                            className="text-[#D32F2F] hover:text-red-700 text-xs p-1 cursor-pointer"
                             title="মুছে ফেলুন"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                        {/* Select from existing or type custom name */}
-                        <div className="sm:col-span-5">
-                          <input
-                            type="text"
-                            required
-                            list={`prod-suggestions-${idx}`}
-                            value={item.productName}
-                            onChange={(e) => handleItemChange(idx, 'productName', e.target.value)}
-                            placeholder="পণ্যের নাম (যেমন: মিনিকেট চাল ৫০ কেজি)"
-                            className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-xs text-[#102A43] focus:ring-2 focus:ring-[#0E6B6B] focus:outline-none"
-                          />
-                          <datalist id={`prod-suggestions-${idx}`}>
-                            {products.map((p) => (
-                              <option key={p.id} value={p.name} />
-                            ))}
-                          </datalist>
-                        </div>
+                      {/* Product Name Input (Full Width) */}
+                      <div>
+                        <input
+                          type="text"
+                          required
+                          list={`prod-suggestions-${idx}`}
+                          value={item.productName}
+                          onChange={(e) =>
+                            handleItemChange(idx, 'productName', e.target.value)
+                          }
+                          placeholder="পণ্যের নাম (যেমন: মিনিকেট চাল ৫০ কেজি)"
+                          className="w-full px-3.5 py-2.5 rounded-2xl border border-[#8A949E] bg-white text-xs sm:text-sm font-medium text-[#111827] placeholder-[#1F2937] focus:ring-2 focus:ring-[#0D5238] focus:outline-none"
+                        />
+                        <datalist id={`prod-suggestions-${idx}`}>
+                          {products.map((p) => (
+                            <option key={p.id} value={p.name} />
+                          ))}
+                        </datalist>
+                      </div>
 
+                      {/* Quantity, Unit, and Unit Cost Price in 3 Columns */}
+                      <div className="grid grid-cols-12 gap-2">
                         {/* Quantity */}
-                        <div className="sm:col-span-2">
+                        <div className="col-span-4">
                           <input
                             type="number"
                             required
                             min="0.1"
                             step="any"
                             value={item.quantity || ''}
-                            onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
-                            placeholder="পরিমাণ"
-                            className="w-full px-2.5 py-2 rounded-xl border border-[#E2E8F0] bg-white text-xs font-mono text-center text-[#102A43] focus:ring-2 focus:ring-[#0E6B6B] focus:outline-none"
+                            onChange={(e) =>
+                              handleItemChange(idx, 'quantity', e.target.value)
+                            }
+                            placeholder="1"
+                            className="w-full px-2.5 py-2.5 rounded-2xl border border-[#8A949E] bg-white text-xs sm:text-sm font-medium text-center text-[#111827] focus:ring-2 focus:ring-[#0D5238] focus:outline-none"
                           />
                         </div>
 
                         {/* Unit */}
-                        <div className="sm:col-span-2">
+                        <div className="col-span-4">
                           <select
                             value={item.unit}
-                            onChange={(e) => handleItemChange(idx, 'unit', e.target.value)}
-                            className="w-full px-2 py-2 rounded-xl border border-[#E2E8F0] bg-white text-xs text-[#102A43] focus:ring-2 focus:ring-[#0E6B6B] focus:outline-none"
+                            onChange={(e) =>
+                              handleItemChange(idx, 'unit', e.target.value)
+                            }
+                            className="w-full px-2.5 py-2.5 rounded-2xl border border-[#8A949E] bg-white text-xs sm:text-sm font-medium text-[#111827] focus:ring-2 focus:ring-[#0D5238] focus:outline-none"
                           >
                             <option value="kg">কেজি</option>
                             <option value="packet">প্যাকেট/বস্তা</option>
@@ -636,72 +643,87 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                           </select>
                         </div>
 
-                        {/* Unit buy rate */}
-                        <div className="sm:col-span-3">
-                          <div className="relative">
-                            <span className="absolute left-2.5 top-2 text-[#64748B] text-xs">৳</span>
-                            <input
-                              type="number"
-                              required
-                              min="0"
-                              step="any"
-                              value={item.unitCostPrice || ''}
-                              onChange={(e) => handleItemChange(idx, 'unitCostPrice', e.target.value)}
-                              placeholder="দর (প্রতি একক)"
-                              className="w-full pl-6 pr-2.5 py-2 rounded-xl border border-[#E2E8F0] bg-white text-xs font-mono text-right text-[#102A43] focus:ring-2 focus:ring-[#0E6B6B] focus:outline-none"
-                            />
-                          </div>
+                        {/* Unit Cost Price */}
+                        <div className="col-span-4">
+                          <input
+                            type="number"
+                            required
+                            min="0"
+                            step="any"
+                            value={item.unitCostPrice || ''}
+                            onChange={(e) =>
+                              handleItemChange(idx, 'unitCostPrice', e.target.value)
+                            }
+                            placeholder="৳ দর (প্রতি একক)"
+                            className="w-full px-2.5 py-2.5 rounded-2xl border border-[#8A949E] bg-white text-xs sm:text-sm font-medium text-center text-[#111827] placeholder-[#1F2937] focus:ring-2 focus:ring-[#0D5238] focus:outline-none"
+                          />
                         </div>
                       </div>
 
-                      <div className="text-right text-[11px] font-bold text-[#64748B]">
-                        মোট টাকা:{' '}
-                        <span className="font-mono text-[#2E7D32] text-xs font-black">
-                          ৳{(item.totalCost || 0).toLocaleString()}
-                        </span>
+                      <div className="text-right text-xs sm:text-sm font-extrabold text-[#0D5238] pt-0.5">
+                        মোট টাকা: ৳
+                        {String((item.totalCost || 0).toLocaleString('en-IN')).replace(
+                          /\d/g,
+                          (d) => '০১২৩৪৫৬৭৮৯'[Number(d)]
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
+
+                {/* Full-width Outlined Button: + আরও পণ্য যোগ করুন */}
+                <button
+                  type="button"
+                  onClick={handleAddItemRow}
+                  className="w-full py-2.5 px-4 rounded-2xl border border-[#8A949E] bg-white hover:bg-[#F8FAFC] text-[#0D5238] text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition active:scale-[0.99] cursor-pointer"
+                >
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span>আরও পণ্য যোগ করুন</span>
+                </button>
               </div>
 
-              {/* Financial Calculation Bar (শুধুমাত্র নগদ ক্রয় রসিদ) */}
-              <div className="p-4 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-3">
-                <div className="flex items-center justify-between text-sm sm:text-base font-black text-[#102A43]">
-                  <span>সর্বমোট নগদ বিল:</span>
-                  <span className="font-mono text-lg sm:text-xl text-[#2E7D32]">
-                    ৳{purchaseGrandTotal.toLocaleString()}
-                  </span>
-                </div>
+              {/* Voucher / Receipt Note */}
+              <div>
+                <label className="block text-xs sm:text-sm font-extrabold text-[#111827] mb-1.5">
+                  রসিদ বা ভাউচার বিবরণ (ঐচ্ছিক)
+                </label>
+                <input
+                  type="text"
+                  value={purchaseNote}
+                  onChange={(e) => setPurchaseNote(e.target.value)}
+                  placeholder="যেমন: পাইকারি বাজার রসিদ #5088"
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-[#8A949E] bg-white text-xs sm:text-sm font-medium text-[#111827] placeholder-[#1F2937] focus:ring-2 focus:ring-[#0D5238] focus:outline-none"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-[#102A43] mb-1">
-                    রসিদ বা ভাউচার বিবরণ (ঐচ্ছিক)
-                  </label>
-                  <input
-                    type="text"
-                    value={purchaseNote}
-                    onChange={(e) => setPurchaseNote(e.target.value)}
-                    placeholder="যেমন: পাইকারি বাজার রসিদ #5088"
-                    className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] bg-white text-xs text-[#102A43]"
-                  />
+              {/* Mint Green Total Cash Bill Box */}
+              <div className="px-4 py-3 rounded-[20px] bg-[#DCFCE7]">
+                <div className="text-sm sm:text-base font-extrabold text-[#111827]">
+                  সর্বমোট নগদ বিল: ৳{' '}
+                  {String(purchaseGrandTotal.toLocaleString('en-IN')).replace(
+                    /\d/g,
+                    (d) => '০১২৩৪৫৬৭৮৯'[Number(d)]
+                  )}
+                </div>
+                <div className="text-xs sm:text-sm font-medium text-[#1F2937] mt-0.5">
+                  (ক্যাশ ড্রয়ার থেকে বিয়োগ হবে)
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="pt-2 flex items-center justify-end gap-2.5 shrink-0">
+              {/* Bottom Action Buttons */}
+              <div className="pt-1 flex items-center gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowNewPurchaseModal(false)}
-                  className="px-4 py-2.5 rounded-xl border border-[#E2E8F0] bg-[#EDF2F7] text-xs font-bold text-[#102A43] cursor-pointer"
+                  className="px-6 py-3 rounded-2xl bg-[#D1D5DB] hover:bg-[#9CA3AF] text-xs sm:text-sm font-extrabold text-[#1F2937] transition cursor-pointer"
                 >
                   বাতিল
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+                  className="flex-1 py-3 px-4 rounded-2xl bg-[#0D5238] hover:bg-[#093B28] text-white text-xs sm:text-sm font-extrabold text-center shadow-xs transition active:scale-95 cursor-pointer"
                 >
-                  রসিদ সংরক্ষণ করুন ও স্টক আপডেট করুন
+                  সংরক্ষণ ও স্টক আপডেট
                 </button>
               </div>
             </form>

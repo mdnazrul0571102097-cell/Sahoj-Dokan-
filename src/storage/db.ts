@@ -38,6 +38,7 @@ const STORAGE_KEYS = {
   DAILY_RECONCILIATIONS: 'sahoj_dokan_daily_reconciliations',
   MONTHLY_RECONCILIATIONS: 'sahoj_dokan_monthly_reconciliations',
   INITIAL_OPENING_CASH: 'sahoj_dokan_initial_opening_cash',
+  INITIAL_STORE_CAPITAL: 'sahoj_dokan_initial_store_capital',
   ADMIN_PASSWORD: 'sahoj_dokan_admin_password',
   TRIAL_START_MAP: 'sahoj_dokan_trial_start_map',
   APK_DOWNLOAD_URL: 'sahoj_dokan_apk_download_url',
@@ -986,6 +987,24 @@ export const DB = {
     } catch (_) {}
   },
 
+  getInitialStoreCapital(): number {
+    try {
+      const val = parseFloat(localStorage.getItem(STORAGE_KEYS.INITIAL_STORE_CAPITAL) || '0');
+      return isNaN(val) ? 0 : Math.max(0, Math.round(val));
+    } catch (_) {
+      return 0;
+    }
+  },
+
+  saveInitialStoreCapital(amount: number) {
+    try {
+      localStorage.setItem(STORAGE_KEYS.INITIAL_STORE_CAPITAL, String(Math.max(0, Math.round(amount))));
+      if (typeof window !== 'undefined' && (window as any).__sd_schedule_sync) {
+        (window as any).__sd_schedule_sync();
+      }
+    } catch (_) {}
+  },
+
   isFirstRun(): boolean {
     return localStorage.getItem(STORAGE_KEYS.FIRST_RUN) === null;
   },
@@ -1397,6 +1416,7 @@ export const DB = {
       dailyReconciliations: this.getDailyReconciliations(),
       monthlyReconciliations: this.getMonthlyReconciliations(),
       initialOpeningCash: this.getInitialOpeningCash(),
+      initialStoreCapital: this.getInitialStoreCapital(),
       subscription: this.getSubscription(),
       paymentRequests: this.getPaymentRequests(),
     };
@@ -1437,6 +1457,9 @@ export const DB = {
     if (Array.isArray(data.monthlyReconciliations)) this.saveMonthlyReconciliations(data.monthlyReconciliations);
     if (typeof data.initialOpeningCash === 'number') {
       this.saveInitialOpeningCash(data.initialOpeningCash);
+    }
+    if (typeof data.initialStoreCapital === 'number') {
+      this.saveInitialStoreCapital(data.initialStoreCapital);
     }
 
     if (Array.isArray(data.paymentRequests)) {

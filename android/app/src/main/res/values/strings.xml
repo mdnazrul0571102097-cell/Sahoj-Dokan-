@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sahoj Dokan</string>
+    <string name="title_activity_main">Sahoj Dokan</string>
+    <string name="package_name">com.sahojdokan.pos</string>
+    <string name="custom_url_scheme">com.sahojdokan.pos</string>
+</resources>

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="bn">
+  <head>
+    <script>
+      (function() {
+        // 1. Filter out benign Vite HMR WebSocket errors in AI Studio sandbox
+        var origConsoleError = console.error;
+        console.error = function() {
+          var msg = '';
+          for (var i = 0; i < arguments.length; i++) {
+            var arg = arguments[i];
+            if (arg instanceof Error) msg += ' ' + arg.message + ' ' + (arg.stack || '');
+            else msg += ' ' + String(arg);
+          }
+          if (msg.indexOf('WebSocket') !== -1 || msg.indexOf('closed without opened') !== -1 || msg.indexOf('vite-hmr') !== -1) {
+            return;
+          }
+          return origConsoleError.apply(console, arguments);
+        };
+
+        // 2. Mock vite-hmr WebSocket client to prevent failed connection attempts
+        if (typeof window !== 'undefined' && window.WebSocket) {
+          var OrigWS = window.WebSocket;
+          window.WebSocket = function(url, protocols) {
+            if (protocols === 'vite-hmr' || (typeof url === 'string' && (url.indexOf('vite-hmr') !== -1 || url.indexOf('vite') !== -1))) {
+              var listeners = {};
+              var dummy = {
+                readyState: 1, // OPEN
+                url: url,
+                protocol: protocols,
+                send: function() {},
+                close: function() {},
+                addEventListener: function(type, fn) {
+                  listeners[type] = listeners[type] || [];
+                  listeners[type].push(fn);
+                  if (type === 'open') {
+                    setTimeout(function() {
+                      try { fn({ type: 'open' }); } catch(_) {}
+                    }, 10);
+                  }
+                },
+                removeEventListener: function(type, fn) {
+                  if (listeners[type]) {
+                    listeners[type] = listeners[type].filter(function(f) { return f !== fn; });
+                  }
+                },
+                dispatchEvent: function() { return true; }
+              };
+              return dummy;
+            }
+            return new OrigWS(url, protocols);
+          };
+          window.WebSocket.prototype = OrigWS.prototype;
+          window.WebSocket.CONNECTING = 0;
+          window.WebSocket.OPEN = 1;
+          window.WebSocket.CLOSING = 2;
+          window.WebSocket.CLOSED = 3;
+        }
+
+        window.addEventListener('error', function(e) {
+          if (e && e.message && (e.message.indexOf('WebSocket') !== -1 || e.message.indexOf('closed without opened') !== -1)) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return true;
+          }
+        }, true);
+
+        // 3. Force purge stale ServiceWorker CacheStorage on APK version upgrade (keeps localStorage 100% intact)
+        try {
+          var CURRENT_APK_BUILD = 'sahoj_dokan_universal_v15_20261104';
+          var prevBuild = localStorage.getItem('__sahoj_apk_build_ver');
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              for (var i = 0; i < regs.length; i++) {
+                regs[i].unregister();
+              }
+            }).catch(function() {});
+          }
+          if (prevBuild !== CURRENT_APK_BUILD) {
+            localStorage.setItem('__sahoj_apk_build_ver', CURRENT_APK_BUILD);
+            if (window.caches && window.caches.keys) {
+              window.caches.keys().then(function(keys) {
+                return Promise.all(keys.map(function(k) { return window.caches.delete(k); }));
+              }).then(function() {
+                if (prevBuild && !sessionStorage.getItem('__sahoj_reloaded_v15')) {
+                  sessionStorage.setItem('__sahoj_reloaded_v15', '1');
+                  window.location.reload();
+                }
+              }).catch(function() {});
+            }
+          }
+        } catch (_) {}
+      })();
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Sahoj Dokan - সহজ দোকান</title>
+    <meta name="description" content="Sahoj Dokan - সহজ দোকান: সম্পূর্ণ বাংলাদেশী অফলাইন গ্রোসারি ও রিটেল পিওএস, পণ্য স্ক্যানার, বাকি খাতা ও দৈনিক হিসাব অ্যাপ।" />
+    <meta property="og:title" content="Sahoj Dokan - সহজ দোকান" />
+    <meta property="og:description" content="Sahoj Dokan - সহজ দোকান: সম্পূর্ণ বাংলাদেশী অফলাইন গ্রোসারি ও রিটেল পিওএস, পণ্য স্ক্যানার, বাকি খাতা ও দৈনিক হিসাব অ্যাপ।" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/assets/icon.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#F8FAFC" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Sahoj Dokan - সহজ দোকান" />
+    <link rel="icon" type="image/png" href="/assets/icon.png" />
+    <link rel="apple-touch-icon" href="/assets/icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="module" crossorigin src="/assets/index-ByX1vyGn.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-5sUvaTf9.css">
+  </head>
+  <body class="bg-[#F8FAFC] text-[#1E293B] select-none antialiased">
+    <div id="root"></div>
+  </body>
+</html>
+

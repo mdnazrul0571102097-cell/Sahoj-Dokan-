@@ -1,6 +1,8 @@
 {
   "appId": "com.sahojdokan.pos",
-  "appName": "Sahoj Dokan - সহজ দোকান",
+  "appName": "Sahoj Dokan",
   "webDir": "dist",
-  "bundledWebRuntime": false
+  "android": {
+    "allowMixedContent": true
+  }
 }

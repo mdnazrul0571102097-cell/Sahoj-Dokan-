@@ -7,6 +7,10 @@ import {
   ShopProfile,
   Language,
   AppMode,
+  Expense,
+  BulkPurchase,
+  PurchaseRecord,
+  OwnerTransaction,
 } from '../types';
 import { translations } from '../i18n/translations';
 import { playBarcodeBeep, playSuccessChime } from '../utils/audio';
@@ -51,6 +55,12 @@ interface Props {
   appMode?: AppMode;
   onOpenSubscriptionModal?: () => void;
   onDeleteSale?: (saleId: string) => void;
+  initialStoreCapital?: number;
+  onSaveInitialStoreCapital?: (amount: number) => void;
+  expenses?: Expense[];
+  bulkPurchases?: BulkPurchase[];
+  purchases?: PurchaseRecord[];
+  ownerTransactions?: OwnerTransaction[];
 }
 
 export const PosView: React.FC<Props> = ({
@@ -66,6 +76,12 @@ export const PosView: React.FC<Props> = ({
   appMode = 'trial',
   onOpenSubscriptionModal,
   onDeleteSale,
+  initialStoreCapital = 0,
+  onSaveInitialStoreCapital,
+  expenses = [],
+  bulkPurchases = [],
+  purchases = [],
+  ownerTransactions = [],
 }) => {
   const t = translations[language];
 
@@ -346,44 +362,51 @@ export const PosView: React.FC<Props> = ({
     setNewCustPhone('');
   };
 
+  // Clean number formatter: strips unnecessary trailing zeros after decimal (e.g. 33.50 -> 33.5)
+  const formatCleanNumber = (val: number | string): string | number => {
+    const num = typeof val === 'number' ? val : parseFloat(String(val));
+    if (isNaN(num)) return val;
+    return Number(num.toFixed(3));
+  };
+
   return (
-    <div className="h-[calc(100vh-125px)] flex flex-col p-2 sm:p-3 max-w-7xl mx-auto overflow-hidden relative">
-      {/* 1. Top Search & Barcode Scanner Bar */}
-      <div className="flex items-center gap-2 mb-2 shrink-0">
-        {/* দ্রুত বিক্রি Button (বাম সাইডে, ক্যামেরা বাটনের মতো সবুজ, শুধু লেখা 'দ্রুত বিক্রি') */}
+    <div className="h-[calc(100dvh-96px)] sm:h-[calc(100dvh-104px)] flex flex-col px-2 py-1.5 sm:p-2.5 max-w-7xl mx-auto overflow-hidden relative">
+      {/* 1. Top Search & Compact Action Bar */}
+      <div className="flex items-center gap-1.5 mb-1.5 shrink-0">
+        {/* দ্রুত বিক্রি Button (ছোট ও পরিপাটি) */}
         <button
           type="button"
           onClick={() => {
             setQuickSaleInitialMode('sale');
             setIsQuickSaleOpen(true);
           }}
-          className="px-2.5 py-2.5 rounded-2xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-bold text-xs shadow-xs transition active:scale-95 shrink-0 cursor-pointer"
+          className="px-2.5 py-1.5 sm:py-2 rounded-xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-bold text-[11px] sm:text-xs leading-tight shadow-2xs transition active:scale-95 shrink-0 cursor-pointer whitespace-nowrap"
           title="পণ্য অ্যাড বা স্ক্যান ছাড়াই সরাসরি বিক্রির হিসাব রাখুন"
         >
           দ্রুত বিক্রি
         </button>
 
-        {/* মাঝখানে সার্চ বার */}
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9AA5B1]" />
+        {/* মাঝখানে একটু বড় ও স্পষ্ট সার্চ বার */}
+        <div className="relative flex-1 min-w-0">
+          <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#64748B]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="পণ্যের নাম লিখুন বা বারকোড খুঁজুন..."
-            className="w-full pl-10 pr-9 py-2.5 bg-white border border-[#E2E8F0] rounded-2xl text-xs sm:text-sm text-[#0F172A] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]/30 focus:border-[#0E6B6B] shadow-xs"
+            placeholder="পণ্য বা বারকোড খুঁজুন..."
+            className="w-full pl-8 pr-7 py-1.5 sm:py-2 bg-white border border-[#CBD5E1] rounded-xl text-xs sm:text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]/25 focus:border-[#0E6B6B] shadow-2xs"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-[#9AA5B1] hover:text-[#0F172A]"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#94A3B8] hover:text-[#0F172A]"
             >
               ✕
             </button>
           )}
         </div>
 
-        {/* Camera Barcode Scanner Button */}
+        {/* Camera Barcode Scanner Button (ছোট ও পরিপাটি) */}
         <button
           type="button"
           onClick={() => {
@@ -397,55 +420,57 @@ export const PosView: React.FC<Props> = ({
             }
             setIsScannerOpen(true);
           }}
-          className="flex items-center gap-1.5 px-3 py-2.5 rounded-2xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-bold text-xs sm:text-sm shadow-xs transition active:scale-95 shrink-0 cursor-pointer"
+          className="flex items-center justify-center gap-1 px-2.5 py-1.5 sm:py-2 rounded-xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-bold text-[11px] sm:text-xs shadow-2xs transition active:scale-95 shrink-0 cursor-pointer"
           title="বারকোড স্ক্যান করুন"
         >
-          <Camera className="w-4 h-4" />
+          <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           <span className="hidden sm:inline">স্ক্যান</span>
         </button>
 
-        {/* Return Product Button (হোম স্ক্রিনে পণ্য ফেরত বাটন) */}
+        {/* Return Product Button (হোম স্ক্রিনে পণ্য ফেরত বাটন - তীর চিহ্ন ছাড়া পরিপাটি বাটন) */}
         <button
           type="button"
           onClick={() => {
             setQuickSaleInitialMode('return');
             setIsQuickSaleOpen(true);
           }}
-          className="flex items-center gap-1 px-2.5 py-2.5 rounded-2xl bg-rose-50 border border-rose-200 text-[#D32F2F] hover:bg-[#D32F2F] hover:text-white font-bold text-xs shadow-xs shrink-0 cursor-pointer transition active:scale-95"
+          className="px-2.5 py-1.5 sm:py-2 rounded-xl bg-rose-50 border border-rose-200 text-[#D32F2F] hover:bg-[#D32F2F] hover:text-white font-bold text-[11px] sm:text-xs leading-tight shadow-2xs shrink-0 cursor-pointer transition active:scale-95 whitespace-nowrap"
           title="পণ্য ফেরত ও হিসাব সমন্বয়"
         >
-          <Undo2 className="w-4 h-4" />
-          <span>পণ্য ফেরত</span>
+          পণ্য ফেরত
         </button>
       </div>
 
-      {/* 2. Product Cards Grid */}
+      {/* 2. Product Cards Grid (Compact 2-Column Mobile Grid) */}
       <div className="flex-1 overflow-y-auto pr-0.5 pb-1">
         {filteredProducts.length === 0 ? (
-          <div className="h-64 flex flex-col items-center justify-center text-center p-6 bg-white rounded-3xl border border-[#E2E8F0]">
-            <Search className="w-12 h-12 text-[#9AA5B1] mb-2 stroke-1" />
+          <div className="h-56 flex flex-col items-center justify-center text-center p-5 bg-white rounded-2xl border border-[#E2E8F0]">
+            <Search className="w-10 h-10 text-[#9AA5B1] mb-2 stroke-1" />
             <p className="text-sm font-bold text-[#0F172A]">কোনো পণ্য পাওয়া যায়নি</p>
             <p className="text-xs text-[#64748B] mt-1">
               অন্য কোনো নাম দিয়ে সার্চ করুন অথবা 'পণ্য ও স্টক' ট্যাবে নতুন পণ্য যোগ করুন।
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 sm:gap-3.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-2.5">
             {filteredProducts.map((product) => {
               const cartItem = cart.find((ci) => ci.product.id === product.id);
               const isLowStock = product.stock <= (product.minStockAlert || 5);
               const isOutOfStock = product.stock <= 0;
+              const displayUnit = product.isLoose ? 'কেজি' : product.unit;
+              const cleanStock = formatCleanNumber(product.stock);
+              const cleanPrice = formatCleanNumber(product.sellPrice);
 
               return (
                 <div
                   key={product.id}
                   onClick={() => handleProductCardClick(product)}
-                  className={`group relative text-left rounded-[22px] overflow-hidden border border-[#E2E8F0] transition-all duration-150 flex flex-col justify-between bg-white hover:shadow-lg hover:border-[#0E6B6B]/50 active:scale-[0.98] cursor-pointer shadow-xs ${
-                    cartItem ? 'ring-2 ring-[#0E6B6B] border-[#0E6B6B]' : ''
+                  className={`group relative text-left rounded-2xl overflow-hidden border border-[#E2E8F0] transition-all duration-150 flex flex-col justify-between bg-white hover:shadow-md hover:border-[#0E6B6B]/45 active:scale-[0.98] cursor-pointer shadow-2xs ${
+                    cartItem ? 'ring-2 ring-[#0E6B6B] border-[#0E6B6B] bg-[#F0FDF9]/30' : ''
                   }`}
                 >
-                  {/* Product Photo (10% Bigger, Modern Polish) & Stock Badges */}
-                  <div className="relative aspect-[4/3.5] w-full bg-[#F8FAFC] overflow-hidden">
+                  {/* Product Photo (~20% Reduced Height for High Density) & Stock Badges */}
+                  <div className="relative h-24 sm:h-28 w-full bg-[#F8FAFC] overflow-hidden shrink-0">
                     <img
                       src={product.image}
                       alt={product.name}
@@ -458,63 +483,66 @@ export const PosView: React.FC<Props> = ({
                     />
 
                     {/* Stock Alert Badge */}
-                    <div className="absolute top-2 left-2">
+                    <div className="absolute top-1.5 left-1.5">
                       {isOutOfStock ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-900/90 text-white shadow">
+                        <span className="px-1.5 py-0.5 rounded-md text-[9.5px] font-bold bg-slate-900/90 text-white shadow-2xs">
                           স্টক শেষ
                         </span>
                       ) : isLowStock ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-600 text-white shadow-md animate-pulse flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" />
-                          <span>{product.stock} {product.unit} বাকি</span>
+                        <span className="px-1.5 py-0.5 rounded-md text-[9.5px] font-extrabold bg-rose-600 text-white shadow-2xs flex items-center gap-0.5">
+                          <AlertTriangle className="w-2.5 h-2.5" />
+                          <span>{cleanStock} {displayUnit}</span>
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#0E6B6B]/85 text-white backdrop-blur-xs shadow-xs">
-                          {product.stock} {product.unit}
+                        <span className="px-1.5 py-0.5 rounded-md text-[9.5px] font-bold bg-[#0E6B6B]/90 text-white backdrop-blur-xs shadow-2xs">
+                          {cleanStock} {displayUnit}
                         </span>
                       )}
                     </div>
 
                     {/* Loose / Weight indicator badge */}
                     {product.isLoose && (
-                      <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md text-[10px] font-black bg-amber-400 text-slate-950 shadow-xs">
+                      <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md text-[9px] font-extrabold bg-amber-400/95 text-slate-950 shadow-2xs">
                         খোলা / কেজি
                       </div>
                     )}
                   </div>
 
-                  {/* Product Details & Action */}
-                  <div className="p-3 flex-1 flex flex-col justify-between">
-                    <div>
-                      <h4 className="font-bold text-xs sm:text-sm text-[#0F172A] line-clamp-2 leading-tight">
+                  {/* Compact Product Details & Action */}
+                  <div className="px-2.5 py-1.5 sm:p-2.5 flex-1 flex flex-col justify-between">
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-xs sm:text-[13px] text-[#0F172A] line-clamp-1 leading-snug">
                         {product.name}
                       </h4>
-                      {product.barcode && (
-                        <p className="text-[10px] text-[#64748B] font-mono mt-0.5">
+                      {product.barcode ? (
+                        <p className="text-[9.5px] text-[#64748B] font-mono leading-tight mt-0.5 truncate">
                           #{product.barcode}
+                        </p>
+                      ) : (
+                        <p className="text-[9.5px] text-[#94A3B8] leading-tight mt-0.5 truncate">
+                          {product.category}
                         </p>
                       )}
                     </div>
 
-                    <div className="mt-2.5 pt-2 border-t border-[#F1F5F9] flex items-center justify-between">
-                      <div>
-                        {/* Bold & Bigger Price */}
-                        <span className="text-lg sm:text-xl font-black text-[#0E6B6B] tracking-tight">
-                          ৳{product.sellPrice}
+                    <div className="mt-1.5 pt-1.5 border-t border-[#F1F5F9] flex items-center justify-between gap-1">
+                      <div className="min-w-0 truncate">
+                        <span className="text-sm sm:text-base font-black text-[#0E6B6B] tracking-tight tabular-nums">
+                          ৳{cleanPrice}
                         </span>
-                        <span className="text-[11px] font-bold text-[#64748B] ml-1">
-                          /{product.unit}
+                        <span className="text-[10px] font-semibold text-[#64748B] ml-0.5">
+                          /{displayUnit}
                         </span>
                       </div>
 
-                      {/* Add button (Rounded-Full with Modern Shadow) or In-Cart Indicator */}
+                      {/* Compact Modern Add (+) Button or In-Cart Quantity Pill */}
                       {cartItem ? (
-                        <div className="px-2.5 py-1 rounded-full bg-[#0E6B6B] text-white text-[11px] font-bold flex items-center gap-1 shadow-md">
-                          <span>{cartItem.quantity} {product.unit}</span>
+                        <div className="px-2 py-0.5 rounded-lg bg-[#0E6B6B] text-white text-[10px] font-bold flex items-center gap-0.5 shadow-2xs shrink-0 tabular-nums">
+                          <span>{formatCleanNumber(cartItem.quantity)} {displayUnit}</span>
                         </div>
                       ) : (
-                        <div className="w-8 h-8 rounded-full bg-[#0E6B6B] hover:bg-[#094747] text-white flex items-center justify-center transition-all shadow-md hover:shadow-lg active:scale-90">
-                          <Plus className="w-4 h-4 stroke-[3]" />
+                        <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-[#0E6B6B] hover:bg-[#094747] text-white flex items-center justify-center transition-all shadow-2xs active:scale-90 shrink-0">
+                          <Plus className="w-3.5 h-3.5 stroke-[2.75]" />
                         </div>
                       )}
                     </div>
@@ -526,25 +554,25 @@ export const PosView: React.FC<Props> = ({
         )}
       </div>
 
-      {/* 4. Persistent Bottom Cart Bar (নিচে সবুজ কার্ট বার "0 টি পণ্য ৳0") */}
-      <div className="pt-2 shrink-0">
+      {/* 4. Compact Persistent Bottom Cart Summary Bar */}
+      <div className="pt-1.5 shrink-0">
         <button
           type="button"
           onClick={() => setIsCartOpenMobile(true)}
-          className="w-full py-3 px-4 rounded-2xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-bold text-sm flex items-center justify-between shadow-lg active:scale-[0.99] transition cursor-pointer"
+          className="w-full py-2 px-3.5 rounded-xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-bold text-xs sm:text-sm flex items-center justify-between shadow-md active:scale-[0.99] transition cursor-pointer"
         >
-          <div className="flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5" />
+          <div className="flex items-center gap-1.5">
+            <ShoppingCart className="w-4 h-4" />
             <span>
               {cart.length} টি পণ্য
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="text-base font-extrabold tracking-tight">
-              ৳{grandTotal}
+          <div className="flex items-center gap-2.5">
+            <span className="text-sm sm:text-base font-extrabold tracking-tight tabular-nums">
+              ৳{formatCleanNumber(grandTotal)}
             </span>
-            <span className="bg-white/20 px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1">
+            <span className="bg-white/20 px-2 py-0.5 rounded-lg text-[11px] font-bold flex items-center gap-1">
               <span>{cart.length > 0 ? 'বিক্রি সম্পন্ন করুন →' : 'কার্ট দেখুন'}</span>
             </span>
           </div>
@@ -632,7 +660,7 @@ export const PosView: React.FC<Props> = ({
                         {item.product.name}
                       </h5>
                       <p className="text-[11px] text-[#64748B]">
-                        ৳{item.unitPrice} × {item.quantity} {item.product.unit} = ৳{item.totalPrice}
+                        ৳{formatCleanNumber(item.unitPrice)} × {formatCleanNumber(item.quantity)} {item.product.isLoose ? 'কেজি' : item.product.unit} = ৳{formatCleanNumber(item.totalPrice)}
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -650,7 +678,7 @@ export const PosView: React.FC<Props> = ({
                         -
                       </button>
                       <span className="w-8 text-center font-bold text-xs text-[#0F172A]">
-                        {item.quantity}
+                        {formatCleanNumber(item.quantity)}
                       </span>
                       <button
                         onClick={() =>
@@ -862,6 +890,12 @@ export const PosView: React.FC<Props> = ({
         }}
         onDeleteSale={onDeleteSale}
         onAddNewCustomer={onAddNewCustomer}
+        initialStoreCapital={initialStoreCapital}
+        onSaveInitialStoreCapital={onSaveInitialStoreCapital}
+        expenses={expenses}
+        bulkPurchases={bulkPurchases}
+        purchases={purchases}
+        ownerTransactions={ownerTransactions}
       />
     </div>
   );

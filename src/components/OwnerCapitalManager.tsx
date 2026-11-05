@@ -3,8 +3,13 @@ import {
   OwnerTransaction,
   OwnerTransactionType,
   DailyCashReconciliation,
+  Sale,
+  BulkPurchase,
+  PurchaseRecord,
+  Expense,
 } from '../types';
 import { playSuccessChime } from '../utils/audio';
+import { RunningCapitalCard } from './RunningCapitalCard';
 import {
   UserCheck,
   ArrowUpRight,
@@ -23,12 +28,24 @@ interface Props {
   dailyReconciliations?: DailyCashReconciliation[];
   onAddOwnerTransaction: (tx: OwnerTransaction) => void;
   onDeleteOwnerTransaction: (id: string) => void;
+  initialStoreCapital?: number;
+  onSaveInitialStoreCapital?: (amount: number) => void;
+  sales?: Sale[];
+  bulkPurchases?: BulkPurchase[];
+  purchases?: PurchaseRecord[];
+  expenses?: Expense[];
 }
 
 export const OwnerCapitalManager: React.FC<Props> = ({
   ownerTransactions,
   onAddOwnerTransaction,
   onDeleteOwnerTransaction,
+  initialStoreCapital = 0,
+  onSaveInitialStoreCapital = () => {},
+  sales = [],
+  bulkPurchases = [],
+  purchases = [],
+  expenses = [],
 }) => {
   const getLocalDateStr = (d?: string | Date): string => {
     if (!d) return '';
@@ -214,6 +231,17 @@ export const OwnerCapitalManager: React.FC<Props> = ({
 
   return (
     <div className="flex-1 flex flex-col space-y-3">
+      {/* Running Store Capital Tracker (চলমান মোট পুঁজি / মূলধন ট্র্যাকার) */}
+      <RunningCapitalCard
+        initialStoreCapital={initialStoreCapital}
+        onSaveInitialStoreCapital={onSaveInitialStoreCapital}
+        sales={sales}
+        bulkPurchases={bulkPurchases}
+        purchases={purchases}
+        expenses={expenses}
+        ownerTransactions={ownerTransactions}
+      />
+
       {/* Info Banner: Accounting Isolation Guarantee */}
       <div className="bg-gradient-to-r from-[#E0F2F1] via-white to-[#E8F5E9] rounded-[22px] p-3.5 border border-[#80CBC4] flex items-start gap-3 shadow-2xs">
         <div className="w-9 h-9 rounded-xl bg-[#0E6B6B] text-white flex items-center justify-center shrink-0 mt-0.5">

@@ -221,7 +221,7 @@ export const LooseItemModal: React.FC<Props> = ({
               </p>
               <p className="text-base font-extrabold text-emerald-950 dark:text-emerald-100">
                 {weightKg >= 1
-                  ? `${weightKg.toFixed(2)} ${language === 'bn' ? 'কেজি' : 'KG'}`
+                  ? `${Number(weightKg.toFixed(3))} ${language === 'bn' ? 'কেজি' : 'KG'}`
                   : `${Math.round(weightKg * 1000)} ${language === 'bn' ? 'গ্রাম' : 'gm'}`}
               </p>
             </div>

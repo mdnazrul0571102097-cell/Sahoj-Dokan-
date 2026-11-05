@@ -1,6 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Sale, Customer, Language, Product } from '../types';
+import {
+  Sale,
+  Customer,
+  Language,
+  Product,
+  Expense,
+  BulkPurchase,
+  PurchaseRecord,
+  OwnerTransaction,
+} from '../types';
 import { playSuccessChime } from '../utils/audio';
+import { calculateRunningCapital } from './RunningCapitalCard';
 import {
   Zap,
   X,
@@ -12,9 +22,9 @@ import {
   Plus,
   ShoppingBag,
   TrendingUp,
-  Undo2,
-  Package,
-  AlertCircle,
+  Landmark,
+  Edit3,
+  Check,
 } from 'lucide-react';
 
 interface Props {
@@ -28,6 +38,12 @@ interface Props {
   onSaveQuickSale: (sale: Sale, openReceipt?: boolean, updatedProducts?: Product[]) => void;
   onDeleteSale?: (saleId: string) => void;
   onAddNewCustomer?: (customer: Customer) => void;
+  initialStoreCapital?: number;
+  onSaveInitialStoreCapital?: (amount: number) => void;
+  expenses?: Expense[];
+  bulkPurchases?: BulkPurchase[];
+  purchases?: PurchaseRecord[];
+  ownerTransactions?: OwnerTransaction[];
 }
 
 export const QuickSaleModal: React.FC<Props> = ({
@@ -41,9 +57,19 @@ export const QuickSaleModal: React.FC<Props> = ({
   onSaveQuickSale,
   onDeleteSale,
   onAddNewCustomer,
+  initialStoreCapital = 0,
+  onSaveInitialStoreCapital,
+  expenses = [],
+  bulkPurchases = [],
+  purchases = [],
+  ownerTransactions = [],
 }) => {
   // Active tab inside modal: 'sale' (দ্রুত বিক্রি) | 'return' (পণ্য ফেরত)
   const [activeMode, setActiveMode] = useState<'sale' | 'return'>(initialMode);
+  const [isEditingCapital, setIsEditingCapital] = useState(false);
+  const [capitalInputVal, setCapitalInputVal] = useState<string>(
+    initialStoreCapital > 0 ? String(initialStoreCapital) : ''
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -109,6 +135,19 @@ export const QuickSaleModal: React.FC<Props> = ({
   const todayTotalProfit = useMemo(() => {
     return Math.round(todaySales.reduce((sum, s) => sum + (s.profit || 0), 0));
   }, [todaySales]);
+
+  const capitalBreakdown = useMemo(
+    () =>
+      calculateRunningCapital({
+        initialStoreCapital,
+        sales,
+        bulkPurchases,
+        purchases,
+        expenses,
+        ownerTransactions,
+      }),
+    [initialStoreCapital, sales, bulkPurchases, purchases, expenses, ownerTransactions]
+  );
 
   if (!isOpen) return null;
 
@@ -362,36 +401,32 @@ export const QuickSaleModal: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
-      <div className="w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-2xl border border-[#E2E8F0] overflow-hidden">
-        {/* Header */}
+      <div className="w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-2xl max-h-[94dvh] flex flex-col shadow-2xl border border-[#E2E8F0] overflow-hidden">
+        {/* ১. স্লিম টপ বার (Compact Header) */}
         <div
-          className={`px-4 py-3.5 text-white flex items-center justify-between shrink-0 transition-colors ${
+          className={`px-3 py-2 text-white flex items-center justify-between gap-2 shrink-0 transition-colors ${
             activeMode === 'return'
               ? 'bg-gradient-to-r from-[#D32F2F] to-[#9A0007]'
               : 'bg-gradient-to-r from-[#0E6B6B] to-[#094747]'
           }`}
         >
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <div
-              className={`w-9 h-9 rounded-2xl flex items-center justify-center font-black shadow-xs shrink-0 ${
+              className={`w-7 h-7 rounded-xl flex items-center justify-center font-black shadow-2xs shrink-0 ${
                 activeMode === 'return'
                   ? 'bg-white text-[#D32F2F]'
                   : 'bg-amber-400 text-slate-950'
               }`}
             >
-              {activeMode === 'return' ? (
-                <Undo2 className="w-5 h-5 stroke-[2.5]" />
-              ) : (
-                <Zap className="w-5 h-5 fill-current" />
-              )}
+              <Zap className="w-4 h-4 fill-current" />
             </div>
-            <div>
-              <h3 className="font-extrabold text-base leading-tight">
+            <div className="min-w-0 flex-1">
+              <h3 className="font-extrabold text-xs sm:text-sm leading-tight truncate">
                 {activeMode === 'return'
                   ? 'পণ্য ফেরত ও হিসাব সমন্বয়'
                   : 'দ্রুত বিক্রি ও পণ্য ফেরত'}
               </h3>
-              <p className="text-[11px] text-white/90">
+              <p className="text-[10px] text-white/90 truncate whitespace-nowrap leading-tight">
                 {activeMode === 'return'
                   ? 'পণ্য ফেরত নিলে মূল ড্যাশবোর্ডের বিক্রি ও লাভ থেকে অটো টাকা কেটে যাবে'
                   : 'পণ্য অ্যাড বা স্ক্যান ছাড়াই সরাসরি বিক্রি ও ফেরতের হিসাব রাখুন'}
@@ -401,27 +436,27 @@ export const QuickSaleModal: React.FC<Props> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white cursor-pointer transition"
+            className="w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-white cursor-pointer transition shrink-0"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Mode Switcher: দ্রুত বিক্রি vs পণ্য ফেরত */}
-        <div className="p-2.5 bg-[#F8FAFC] border-b border-[#E2E8F0] grid grid-cols-2 gap-2 shrink-0">
+        {/* কমপ্যাক্ট ট্যাব সুইচার: দ্রুত বিক্রি vs পণ্য ফেরত (তীর চিহ্ন ছাড়া) */}
+        <div className="px-2.5 py-1.5 bg-[#F8FAFC] border-b border-[#E2E8F0] grid grid-cols-2 gap-1.5 shrink-0">
           <button
             type="button"
             onClick={() => {
               setActiveMode('sale');
               setJustSavedToast('');
             }}
-            className={`py-2.5 px-3 rounded-2xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition cursor-pointer border ${
+            className={`py-1.5 px-2.5 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1 transition cursor-pointer border ${
               activeMode === 'sale'
-                ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-sm'
+                ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-2xs'
                 : 'bg-white text-[#64748B] border-[#E2E8F0] hover:text-[#102A43]'
             }`}
           >
-            <Zap className="w-4 h-4 fill-current" />
+            <Zap className="w-3.5 h-3.5 fill-current" />
             <span>দ্রুত বিক্রি</span>
           </button>
 
@@ -431,45 +466,105 @@ export const QuickSaleModal: React.FC<Props> = ({
               setActiveMode('return');
               setJustSavedToast('');
             }}
-            className={`py-2.5 px-3 rounded-2xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition cursor-pointer border ${
+            className={`py-1.5 px-2.5 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1 transition cursor-pointer border ${
               activeMode === 'return'
-                ? 'bg-[#D32F2F] text-white border-[#D32F2F] shadow-sm'
+                ? 'bg-[#D32F2F] text-white border-[#D32F2F] shadow-2xs'
                 : 'bg-white text-[#D32F2F] border-rose-200 hover:bg-rose-50'
             }`}
           >
-            <Undo2 className="w-4 h-4 stroke-[2.5]" />
             <span>পণ্য ফেরত</span>
           </button>
         </div>
 
-        {/* Live Today Summary Banner (বিক্রি ও লাভ) */}
-        <div className="px-4 py-2 bg-[#E0F2F1] border-b border-[#B2DFDB] flex items-center justify-between gap-2 shrink-0">
-          <div className="flex items-center gap-1.5">
-            <ShoppingBag className="w-4 h-4 text-[#0E6B6B]" />
-            <span className="text-xs font-bold text-[#102A43]">আজকের বিক্রি:</span>
-            <span className="text-sm sm:text-base font-black text-[#0E6B6B]">
-              ৳{todayTotalAmount.toLocaleString()}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <TrendingUp className="w-4 h-4 text-[#2E7D32]" />
-            <span className="text-xs font-bold text-[#102A43]">আজকের লাভ:</span>
-            <span
-              className={`text-sm sm:text-base font-black ${
-                todayTotalProfit >= 0 ? 'text-[#2E7D32]' : 'text-[#D32F2F]'
-              }`}
+        {/* ২. আজকের হিসাব ও চলমান পুঁজি বার (Slim Single Strip) */}
+        <div className="px-2.5 py-1 bg-[#E0F2F1] border-b border-[#B2DFDB] shrink-0">
+          <div className="flex items-center justify-between gap-1.5 text-[11px]">
+            <div className="flex items-center gap-1 min-w-0">
+              <ShoppingBag className="w-3 h-3 text-[#0E6B6B] shrink-0" />
+              <span className="font-bold text-[#102A43] truncate">বিক্রি:</span>
+              <span className="font-black text-[#0E6B6B] tabular-nums">
+                ৳{todayTotalAmount.toLocaleString()}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1 min-w-0">
+              <TrendingUp className="w-3 h-3 text-[#2E7D32] shrink-0" />
+              <span className="font-bold text-[#102A43] truncate">লাভ:</span>
+              <span
+                className={`font-black tabular-nums ${
+                  todayTotalProfit >= 0 ? 'text-[#2E7D32]' : 'text-[#D32F2F]'
+                }`}
+              >
+                ৳{todayTotalProfit.toLocaleString()}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setCapitalInputVal(
+                  initialStoreCapital > 0 ? String(initialStoreCapital) : ''
+                );
+                setIsEditingCapital(!isEditingCapital);
+              }}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/80 hover:bg-white border border-[#80CBC4] cursor-pointer transition shrink-0"
+              title="শুরুর মূলধন সেট বা এডিট করতে ট্যাপ করুন"
             >
-              ৳{todayTotalProfit.toLocaleString()}
-            </span>
+              <Landmark className="w-3 h-3 text-[#0E6B6B]" />
+              <span className="font-bold text-[#102A43]">পুঁজি:</span>
+              <span
+                className={`font-black tabular-nums ${
+                  capitalBreakdown.currentRunningCapital >= 0
+                    ? 'text-[#0E6B6B]'
+                    : 'text-[#D32F2F]'
+                }`}
+              >
+                ৳{capitalBreakdown.currentRunningCapital.toLocaleString()}
+              </span>
+              <Edit3 className="w-2.5 h-2.5 text-[#0E6B6B]" />
+            </button>
           </div>
+
+          {isEditingCapital && onSaveInitialStoreCapital && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const val = Math.max(0, Math.round(Number(capitalInputVal) || 0));
+                onSaveInitialStoreCapital(val);
+                playSuccessChime();
+                setIsEditingCapital(false);
+              }}
+              className="mt-1 pt-1 border-t border-[#B2DFDB] flex items-center justify-between gap-1.5"
+            >
+              <span className="text-[10.5px] font-extrabold text-[#102A43] whitespace-nowrap">
+                শুরুর মূলধন (৳):
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="0"
+                value={capitalInputVal}
+                onChange={(e) => setCapitalInputVal(e.target.value)}
+                placeholder="যেমন: 50000"
+                className="flex-1 px-2 py-0.5 rounded-lg bg-white border border-[#0E6B6B] text-xs font-black text-[#102A43] focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="px-2 py-0.5 rounded-lg bg-[#0E6B6B] text-white text-[10.5px] font-extrabold flex items-center gap-0.5 cursor-pointer"
+              >
+                <Check className="w-3 h-3" />
+                <span>সেভ</span>
+              </button>
+            </form>
+          )}
         </div>
 
-        {/* Scrollable Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Compact Body */}
+        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
           {justSavedToast && (
-            <div className="p-3 rounded-2xl bg-emerald-600 text-white text-xs sm:text-sm font-extrabold flex items-center justify-between shadow-md animate-in fade-in duration-150">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <div className="px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-extrabold flex items-center justify-between shadow-xs animate-in fade-in duration-150">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                 <span>{justSavedToast}</span>
               </div>
             </div>
@@ -477,27 +572,27 @@ export const QuickSaleModal: React.FC<Props> = ({
 
           {activeMode === 'sale' ? (
             <>
-              {/* ================= QUICK SALE FORM ================= */}
-              {/* 1. Sale Amount Input + Fast Keypad Chips */}
-              <div className="p-3.5 rounded-2xl bg-[#F8FAFC] border-2 border-[#0E6B6B]/30 space-y-2.5">
+              {/* ================= QUICK SALE FORM (COMPACT) ================= */}
+              {/* ৩. টাকার ইনপুট ও কুইক বাটন (Amount & Quick Chips) */}
+              <div className="p-2.5 rounded-xl bg-[#F8FAFC] border border-[#0E6B6B]/30 space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs sm:text-sm font-extrabold text-[#102A43]">
+                  <label className="text-[11px] font-extrabold text-[#102A43] leading-none">
                     ১. কত টাকা বিক্রি করলেন? (৳) *
                   </label>
                   {amountInput && (
                     <button
                       type="button"
                       onClick={() => setAmountInput('')}
-                      className="text-[11px] font-bold text-rose-600 hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-[10px] font-bold text-rose-600 hover:underline flex items-center gap-0.5 cursor-pointer leading-none"
                     >
-                      <RotateCcw className="w-3 h-3" />
+                      <RotateCcw className="w-2.5 h-2.5" />
                       <span>মুছুন</span>
                     </button>
                   )}
                 </div>
 
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-[#0E6B6B]">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg font-black text-[#0E6B6B]">
                     ৳
                   </span>
                   <input
@@ -513,73 +608,52 @@ export const QuickSaleModal: React.FC<Props> = ({
                       }
                     }}
                     placeholder="০"
-                    className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white border-2 border-[#0E6B6B] text-2xl sm:text-3xl font-black text-[#102A43] placeholder:text-slate-300 focus:outline-none focus:ring-4 focus:ring-[#0E6B6B]/20"
+                    className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-white border-2 border-[#0E6B6B] text-xl font-black text-[#102A43] placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]/20"
                   />
                 </div>
 
-                {/* Quick Amount Add Buttons */}
-                <div>
-                  <p className="text-[11px] font-bold text-[#64748B] mb-1.5">
-                    বাটনে ট্যাপ করে দ্রুত টাকা যোগ করুন:
-                  </p>
-                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
-                    {[10, 20, 50, 100, 200, 500, 1000].map((val) => (
-                      <button
-                        key={val}
-                        type="button"
-                        onClick={() => handleQuickAddAmount(val)}
-                        className="py-2 px-1.5 rounded-xl bg-white hover:bg-[#E0F2F1] text-[#0E6B6B] font-extrabold text-xs border border-[#B2DFDB] shadow-2xs active:scale-95 transition cursor-pointer"
-                      >
-                        +৳{val}
-                      </button>
-                    ))}
-                  </div>
+                {/* Compact 7-Column Quick Amount Grid */}
+                <div className="grid grid-cols-7 gap-1 pt-0.5">
+                  {[10, 20, 50, 100, 200, 500, 1000].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => handleQuickAddAmount(val)}
+                      className="py-1 px-0.5 rounded-lg bg-white hover:bg-[#E0F2F1] text-[#0E6B6B] font-extrabold text-[10px] border border-[#B2DFDB] shadow-2xs active:scale-95 transition cursor-pointer text-center whitespace-nowrap"
+                    >
+                      +৳{val}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* 2. Optional Note / Description */}
-              <div className="space-y-2">
-                <label className="block text-xs font-extrabold text-[#102A43]">
-                  ২. কী বিক্রি করলেন / বিবরণ (ঐচ্ছিক - না লিখলেও চলবে)
+              {/* ৪. বিবরণ ফিল্ড (নিচের ট্যাগ চিপস ছাড়া স্লিম ইনপুট) */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-extrabold text-[#102A43] leading-none">
+                  ২. কী বিক্রি করলেন / বিবরণ (ঐচ্ছিক)
                 </label>
                 <input
                   type="text"
                   value={noteInput}
                   onChange={(e) => setNoteInput(e.target.value)}
                   placeholder="যেমন: খুচরা বিক্রি, মুদি মাল, চা-বিস্কুট..."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs sm:text-sm font-semibold text-[#102A43] focus:outline-none focus:border-[#0E6B6B] focus:bg-white"
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-semibold text-[#102A43] focus:outline-none focus:border-[#0E6B6B] focus:bg-white"
                 />
-                <div className="flex flex-wrap gap-1.5">
-                  {quickNotes.map((qn) => (
-                    <button
-                      key={qn}
-                      type="button"
-                      onClick={() => setNoteInput(qn)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
-                        noteInput === qn
-                          ? 'bg-[#0E6B6B] text-white border-[#0E6B6B]'
-                          : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
-                      }`}
-                    >
-                      {qn}
-                    </button>
-                  ))}
-                </div>
               </div>
 
-              {/* 3. Cash vs Due Selection */}
-              <div className="space-y-2">
-                <label className="block text-xs font-extrabold text-[#102A43]">
+              {/* ৫. বিক্রির ধরন (Compact Segmented Buttons) */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-extrabold text-[#102A43] leading-none">
                   ৩. বিক্রির ধরন (নগদ নাকি বাকি?)
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="p-0.5 bg-[#F1F5F9] rounded-xl grid grid-cols-2 gap-1 border border-[#E2E8F0]">
                   <button
                     type="button"
                     onClick={() => setPaymentMode('cash')}
-                    className={`py-2.5 px-3 rounded-xl font-extrabold text-xs sm:text-sm border flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    className={`py-1.5 px-2 rounded-lg font-extrabold text-xs flex items-center justify-center gap-1 transition cursor-pointer ${
                       paymentMode === 'cash'
-                        ? 'bg-[#2E7D32] text-white border-[#2E7D32] shadow-xs'
-                        : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0]'
+                        ? 'bg-[#2E7D32] text-white shadow-2xs'
+                        : 'text-[#64748B] hover:text-[#102A43]'
                     }`}
                   >
                     <span>💵 নগদ বিক্রি</span>
@@ -587,10 +661,10 @@ export const QuickSaleModal: React.FC<Props> = ({
                   <button
                     type="button"
                     onClick={() => setPaymentMode('due')}
-                    className={`py-2.5 px-3 rounded-xl font-extrabold text-xs sm:text-sm border flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    className={`py-1.5 px-2 rounded-lg font-extrabold text-xs flex items-center justify-center gap-1 transition cursor-pointer ${
                       paymentMode === 'due'
-                        ? 'bg-[#D32F2F] text-white border-[#D32F2F] shadow-xs'
-                        : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0]'
+                        ? 'bg-[#D32F2F] text-white shadow-2xs'
+                        : 'text-[#64748B] hover:text-[#102A43]'
                     }`}
                   >
                     <span>📒 বাকি বিক্রি</span>
@@ -598,52 +672,52 @@ export const QuickSaleModal: React.FC<Props> = ({
                 </div>
 
                 {paymentMode === 'due' && (
-                  <div className="p-3 rounded-2xl bg-rose-50/70 border border-rose-200 space-y-2.5 mt-2">
+                  <div className="p-2 rounded-xl bg-rose-50/70 border border-rose-200 space-y-1.5 mt-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-[#102A43] flex items-center gap-1">
-                        <User className="w-3.5 h-3.5 text-[#D32F2F]" />
+                      <span className="text-[11px] font-bold text-[#102A43] flex items-center gap-1">
+                        <User className="w-3 h-3 text-[#D32F2F]" />
                         <span>বাকি খাতার গ্রাহক নির্বাচন করুন *</span>
                       </span>
                       {onAddNewCustomer && (
                         <button
                           type="button"
                           onClick={() => setShowNewCustomerForm(!showNewCustomerForm)}
-                          className="text-xs font-extrabold text-[#0E6B6B] hover:underline flex items-center gap-0.5 cursor-pointer"
+                          className="text-[11px] font-extrabold text-[#0E6B6B] hover:underline flex items-center gap-0.5 cursor-pointer"
                         >
-                          <Plus className="w-3.5 h-3.5" />
+                          <Plus className="w-3 h-3" />
                           <span>নতুন গ্রাহক</span>
                         </button>
                       )}
                     </div>
 
                     {showNewCustomerForm ? (
-                      <div className="p-2.5 rounded-xl bg-white border border-[#E2E8F0] space-y-2">
+                      <div className="p-2 rounded-lg bg-white border border-[#E2E8F0] space-y-1.5">
                         <input
                           type="text"
                           value={newCustName}
                           onChange={(e) => setNewCustName(e.target.value)}
                           placeholder="গ্রাহকের নাম লিখুন"
-                          className="w-full px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-xs font-semibold"
+                          className="w-full px-2.5 py-1 rounded-lg border border-[#E2E8F0] text-xs font-semibold"
                         />
                         <input
                           type="tel"
                           value={newCustPhone}
                           onChange={(e) => setNewCustPhone(e.target.value)}
                           placeholder="মোবাইল নম্বর (ঐচ্ছিক)"
-                          className="w-full px-3 py-1.5 rounded-lg border border-[#E2E8F0] text-xs font-semibold"
+                          className="w-full px-2.5 py-1 rounded-lg border border-[#E2E8F0] text-xs font-semibold"
                         />
-                        <div className="flex gap-2">
+                        <div className="flex gap-1.5">
                           <button
                             type="button"
                             onClick={() => setShowNewCustomerForm(false)}
-                            className="flex-1 py-1.5 rounded-lg bg-slate-100 text-xs font-bold text-slate-600"
+                            className="flex-1 py-1 rounded-lg bg-slate-100 text-[11px] font-bold text-slate-600"
                           >
                             বাতিল
                           </button>
                           <button
                             type="button"
                             onClick={handleCreateQuickCustomer}
-                            className="flex-1 py-1.5 rounded-lg bg-[#0E6B6B] text-white text-xs font-bold"
+                            className="flex-1 py-1 rounded-lg bg-[#0E6B6B] text-white text-[11px] font-bold"
                           >
                             গ্রাহক সেভ করুন
                           </button>
@@ -653,7 +727,7 @@ export const QuickSaleModal: React.FC<Props> = ({
                       <select
                         value={selectedCustomerId}
                         onChange={(e) => setSelectedCustomerId(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-white border border-rose-200 text-xs sm:text-sm font-bold text-[#102A43]"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-rose-200 text-xs font-bold text-[#102A43]"
                       >
                         <option value="">-- গ্রাহক নির্বাচন করুন --</option>
                         {customers.map((c) => (
@@ -664,7 +738,7 @@ export const QuickSaleModal: React.FC<Props> = ({
                       </select>
                     )}
 
-                    <div className="flex items-center justify-between text-xs pt-1">
+                    <div className="flex items-center justify-between text-[11px]">
                       <span className="font-bold text-[#102A43]">নগদ জমা দিয়েছে (থাকলে):</span>
                       <input
                         type="number"
@@ -672,42 +746,42 @@ export const QuickSaleModal: React.FC<Props> = ({
                         value={paidAmountForDue}
                         onChange={(e) => setPaidAmountForDue(e.target.value)}
                         placeholder="০"
-                        className="w-28 px-2.5 py-1 rounded-lg bg-white border border-rose-200 text-right font-bold text-[#102A43]"
+                        className="w-24 px-2 py-1 rounded-lg bg-white border border-rose-200 text-right font-bold text-xs text-[#102A43]"
                       />
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* 4. Optional Profit Selector */}
-              <div className="space-y-1.5">
+              {/* ৪. লাভের হিসাব (এক লাইনে সাজানো কমপ্যাক্ট চিপস) */}
+              <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-extrabold text-[#102A43] flex items-center gap-1">
-                    <TrendingUp className="w-3.5 h-3.5 text-[#2E7D32]" />
+                  <label className="text-[11px] font-extrabold text-[#102A43] flex items-center gap-1 leading-none">
+                    <TrendingUp className="w-3 h-3 text-[#2E7D32]" />
                     <span>৪. লাভের হিসাব (ঐচ্ছিক)</span>
                   </label>
                   {calculatedProfit > 0 && (
-                    <span className="text-xs font-black text-[#2E7D32]">
+                    <span className="text-[11px] font-black text-[#2E7D32] leading-none">
                       লাভ: +৳{calculatedProfit}
                     </span>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="grid grid-cols-5 gap-1">
                   {[
-                    { id: 'none', label: 'শুধু বিক্রির হিসাব' },
+                    { id: 'none', label: 'শুধু বিক্রি' },
                     { id: '10', label: '১০% লাভ' },
                     { id: '15', label: '১৫% লাভ' },
                     { id: '20', label: '২০% লাভ' },
-                    { id: 'custom', label: 'নিজে লাভ লিখুন' },
+                    { id: 'custom', label: 'নিজে লিখুন' },
                   ].map((pm) => (
                     <button
                       key={pm.id}
                       type="button"
                       onClick={() => setProfitMode(pm.id as any)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                      className={`py-1 px-1 rounded-lg text-[10.5px] font-bold border transition cursor-pointer text-center whitespace-nowrap truncate ${
                         profitMode === pm.id
                           ? 'bg-[#2E7D32] text-white border-[#2E7D32]'
-                          : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0]'
+                          : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:bg-emerald-50'
                       }`}
                     >
                       {pm.label}
@@ -715,14 +789,14 @@ export const QuickSaleModal: React.FC<Props> = ({
                   ))}
                 </div>
                 {profitMode === 'custom' && (
-                  <div className="pt-1">
+                  <div className="pt-0.5">
                     <input
                       type="number"
                       min="0"
                       value={customProfitInput}
                       onChange={(e) => setCustomProfitInput(e.target.value)}
                       placeholder="এই বিক্রিতে কত টাকা লাভ হয়েছে লিখুন (৳)"
-                      className="w-full px-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-bold text-[#102A43]"
+                      className="w-full px-2.5 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-bold text-[#102A43]"
                     />
                   </div>
                 )}
@@ -730,38 +804,27 @@ export const QuickSaleModal: React.FC<Props> = ({
             </>
           ) : (
             <>
-              {/* ================= PRODUCT RETURN FORM (পণ্য ফেরত) ================= */}
-              <div className="p-3 rounded-2xl bg-rose-50/80 border border-rose-200 flex items-start gap-2.5">
-                <AlertCircle className="w-4 h-4 text-[#D32F2F] shrink-0 mt-0.5" />
-                <p className="text-xs font-bold text-[#102A43] leading-relaxed">
-                  কাস্টমার পণ্য ফেরত দিলে এখানে টাকার পরিমাণ লিখুন। এটি সাথে সাথে{' '}
-                  <span className="text-[#D32F2F] font-black">
-                    মূল ড্যাশবোর্ডের বিক্রি ও লাভ থেকে টাকা কেটে নিবে
-                  </span>{' '}
-                  এবং ক্যাশ বাক্সের হিসাব মিলিয়ে দিবে।
-                </p>
-              </div>
-
-              {/* 1. Return Amount Input + Quick Buttons */}
-              <div className="p-3.5 rounded-2xl bg-[#FFF5F5] border-2 border-[#D32F2F]/30 space-y-2.5">
+              {/* ================= PRODUCT RETURN FORM (COMPACT পণ্য ফেরত) ================= */}
+              {/* ১. ফেরতের টাকার ইনপুট ও কুইক বাটন */}
+              <div className="p-2.5 rounded-xl bg-[#FFF5F5] border border-[#D32F2F]/30 space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs sm:text-sm font-extrabold text-[#102A43]">
+                  <label className="text-[11px] font-extrabold text-[#102A43] leading-none">
                     ১. কত টাকার পণ্য ফেরত নিলেন? (৳) *
                   </label>
                   {returnAmountInput && (
                     <button
                       type="button"
                       onClick={() => setReturnAmountInput('')}
-                      className="text-[11px] font-bold text-rose-600 hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-[10px] font-bold text-rose-600 hover:underline flex items-center gap-0.5 cursor-pointer leading-none"
                     >
-                      <RotateCcw className="w-3 h-3" />
+                      <RotateCcw className="w-2.5 h-2.5" />
                       <span>মুছুন</span>
                     </button>
                   )}
                 </div>
 
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-[#D32F2F]">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg font-black text-[#D32F2F]">
                     ৳
                   </span>
                   <input
@@ -777,96 +840,91 @@ export const QuickSaleModal: React.FC<Props> = ({
                       }
                     }}
                     placeholder="০"
-                    className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white border-2 border-[#D32F2F] text-2xl sm:text-3xl font-black text-[#102A43] placeholder:text-slate-300 focus:outline-none focus:ring-4 focus:ring-[#D32F2F]/20"
+                    className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-white border-2 border-[#D32F2F] text-xl font-black text-[#102A43] placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#D32F2F]/20"
                   />
                 </div>
 
-                {/* Quick Return Amount Buttons */}
-                <div>
-                  <p className="text-[11px] font-bold text-[#64748B] mb-1.5">
-                    বাটনে ট্যাপ করে দ্রুত ফেরতের টাকা যোগ করুন:
-                  </p>
-                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
-                    {[10, 20, 50, 100, 200, 500, 1000].map((val) => (
-                      <button
-                        key={val}
-                        type="button"
-                        onClick={() => handleQuickAddReturnAmount(val)}
-                        className="py-2 px-1.5 rounded-xl bg-white hover:bg-rose-100 text-[#D32F2F] font-extrabold text-xs border border-rose-200 shadow-2xs active:scale-95 transition cursor-pointer"
-                      >
-                        +৳{val}
-                      </button>
-                    ))}
-                  </div>
+                {/* Compact 7-Column Quick Return Amount Grid */}
+                <div className="grid grid-cols-7 gap-1 pt-0.5">
+                  {[10, 20, 50, 100, 200, 500, 1000].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => handleQuickAddReturnAmount(val)}
+                      className="py-1 px-0.5 rounded-lg bg-white hover:bg-rose-100 text-[#D32F2F] font-extrabold text-[10px] border border-rose-200 shadow-2xs active:scale-95 transition cursor-pointer text-center whitespace-nowrap"
+                    >
+                      +৳{val}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* 2. Where to deduct from: Sales & Profit / Sales Only / Profit Only */}
-              <div className="space-y-2 p-3.5 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0]">
-                <label className="block text-xs font-extrabold text-[#102A43]">
+              {/* ২. কোন হিসাব থেকে টাকা কাটবে ও লাভের হার */}
+              <div className="space-y-1.5 p-2.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+                <label className="block text-[11px] font-extrabold text-[#102A43] leading-none">
                   ২. মূল ড্যাশবোর্ডের কোন হিসাব থেকে টাকা কাটবে?
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-3 gap-1">
                   <button
                     type="button"
                     onClick={() => setReturnDeductionType('sale_and_profit')}
-                    className={`py-2 px-2.5 rounded-xl font-extrabold text-xs border transition cursor-pointer ${
+                    className={`py-1.5 px-1.5 rounded-lg font-extrabold text-[10.5px] border transition cursor-pointer text-center whitespace-nowrap truncate ${
                       returnDeductionType === 'sale_and_profit'
                         ? 'bg-[#D32F2F] text-white border-[#D32F2F] shadow-2xs'
                         : 'bg-white text-[#102A43] border-[#E2E8F0]'
                     }`}
                   >
-                    বিক্রয় ও লাভ উভয় থেকে
+                    বিক্রয় ও লাভ
                   </button>
                   <button
                     type="button"
                     onClick={() => setReturnDeductionType('sale_only')}
-                    className={`py-2 px-2.5 rounded-xl font-extrabold text-xs border transition cursor-pointer ${
+                    className={`py-1.5 px-1.5 rounded-lg font-extrabold text-[10.5px] border transition cursor-pointer text-center whitespace-nowrap truncate ${
                       returnDeductionType === 'sale_only'
                         ? 'bg-[#D32F2F] text-white border-[#D32F2F] shadow-2xs'
                         : 'bg-white text-[#102A43] border-[#E2E8F0]'
                     }`}
                   >
-                    শুধু মোট বিক্রয় থেকে
+                    শুধু বিক্রয় থেকে
                   </button>
                   <button
                     type="button"
                     onClick={() => setReturnDeductionType('profit_only')}
-                    className={`py-2 px-2.5 rounded-xl font-extrabold text-xs border transition cursor-pointer ${
+                    className={`py-1.5 px-1.5 rounded-lg font-extrabold text-[10.5px] border transition cursor-pointer text-center whitespace-nowrap truncate ${
                       returnDeductionType === 'profit_only'
                         ? 'bg-[#D32F2F] text-white border-[#D32F2F] shadow-2xs'
                         : 'bg-white text-[#102A43] border-[#E2E8F0]'
                     }`}
                   >
-                    শুধু লাভ থেকে কাটবে
+                    শুধু লাভ থেকে
                   </button>
                 </div>
 
                 {returnDeductionType === 'sale_and_profit' && (
-                  <div className="pt-2 space-y-1.5">
+                  <div className="pt-1 space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-[#64748B]">
-                        ফেরত পণ্যে কতটুকু লাভ ধরা ছিল? (লাভ থেকে কাটবে):
+                      <span className="text-[10.5px] font-bold text-[#64748B]">
+                        ফেরত পণ্যে লাভের হার (লাভ থেকে কাটবে):
                       </span>
                       {profitDeductionAmount > 0 && (
-                        <span className="text-xs font-black text-[#D32F2F]">
+                        <span className="text-[11px] font-black text-[#D32F2F]">
                           লাভ কমবে: -৳{profitDeductionAmount}
                         </span>
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="grid grid-cols-5 gap-1">
                       {[
-                        { id: '10', label: '১০% লাভ কাটবে' },
-                        { id: '15', label: '১৫% লাভ কাটবে' },
-                        { id: '20', label: '২০% লাভ কাটবে' },
-                        { id: 'custom', label: 'নিজে লাভ লিখুন' },
-                        { id: 'none', label: 'লাভ কাটবে না (৳০)' },
+                        { id: '10', label: '১০% লাভ' },
+                        { id: '15', label: '১৫% লাভ' },
+                        { id: '20', label: '২০% লাভ' },
+                        { id: 'custom', label: 'নিজে লিখুন' },
+                        { id: 'none', label: '৳০ লাভ' },
                       ].map((pm) => (
                         <button
                           key={pm.id}
                           type="button"
                           onClick={() => setReturnProfitMode(pm.id as any)}
-                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                          className={`py-1 px-1 rounded-lg text-[10px] font-bold border transition cursor-pointer text-center whitespace-nowrap truncate ${
                             returnProfitMode === pm.id
                               ? 'bg-[#102A43] text-white border-[#102A43]'
                               : 'bg-white text-[#64748B] border-[#E2E8F0]'
@@ -877,32 +935,31 @@ export const QuickSaleModal: React.FC<Props> = ({
                       ))}
                     </div>
                     {returnProfitMode === 'custom' && (
-                      <div className="pt-1">
+                      <div className="pt-0.5">
                         <input
                           type="number"
                           min="0"
                           value={returnCustomProfitInput}
                           onChange={(e) => setReturnCustomProfitInput(e.target.value)}
                           placeholder="লাভ থেকে কত টাকা কাটবে লিখুন (৳)"
-                          className="w-full px-3 py-2 rounded-xl bg-white border border-rose-300 text-xs font-bold text-[#102A43]"
+                          className="w-full px-2.5 py-1.5 rounded-xl bg-white border border-rose-300 text-xs font-bold text-[#102A43]"
                         />
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Live Impact Summary Preview */}
                 {returnNumericAmount > 0 && (
-                  <div className="mt-2 p-2.5 rounded-xl bg-white border border-rose-200 flex items-center justify-between text-xs">
+                  <div className="p-1.5 rounded-lg bg-white border border-rose-200 flex items-center justify-between text-[11px]">
                     <div>
-                      <span className="font-bold text-[#64748B] block">বিক্রয় থেকে কমবে:</span>
-                      <span className="text-sm font-black text-[#D32F2F]">
+                      <span className="font-bold text-[#64748B]">বিক্রয় কমবে: </span>
+                      <span className="font-black text-[#D32F2F]">
                         -৳{saleDeductionAmount.toLocaleString()}
                       </span>
                     </div>
                     <div className="text-right">
-                      <span className="font-bold text-[#64748B] block">লাভ থেকে কমবে:</span>
-                      <span className="text-sm font-black text-[#D32F2F]">
+                      <span className="font-bold text-[#64748B]">লাভ কমবে: </span>
+                      <span className="font-black text-[#D32F2F]">
                         -৳{profitDeductionAmount.toLocaleString()}
                       </span>
                     </div>
@@ -910,91 +967,66 @@ export const QuickSaleModal: React.FC<Props> = ({
                 )}
               </div>
 
-              {/* 3. Optional Stock Product Selection + Note */}
-              <div className="space-y-2">
+              {/* ৩. স্টকের পণ্য সিলেক্ট ও বিবরণ (ট্যাগ চিপস ছাড়া স্লিম ইনপুট) */}
+              <div className="space-y-1.5">
                 {products.length > 0 && (
-                  <div className="p-3 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-2">
-                    <label className="text-xs font-extrabold text-[#102A43] flex items-center gap-1.5">
-                      <Package className="w-3.5 h-3.5 text-[#0E6B6B]" />
-                      <span>৩. স্টকের পণ্য হলে সিলেক্ট করুন (ঐচ্ছিক - স্টকে পণ্য যোগ হবে)</span>
-                    </label>
-                    <div className="flex gap-2">
-                      <select
-                        value={selectedReturnProductId}
-                        onChange={(e) => handleSelectReturnProduct(e.target.value)}
-                        className="flex-1 px-3 py-2 rounded-xl bg-white border border-[#E2E8F0] text-xs font-bold text-[#102A43]"
-                      >
-                        <option value="">-- পণ্য ছাড়া সরাসরি ফেরত --</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} (বিক্রয়: ৳{p.sellPrice}, লাভ: ৳
-                            {Math.max(0, p.sellPrice - p.costPrice)})
-                          </option>
-                        ))}
-                      </select>
-                      {selectedReturnProductId && (
-                        <input
-                          type="number"
-                          min="0.1"
-                          step="any"
-                          value={returnQuantityInput}
-                          onChange={(e) => handleReturnQuantityChange(e.target.value)}
-                          placeholder="পরিমাণ"
-                          className="w-20 px-2.5 py-2 rounded-xl bg-white border border-[#0E6B6B] text-xs font-black text-center text-[#102A43]"
-                          title="ফেরত পণ্যের পরিমাণ"
-                        />
-                      )}
-                    </div>
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={selectedReturnProductId}
+                      onChange={(e) => handleSelectReturnProduct(e.target.value)}
+                      className="flex-1 px-2.5 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-bold text-[#102A43]"
+                    >
+                      <option value="">-- স্টকের পণ্য হলে সিলেক্ট করুন (ঐচ্ছিক) --</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} (বিক্রয়: ৳{p.sellPrice}, লাভ: ৳
+                          {Math.max(0, p.sellPrice - p.costPrice)})
+                        </option>
+                      ))}
+                    </select>
+                    {selectedReturnProductId && (
+                      <input
+                        type="number"
+                        min="0.1"
+                        step="any"
+                        value={returnQuantityInput}
+                        onChange={(e) => handleReturnQuantityChange(e.target.value)}
+                        placeholder="পরিমাণ"
+                        className="w-16 px-2 py-1.5 rounded-xl bg-white border border-[#0E6B6B] text-xs font-black text-center text-[#102A43]"
+                        title="ফেরত পণ্যের পরিমাণ"
+                      />
+                    )}
                   </div>
                 )}
 
-                <label className="block text-xs font-extrabold text-[#102A43]">
-                  ফেরতের কারণ / পণ্যের নাম (ঐচ্ছিক)
-                </label>
                 <input
                   type="text"
                   value={returnNoteInput}
                   onChange={(e) => setReturnNoteInput(e.target.value)}
-                  placeholder="যেমন: পণ্য ফেরত, সাবান ফেরত, নষ্ট পণ্য..."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs sm:text-sm font-semibold text-[#102A43] focus:outline-none focus:border-[#D32F2F] focus:bg-white"
+                  placeholder="ফেরতের কারণ বা পণ্যের নাম (ঐচ্ছিক)..."
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-semibold text-[#102A43] focus:outline-none focus:border-[#D32F2F] focus:bg-white"
                 />
-                <div className="flex flex-wrap gap-1.5">
-                  {quickReturnNotes.map((rn) => (
-                    <button
-                      key={rn}
-                      type="button"
-                      onClick={() => setReturnNoteInput(rn)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
-                        returnNoteInput === rn
-                          ? 'bg-[#D32F2F] text-white border-[#D32F2F]'
-                          : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:bg-rose-50 hover:text-[#D32F2F]'
-                      }`}
-                    >
-                      {rn}
-                    </button>
-                  ))}
-                </div>
               </div>
             </>
           )}
 
-          {/* 5. Today's Recent Sales & Returns Log (কখন কত বিক্রি বা ফেরত নিয়েছেন) */}
+          {/* আজকের বিক্রি ও ফেরত লগ (কমপ্যাক্ট ভিউ) */}
           {todaySales.length > 0 && (
-            <div className="pt-2 border-t border-[#E2E8F0]">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-extrabold text-[#102A43] flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-[#0E6B6B]" />
+            <details className="pt-1 border-t border-[#E2E8F0] group">
+              <summary className="flex items-center justify-between cursor-pointer list-none py-1 text-[11px] font-extrabold text-[#102A43]">
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-[#0E6B6B]" />
                   <span>
                     {activeMode === 'return'
-                      ? 'আজকের বিক্রি থেকে ১ ক্লিকে ফেরত নিন:'
-                      : `আজ কখন কত বিক্রি করেছেন (${todaySales.length}টি):`}
+                      ? `আজকের বিক্রি থেকে ১ ক্লিকে ফেরত নিন (${todaySales.length}টি) ▾`
+                      : `আজকের বিক্রির তালিকা দেখুন (${todaySales.length}টি) ▾`}
                   </span>
                 </span>
-                <span className="text-xs font-black text-[#0E6B6B]">
+                <span className="text-[11px] font-black text-[#0E6B6B]">
                   নিট: ৳{todayTotalAmount.toLocaleString()}
                 </span>
-              </div>
-              <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+              </summary>
+              <div className="max-h-28 overflow-y-auto space-y-1 pt-1 pr-0.5">
                 {todaySales
                   .slice()
                   .reverse()
@@ -1005,7 +1037,7 @@ export const QuickSaleModal: React.FC<Props> = ({
                     return (
                       <div
                         key={s.id}
-                        className={`px-3 py-2 rounded-xl border flex items-center justify-between gap-2 text-xs ${
+                        className={`px-2.5 py-1.5 rounded-lg border flex items-center justify-between gap-2 text-[11px] ${
                           isReturnRecord
                             ? 'bg-rose-50/70 border-rose-200'
                             : 'bg-[#F8FAFC] border-[#E2E8F0]'
@@ -1019,8 +1051,7 @@ export const QuickSaleModal: React.FC<Props> = ({
                           >
                             {s.items.map((i) => i.productName).join(', ')}
                           </span>
-                          <span className="text-[10px] text-[#64748B]">
-                            🕒{' '}
+                          <span className="text-[9.5px] text-[#64748B]">
                             {new Date(s.date).toLocaleTimeString('bn-BD', {
                               hour: '2-digit',
                               minute: '2-digit',
@@ -1031,9 +1062,9 @@ export const QuickSaleModal: React.FC<Props> = ({
                               : `লাভ: +৳${Math.round(s.profit || 0)}`}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0">
                           <span
-                            className={`font-black text-sm ${
+                            className={`font-black text-xs ${
                               isReturnRecord ? 'text-[#D32F2F]' : 'text-[#0E6B6B]'
                             }`}
                           >
@@ -1048,15 +1079,14 @@ export const QuickSaleModal: React.FC<Props> = ({
                                 onDeleteSale(s.id);
                                 playSuccessChime();
                                 setJustSavedToast(
-                                  `✅ ৳${s.grandTotal.toLocaleString()} টাকার বিক্রি ফেরত নেওয়া হয়েছে এবং ড্যাশবোর্ড থেকে বিক্রি ও লাভ কেটে নেওয়া হয়েছে!`
+                                  `✅ ৳${s.grandTotal.toLocaleString()} টাকার বিক্রি ফেরত নেওয়া হয়েছে!`
                                 );
                                 setTimeout(() => setJustSavedToast(''), 4000);
                               }}
-                              className="px-2 py-1 rounded-lg bg-[#D32F2F] hover:bg-rose-800 text-white font-extrabold text-[11px] flex items-center gap-1 cursor-pointer transition active:scale-95"
+                              className="px-2 py-0.5 rounded-md bg-[#D32F2F] hover:bg-rose-800 text-white font-extrabold text-[10px] cursor-pointer transition active:scale-95"
                               title="এই বিক্রিটি পুরোপুরি ফেরত নিন"
                             >
-                              <Undo2 className="w-3 h-3" />
-                              <span>ফেরত নিন</span>
+                              ফেরত নিন
                             </button>
                           )}
                           {activeMode === 'sale' && onDeleteSale && (
@@ -1072,10 +1102,10 @@ export const QuickSaleModal: React.FC<Props> = ({
                                 );
                                 setTimeout(() => setJustSavedToast(''), 3500);
                               }}
-                              className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-[#D32F2F] text-[#D32F2F] hover:text-white border border-rose-200 font-extrabold text-[11px] flex items-center gap-1 cursor-pointer transition active:scale-95"
+                              className="px-2 py-0.5 rounded-md bg-rose-50 hover:bg-[#D32F2F] text-[#D32F2F] hover:text-white border border-rose-200 font-extrabold text-[10px] cursor-pointer transition active:scale-95"
                               title="এই মেমো ডিলিট করুন"
                             >
-                              <span>মুছুন</span>
+                              মুছুন
                             </button>
                           )}
                         </div>
@@ -1083,19 +1113,19 @@ export const QuickSaleModal: React.FC<Props> = ({
                     );
                   })}
               </div>
-            </div>
+            </details>
           )}
         </div>
 
-        {/* Bottom Action Buttons */}
-        <div className="p-3.5 bg-[#F8FAFC] border-t border-[#E2E8F0] flex items-center gap-2 shrink-0">
+        {/* ৬. ফিক্সড সাবমিট অ্যাকশন বার (Compact Fixed Bottom Bar) */}
+        <div className="px-3 py-2 bg-[#F8FAFC] border-t border-[#E2E8F0] flex items-center gap-2 shrink-0">
           {activeMode === 'sale' ? (
             <>
               <button
                 type="button"
                 disabled={numericAmount <= 0}
                 onClick={() => handleSubmitSale(false)}
-                className="flex-1 py-3 px-4 rounded-2xl bg-[#0E6B6B] hover:bg-[#094747] disabled:opacity-50 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-md transition active:scale-95 cursor-pointer"
+                className="flex-1 py-2.5 px-3 rounded-xl bg-[#0E6B6B] hover:bg-[#094747] disabled:opacity-50 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>
@@ -1107,10 +1137,10 @@ export const QuickSaleModal: React.FC<Props> = ({
                 type="button"
                 disabled={numericAmount <= 0}
                 onClick={() => handleSubmitSale(true)}
-                className="py-3 px-3.5 rounded-2xl bg-white hover:bg-[#E0F2F1] disabled:opacity-50 text-[#0E6B6B] border border-[#0E6B6B] font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer shrink-0"
+                className="py-2.5 px-3 rounded-xl bg-white hover:bg-[#E0F2F1] disabled:opacity-50 text-[#0E6B6B] border border-[#0E6B6B] font-extrabold text-xs flex items-center justify-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer shrink-0"
                 title="বিক্রি জমা করে রসিদ প্রিন্ট করুন"
               >
-                <Printer className="w-4 h-4" />
+                <Printer className="w-3.5 h-3.5" />
                 <span>রসিদসহ</span>
               </button>
             </>
@@ -1119,9 +1149,8 @@ export const QuickSaleModal: React.FC<Props> = ({
               type="button"
               disabled={returnNumericAmount <= 0}
               onClick={handleSubmitReturn}
-              className="w-full py-3 px-4 rounded-2xl bg-[#D32F2F] hover:bg-rose-800 disabled:opacity-50 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-md transition active:scale-95 cursor-pointer"
+              className="w-full py-2.5 px-3 rounded-xl bg-[#D32F2F] hover:bg-rose-800 disabled:opacity-50 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer"
             >
-              <Undo2 className="w-4 h-4 stroke-[2.5]" />
               <span>
                 পণ্য ফেরত সংরক্ষণ করুন{' '}
                 {returnNumericAmount > 0 ? `(-৳${returnNumericAmount.toLocaleString()})` : ''}

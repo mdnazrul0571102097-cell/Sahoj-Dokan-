@@ -1,0 +1,8 @@
+{
+	"appId": "com.sahojdokan.pos",
+	"appName": "Sahoj Dokan",
+	"webDir": "dist",
+	"android": {
+		"allowMixedContent": true
+	}
+}

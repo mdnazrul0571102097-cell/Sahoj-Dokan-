@@ -67,40 +67,40 @@ export const Header: React.FC<Props> = ({
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-white text-[#102A43] shadow-xs border-b border-[#E2E8F0]">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md text-[#102A43] shadow-2xs border-b border-[#E2E8F0]">
+        <div className="max-w-7xl mx-auto px-2.5 sm:px-4 py-1.5 flex items-center justify-between gap-2">
           {/* Left: Logo & Shop Identity */}
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="relative shrink-0 w-10 h-10 rounded-[14px] overflow-hidden bg-[#E0F2F1] p-1 border border-[#B2DFDB] flex items-center justify-center">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="relative shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden bg-[#E0F2F1] p-0.5 border border-[#B2DFDB] flex items-center justify-center shadow-2xs">
               <img
                 src={profile.logo || '/assets/icon.png'}
                 alt="Sahoj Dokan Logo"
-                className="w-full h-full object-contain rounded-[10px]"
+                className="w-full h-full object-contain rounded-[9px]"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = '/assets/icon.png';
                 }}
               />
             </div>
             <div className="min-w-0">
-              <h1 className="font-extrabold text-base sm:text-lg leading-tight tracking-tight text-[#102A43] whitespace-nowrap">
+              <h1 className="font-extrabold text-sm sm:text-base leading-none tracking-tight text-[#102A43] whitespace-nowrap">
                 Sahoj Dokan
               </h1>
-              <p className="text-[10px] sm:text-[11px] font-semibold text-[#0E6B6B] truncate">
+              <p className="text-[9.5px] sm:text-[10.5px] font-semibold text-[#0E6B6B] truncate leading-tight mt-0.5">
                 {profile.shopName && profile.shopName !== 'Sahoj Dokan' ? profile.shopName : 'ডিজিটাল ক্যাশ খাতা'}
               </p>
             </div>
           </div>
 
           {/* Right: OWNER Badge & Support Button (Right-aligned next to each other) */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             {/* Install PWA Button if available on desktop */}
             {isInstallable && !isInstalled && (
               <button
                 onClick={install}
-                className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] text-xs font-bold border border-[#B2DFDB] transition active:scale-95"
+                className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] text-[11px] font-bold border border-[#B2DFDB] transition active:scale-95"
                 title="Install Sahoj Dokan App"
               >
-                <Download className="w-3.5 h-3.5" />
+                <Download className="w-3 h-3" />
                 <span>{language === 'bn' ? 'ইন্সটল' : 'Install'}</span>
               </button>
             )}
@@ -110,7 +110,7 @@ export const Header: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={onOpenSubscriptionModal}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-black shadow-2xs transition active:scale-95 cursor-pointer ${
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10.5px] sm:text-xs font-extrabold shadow-2xs transition active:scale-95 cursor-pointer whitespace-nowrap ${
                   subDetails.badgeText === '👑 OWNER' || subscription?.isOwner
                     ? 'bg-amber-400 text-slate-950 border border-amber-500/50'
                     : 'bg-[#E0F2F1] text-[#0E6B6B] border border-[#B2DFDB]'
@@ -119,12 +119,12 @@ export const Header: React.FC<Props> = ({
               >
                 {subDetails.badgeText === '👑 OWNER' || subscription?.isOwner ? (
                   <>
-                    <Crown className="w-3.5 h-3.5 fill-current" />
+                    <Crown className="w-3 h-3 fill-current" />
                     <span>OWNER</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5 text-[#0E6B6B]" />
+                    <Sparkles className="w-3 h-3 text-[#0E6B6B]" />
                     <span>PRO</span>
                   </>
                 )}
@@ -135,11 +135,11 @@ export const Header: React.FC<Props> = ({
             <button
               type="button"
               onClick={() => setShowSupportModal(true)}
-              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 rounded-xl bg-[#E8F5E9] hover:bg-[#C8E6C9] text-[#2E7D32] text-xs font-bold border border-[#A5D6A7] transition active:scale-95 cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg bg-[#E8F5E9] hover:bg-[#C8E6C9] text-[#2E7D32] text-[11px] font-bold border border-[#A5D6A7] transition active:scale-95 cursor-pointer shadow-2xs whitespace-nowrap"
               title="সহায়তা ও সাপোর্ট"
             >
-              <MessageCircle className="w-3.5 h-3.5 fill-current text-[#2E7D32]" />
-              <span className="text-xs font-bold">সাপোর্ট</span>
+              <MessageCircle className="w-3 h-3 fill-current text-[#2E7D32]" />
+              <span>সাপোর্ট</span>
             </button>
           </div>
         </div>

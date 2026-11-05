@@ -72,6 +72,9 @@ export default function App() {
   const [initialOpeningCash, setInitialOpeningCash] = useState<number>(() =>
     DB.getInitialOpeningCash()
   );
+  const [initialStoreCapital, setInitialStoreCapital] = useState<number>(() =>
+    DB.getInitialStoreCapital()
+  );
 
   // App UI states
   const [activeTab, setActiveTab] = useState<NavTab>('pos');
@@ -814,6 +817,12 @@ export default function App() {
     DB.saveInitialOpeningCash(clean);
   };
 
+  const handleSaveInitialStoreCapital = (amount: number) => {
+    const clean = Math.max(0, Math.round(amount));
+    setInitialStoreCapital(clean);
+    DB.saveInitialStoreCapital(clean);
+  };
+
   // Handle Data Restored from Backup file
   const handleDataRestored = () => {
     setProfile(DB.getProfile());
@@ -832,6 +841,7 @@ export default function App() {
     setDailyReconciliations(DB.getDailyReconciliations());
     setMonthlyReconciliations(DB.getMonthlyReconciliations());
     setInitialOpeningCash(DB.getInitialOpeningCash());
+    setInitialStoreCapital(DB.getInitialStoreCapital());
     setCart([]);
   };
 
@@ -845,7 +855,7 @@ export default function App() {
   const lowStockCount = products.filter((p) => p.stock <= p.minStockAlert).length;
 
   return (
-    <div className="min-h-screen bg-[#EDF2F7] text-[#102A43] flex flex-col font-sans select-none pb-20">
+    <div className="min-h-screen bg-[#EDF2F7] text-[#102A43] flex flex-col font-sans select-none pb-13 sm:pb-14">
       {/* Top Header */}
       <Header
         profile={profile}
@@ -881,6 +891,12 @@ export default function App() {
             sales={sales}
             appMode={appMode}
             onOpenSubscriptionModal={() => handleOpenSubscriptionModal()}
+            initialStoreCapital={initialStoreCapital}
+            onSaveInitialStoreCapital={handleSaveInitialStoreCapital}
+            expenses={expenses}
+            bulkPurchases={bulkPurchases}
+            purchases={purchases}
+            ownerTransactions={ownerTransactions}
           />
         )}
 
@@ -954,6 +970,8 @@ export default function App() {
             onSaveMonthlyReconciliation={handleSaveMonthlyReconciliation}
             initialOpeningCash={initialOpeningCash}
             onSaveInitialOpeningCash={handleSaveInitialOpeningCash}
+            initialStoreCapital={initialStoreCapital}
+            onSaveInitialStoreCapital={handleSaveInitialStoreCapital}
           />
         )}
 
