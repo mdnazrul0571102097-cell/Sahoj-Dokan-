@@ -15,7 +15,7 @@ android {
     defaultConfig {
         applicationId "com.sahojdokan.pos"
         minSdkVersion 21
-        targetSdkVersion 34
+        targetSdkVersion 33
         versionCode 1000 + autoRunNum
         versionName "5.1.${autoRunNum}"
         multiDexEnabled true

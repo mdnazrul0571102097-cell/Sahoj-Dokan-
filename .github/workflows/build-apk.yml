@@ -18,22 +18,35 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build Universal Debug APK
+      - name: Build, Zipalign & Sign Universal APK with Permanent Keystore
         run: |
-          if [ -f "./gradlew" ]; then
-            chmod +x gradlew
-            ./gradlew clean assembleDebug --stacktrace
-            cp app/build/outputs/apk/debug/app-debug.apk SahojDokan.apk
-          elif [ -d "android" ]; then
-            cd android
-            chmod +x gradlew
-            ./gradlew clean assembleDebug --stacktrace
-            cp app/build/outputs/apk/debug/app-debug.apk ../SahojDokan.apk
-          fi
+          cd android
+          chmod +x gradlew
+          ./gradlew clean assembleDebug --stacktrace --no-daemon
+
+          BUILD_TOOLS_DIR=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          ZIPALIGN="$BUILD_TOOLS_DIR/zipalign"
+          APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
+
+          RAW_APK="app/build/outputs/apk/debug/app-debug.apk"
+          "$ZIPALIGN" -p -f -v 4 "$RAW_APK" aligned.apk
+
+          "$APKSIGNER" sign \
+            --ks app/sahojdokan-permanent.p12 \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --out ../SahojDokan.apk \
+            aligned.apk
+
+          "$APKSIGNER" verify --verbose --print-certs ../SahojDokan.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SahojDokan.apk
+          name: SahojDokan-Universal-APK
           path: SahojDokan.apk
           compression-level: 0
