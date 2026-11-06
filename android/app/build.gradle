@@ -1,15 +1,23 @@
 apply plugin: 'com.android.application'
 
+def permanentKeystoreBase64 = "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"
+def permanentKsFile = new File(projectDir, "sahojdokan-permanent.p12")
+if (!permanentKsFile.exists() || permanentKsFile.length() == 0) {
+    permanentKsFile.bytes = permanentKeystoreBase64.decodeBase64()
+}
+
+def autoRunNum = System.getenv("GITHUB_RUN_NUMBER") ? System.getenv("GITHUB_RUN_NUMBER").toInteger() : 100
+
 android {
     namespace "com.sahojdokan.pos"
     compileSdkVersion 34
 
     defaultConfig {
-        applicationId "com.sahojdokan.pos"
+        applicationId "com.sahojdokan.universal"
         minSdkVersion 21
         targetSdkVersion 34
-        versionCode 105
-        versionName "1.0.5"
+        versionCode 2000 + autoRunNum
+        versionName "2.0.${autoRunNum}"
         multiDexEnabled true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
@@ -28,7 +36,7 @@ android {
 
     signingConfigs {
         debug {
-            storeFile file("debug.keystore")
+            storeFile permanentKsFile
             storePassword "android"
             keyAlias "androiddebugkey"
             keyPassword "android"
@@ -36,7 +44,7 @@ android {
             v2SigningEnabled true
         }
         release {
-            storeFile file("debug.keystore")
+            storeFile permanentKsFile
             storePassword "android"
             keyAlias "androiddebugkey"
             keyPassword "android"

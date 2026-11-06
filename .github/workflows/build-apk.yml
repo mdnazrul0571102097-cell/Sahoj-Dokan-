@@ -2,7 +2,7 @@ name: Build Universal Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -18,11 +18,9 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Build Universal Debug APK
         run: |
+          rm -rf public/assets/aistudio android/app/src/main/assets/public/assets/aistudio
           if [ -f "./gradlew" ]; then
             chmod +x gradlew
             ./gradlew clean assembleDebug --stacktrace
