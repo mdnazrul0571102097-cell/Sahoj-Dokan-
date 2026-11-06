@@ -9,9 +9,7 @@ permissions:
   contents: write
 
 env:
-  # Auto-increment versionCode on every GitHub Actions run (starts > 1000 so it always upgrades over older 500+ builds)
-  ANDROID_VERSION_CODE: ${{ 1000 + github.run_number }}
-  ANDROID_VERSION_NAME: "5.1.${{ github.run_number }}"
+  RUN_NUMBER: ${{ github.run_number }}
   # Permanent embedded PKCS#12 keystore (Alias: androiddebugkey, Pass: android, SHA1: 8D:27:BE:77:B2:F4:31:9B:27:EE:90:D3:08:95:3C:14:60:4B:FC:F7)
   PERMANENT_KEYSTORE_BASE64: "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"
 
@@ -49,10 +47,12 @@ jobs:
 
       - name: Build Unsigned Universal Release APK, Zipalign FIRST, & Sign SECOND with Permanent Keystore
         run: |
+          export ANDROID_VERSION_CODE=$((1000 + ${RUN_NUMBER:-1}))
+          export ANDROID_VERSION_NAME="5.1.${RUN_NUMBER:-1}"
+          echo "Building Sahoj Dokan APK with versionCode=${ANDROID_VERSION_CODE}, versionName=${ANDROID_VERSION_NAME}"
+
           cd android
           chmod +x gradlew
-
-          echo "Building Sahoj Dokan APK with versionCode=${ANDROID_VERSION_CODE}, versionName=${ANDROID_VERSION_NAME}"
           ./gradlew assembleRelease --stacktrace --no-daemon
 
           # Restore the permanent keystore (use project-level keystore or decode embedded Base64 keystore)
