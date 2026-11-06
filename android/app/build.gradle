@@ -6,13 +6,13 @@ android {
 
     defaultConfig {
         applicationId "com.sahojdokan.pos"
-        minSdkVersion 21
-        targetSdkVersion 33
-        versionCode 500
-        versionName "5.0.0"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 502
+        versionName "5.0.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
-            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+            abiFilters 'armeabi-v7a', 'arm64-v8a'
         }
         aaptOptions {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
@@ -35,13 +35,11 @@ android {
 
     buildTypes {
         debug {
-            signingConfig signingConfigs.debug
             minifyEnabled false
             shrinkResources false
             debuggable true
         }
         release {
-            signingConfig signingConfigs.debug
             minifyEnabled false
             shrinkResources false
             debuggable false
@@ -50,7 +48,7 @@ android {
 }
 
 repositories {
-    flatDir{
+    flatDir {
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
     }
 }

@@ -33,218 +33,67 @@ jobs:
           npm install --legacy-peer-deps
           npm install @capacitor/core@6.2.1 @capacitor/cli@6.2.1 @capacitor/android@6.2.3 --save-dev --legacy-peer-deps
 
-      - name: Build Full Web Assets
+      - name: Build Full Web Assets & Sync Capacitor Android
         run: |
           npm run build
-
-      - name: Sync Web Assets, Generate Debug Keystore & Configure Universal Release APK
-        run: |
-          # Backup existing pre-resized mipmap icons if present in repo
-          rm -rf /tmp/saved_mipmaps
-          mkdir -p /tmp/saved_mipmaps
-          if [ -d "android/app/src/main/res" ]; then
-            cp -r android/app/src/main/res/mipmap-* /tmp/saved_mipmaps/ 2>/dev/null || true
-          fi
-
-          rm -rf android
-          node -e '
-            const fs = require("fs");
-            fs.writeFileSync("capacitor.config.json", JSON.stringify({
-              appId: "com.sahojdokan.pos",
-              appName: "Sahoj Dokan",
-              webDir: "dist",
-              android: { allowMixedContent: true }
-            }, null, 2));
-          '
-          npx cap add android
           npx cap sync android
-
-          # 1. Auto-generate default Debug Keystore inside android/app/debug-signing.keystore
-          keytool -genkeypair -v \
-            -keystore android/app/debug-signing.keystore \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
-
-          # Remove Capacitor default blue-X vector launcher icons completely
-          rm -rf android/app/src/main/res/mipmap-anydpi-v26
-          rm -rf android/app/src/main/res/drawable-v24
-          rm -f android/app/src/main/res/drawable/ic_launcher*
-
-          # Restore backed-up mipmap folders
-          cp -r /tmp/saved_mipmaps/mipmap-* android/app/src/main/res/ 2>/dev/null || true
+          # Remove adaptive vector overrides if recreated by sync so properly-sized PNG mipmaps are used
           rm -rf android/app/src/main/res/mipmap-anydpi-v26
 
-          # Guaranteed Node.js icon copy fallback (ensures Sahoj Dokan logo appears on every phone)
-          node -e '
-            const fs = require("fs");
-            const path = require("path");
-            const iconCandidates = ["public/assets/icon.png", "assets/icon.png", "public/icon.png"];
-            const srcIcon = iconCandidates.find(p => fs.existsSync(p));
-            if (srcIcon) {
-              const densities = ["mipmap-mdpi", "mipmap-hdpi", "mipmap-xhdpi", "mipmap-xxhdpi", "mipmap-xxxhdpi"];
-              for (const d of densities) {
-                const dir = path.join("android/app/src/main/res", d);
-                fs.mkdirSync(dir, { recursive: true });
-                fs.copyFileSync(srcIcon, path.join(dir, "ic_launcher.png"));
-                fs.copyFileSync(srcIcon, path.join(dir, "ic_launcher_round.png"));
-                fs.copyFileSync(srcIcon, path.join(dir, "ic_launcher_foreground.png"));
-              }
-            }
-
-            // Configure variables.gradle
-            const varsPath = "android/variables.gradle";
-            if (fs.existsSync(varsPath)) {
-              let vars = fs.readFileSync(varsPath, "utf8");
-              vars = vars.replace(/minSdkVersion\s*=\s*\d+/, "minSdkVersion = 21");
-              vars = vars.replace(/targetSdkVersion\s*=\s*\d+/, "targetSdkVersion = 33");
-              vars = vars.replace(/compileSdkVersion\s*=\s*\d+/, "compileSdkVersion = 34");
-              fs.writeFileSync(varsPath, vars, "utf8");
-            }
-
-            // Write complete unstripped Universal build.gradle (minifyEnabled false, shrinkResources false + signingConfig)
-            const gradleContent = `apply plugin: "com.android.application"
-
-          android {
-              namespace "com.sahojdokan.pos"
-              compileSdk rootProject.ext.compileSdkVersion
-
-              defaultConfig {
-                  applicationId "com.sahojdokan.pos"
-                  minSdkVersion 21
-                  targetSdkVersion 33
-                  versionCode 501
-                  versionName "5.0.1"
-                  testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-                  ndk {
-                      abiFilters "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
-                  }
-                  aaptOptions {
-                      ignoreAssetsPattern "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
-                  }
-              }
-
-              signingConfigs {
-                  universalDebugKey {
-                      storeFile file("debug-signing.keystore")
-                      storePassword "android"
-                      keyAlias "androiddebugkey"
-                      keyPassword "android"
-                      v1SigningEnabled true
-                      v2SigningEnabled true
-                  }
-              }
-
-              splits {
-                  abi {
-                      enable false
-                      universalApk true
-                  }
-              }
-
-              packagingOptions {
-                  doNotStrip "**/*.so"
-                  jniLibs {
-                      useLegacyPackaging true
-                  }
-              }
-
-              buildTypes {
-                  debug {
-                      signingConfig signingConfigs.universalDebugKey
-                      minifyEnabled false
-                      shrinkResources false
-                      debuggable true
-                  }
-                  release {
-                      signingConfig signingConfigs.universalDebugKey
-                      minifyEnabled false
-                      shrinkResources false
-                      debuggable false
-                  }
-              }
-          }
-
-          repositories {
-              flatDir {
-                  dirs "../capacitor-cordova-android-plugins/src/main/libs", "libs"
-              }
-          }
-
-          dependencies {
-              implementation fileTree(include: ["*.jar"], dir: "libs")
-              implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
-              implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
-              implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
-              implementation project(":capacitor-android")
-              testImplementation "junit:junit:$junitVersion"
-              androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
-              androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
-              implementation project(":capacitor-cordova-android-plugins")
-          }
-
-          apply from: "capacitor.build.gradle"
-          `;
-            fs.writeFileSync("android/app/build.gradle", gradleContent, "utf8");
-
-            // Update AndroidManifest.xml
-            const manifestPath = "android/app/src/main/AndroidManifest.xml";
-            if (fs.existsSync(manifestPath)) {
-              let m = fs.readFileSync(manifestPath, "utf8");
-              if (!m.includes("xmlns:tools")) {
-                m = m.replace(
-                  "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">",
-                  "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" xmlns:tools=\"http://schemas.android.com/tools\">\n    <uses-sdk tools:overrideLibrary=\"com.getcapacitor.android,org.apache.cordova,androidx.webkit,androidx.activity,androidx.fragment,androidx.core,androidx.appcompat,androidx.coordinatorlayout,androidx.core.splashscreen\" />"
-                );
-              }
-              m = m.replace(
-                "<application",
-                "<application android:usesCleartextTraffic=\"true\" android:extractNativeLibs=\"true\""
-              );
-              fs.writeFileSync(manifestPath, m, "utf8");
-            }
-          '
-
-      - name: Build Universal Release APK & Re-Sign with zipalign + apksigner
+      - name: Build Unsigned Universal Release APK, Zipalign FIRST, & Sign SECOND with apksigner
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease --stacktrace --no-daemon
+
+          # Ensure standard Android debug keystore exists
+          mkdir -p "$HOME/.android"
+          KEYSTORE_PATH="$HOME/.android/debug.keystore"
+          if [ ! -f "$KEYSTORE_PATH" ]; then
+            keytool -genkeypair -v \
+              -keystore "$KEYSTORE_PATH" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
 
           # Locate zipalign and apksigner from Android SDK build-tools
           BUILD_TOOLS_DIR=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
           ZIPALIGN="$BUILD_TOOLS_DIR/zipalign"
           APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
 
-          # Find the built release APK and zipalign it (4-byte page alignment)
-          RAW_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          "$ZIPALIGN" -p -f -v 4 "$RAW_APK" aligned-universal.apk
+          # Locate the unsigned release APK produced by Gradle
+          INPUT_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          echo "Found input APK: $INPUT_APK"
 
-          # Digitally sign with apksigner (v1 + v2 + v3 schemes enabled) into single SahojDokan-Signed-Universal.apk
-          mkdir -p signed-output
+          # STEP 1: Execute zipalign FIRST (never sign before align)
+          "$ZIPALIGN" -v -p 4 "$INPUT_APK" aligned.apk
+
+          # STEP 2: Execute apksigner SECOND on aligned.apk and output SahojDokan-Release.apk
           "$APKSIGNER" sign \
-            --ks app/debug-signing.keystore \
-            --ks-key-alias androiddebugkey \
+            --ks "$KEYSTORE_PATH" \
             --ks-pass pass:android \
+            --ks-key-alias androiddebugkey \
             --key-pass pass:android \
             --v1-signing-enabled true \
             --v2-signing-enabled true \
             --v3-signing-enabled true \
-            --out signed-output/SahojDokan-Signed-Universal.apk \
-            aligned-universal.apk
+            --out SahojDokan-Release.apk \
+            aligned.apk
 
-          # Verify APK signature and print certificate summary
-          "$APKSIGNER" verify --verbose --print-certs signed-output/SahojDokan-Signed-Universal.apk
-          ls -lh signed-output/SahojDokan-Signed-Universal.apk
+          # Verify alignment and v1/v2/v3 signatures
+          "$ZIPALIGN" -c -v 4 SahojDokan-Release.apk
+          "$APKSIGNER" verify --verbose --print-certs SahojDokan-Release.apk
+          ls -lh SahojDokan-Release.apk
 
-      - name: Upload Single Signed Universal APK Artifact
+      - name: Upload SahojDokan-Release.apk Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SahojDokan-Signed-Universal.apk
-          path: android/signed-output/SahojDokan-Signed-Universal.apk
+          name: SahojDokan-Release.apk
+          path: android/SahojDokan-Release.apk
           if-no-files-found: error
           compression-level: 0
