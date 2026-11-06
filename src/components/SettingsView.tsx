@@ -28,6 +28,8 @@ import {
   RefreshCw,
   Sparkles,
   AlertCircle,
+  TrendingUp,
+  Trash2,
 } from 'lucide-react';
 
 interface Props {
@@ -70,6 +72,11 @@ export const SettingsView: React.FC<Props> = ({
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showPrinterModal, setShowPrinterModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showWipeDemoModal, setShowWipeDemoModal] = useState(false);
+  const [keepProductsOnWipe, setKeepProductsOnWipe] = useState(true);
+  const [quickSaleMargin, setQuickSaleMargin] = useState<number>(() =>
+    DB.getQuickSaleProfitMargin()
+  );
 
   // In-App Updater state
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -212,15 +219,37 @@ export const SettingsView: React.FC<Props> = ({
     return false;
   };
 
-  // Check Firebase & Server for App Update
+  // Automatic Online App Update (Clears cache, syncs service worker & downloads/reloads latest online build)
   const handleCheckForUpdate = async () => {
     if (isCheckingUpdate) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      showToast('অটো আপডেটের জন্য ইন্টারনেট (অনলাইন) সংযোগ চালু করুন!', 'error');
+      return;
+    }
+
     setIsCheckingUpdate(true);
+    showToast('অনলাইনে নতুন আপডেট চেক ও সিঙ্ক করা হচ্ছে...', 'info');
 
     try {
+      // 1. Refresh Service Workers & clear stale caches so online updates apply immediately
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        try {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          for (const reg of regs) {
+            await reg.update();
+          }
+        } catch (_) {}
+      }
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        try {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((k) => caches.delete(k)));
+        } catch (_) {}
+      }
+
       let remoteInfo: RemoteVersionInfo | null = null;
 
-      // 1. Check Firebase Firestore `app_config/apk_release` or `app_stats/downloads`
+      // 2. Check Firebase Firestore `app_config/apk_release` or `app_stats/downloads`
       if (firestore) {
         try {
           const releaseSnap = await getDoc(doc(firestore, 'app_config', 'apk_release'));
@@ -254,15 +283,13 @@ export const SettingsView: React.FC<Props> = ({
               }
             }
           }
-        } catch (_) {
-          // Offline or permission fallback
-        }
+        } catch (_) {}
       }
 
-      // 2. Also check server `/api/app-version` if available
+      // 3. Also check server `/api/app-version` if available
       if (!remoteInfo) {
         try {
-          const res = await fetch('/api/app-version', { method: 'GET' });
+          const res = await fetch('/api/app-version', { method: 'GET', cache: 'no-store' });
           if (res.ok) {
             const contentType = res.headers.get('content-type') || '';
             if (contentType.includes('application/json')) {
@@ -283,11 +310,21 @@ export const SettingsView: React.FC<Props> = ({
       if (remoteInfo && isNewerVersion(remoteInfo.version, CURRENT_APP_VERSION)) {
         setUpdateAvailableInfo(remoteInfo);
         setShowUpdateConfirmModal(true);
+        triggerDirectApkDownload('SahojDokan-Signed-Universal.apk', remoteInfo.downloadUrl);
       } else {
-        showToast('অ্যাপটি সম্পূর্ণ আপ-টু-ডেট আছে', 'success');
+        // Fetch latest online entry point with cache-busting and auto-reload
+        try {
+          await fetch(`${window.location.pathname}?auto_update=${Date.now()}`, {
+            cache: 'no-store',
+          });
+        } catch (_) {}
+        showToast('✅ অনলাইন থেকে সর্বশেষ আপডেট স্বয়ংক্রিয়ভাবে সিঙ্ক হয়েছে!', 'success');
+        setTimeout(() => {
+          window.location.reload();
+        }, 900);
       }
     } catch (_) {
-      showToast('অ্যাপটি সম্পূর্ণ আপ-টু-ডেট আছে', 'success');
+      showToast('অ্যাপটি সর্বশেষ অনলাইন ভার্সনে আপডেট আছে', 'success');
     } finally {
       setIsCheckingUpdate(false);
     }
@@ -587,14 +624,14 @@ export const SettingsView: React.FC<Props> = ({
         </div>
       )}
 
-      {/* মূল কন্টেন্ট (অপটিমাইজড মার্জিন ও প্যাডিং যাতে এক স্ক্রিনেই সব অপশন ফিট হয়) */}
-      <div className="flex-1 overflow-y-auto space-y-2 pr-0.5 pb-1">
-        {/* কমপ্যাক্ট শপ প্রোফাইল কার্ড */}
-        <div className="bg-white rounded-2xl px-3 py-2.5 border border-[#E2E8F0] shadow-2xs flex items-center justify-between">
+      {/* মূল কন্টেন্ট: কোনো ক, খ, গ হেডার ছাড়া প্রত্যেকটি অপশন আলাদা ও আকর্ষণীয় কার্ড হিসেবে */}
+      <div className="flex-1 overflow-y-auto space-y-2 pr-0.5 pb-4">
+        {/* ১. শপ প্রোফাইল কার্ড */}
+        <div className="bg-gradient-to-r from-[#E0F2F1]/70 via-white to-[#E8F5E9]/60 rounded-2xl px-3.5 py-2.5 border border-[#80CBC4] shadow-2xs flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
             <div
               onClick={() => setShowEditInfoModal(true)}
-              className="relative w-11 h-11 rounded-xl bg-[#E0F2F1] text-[#0E6B6B] flex items-center justify-center font-bold border border-[#B2DFDB] overflow-hidden shrink-0 cursor-pointer"
+              className="relative w-11 h-11 rounded-xl bg-[#0E6B6B] text-white flex items-center justify-center font-bold border border-[#0E6B6B]/20 overflow-hidden shrink-0 cursor-pointer shadow-2xs"
               title="দোকানের তথ্য ও ফটো পরিবর্তন করুন"
             >
               {profile.logo && profile.logo !== defaultAppLogo ? (
@@ -611,7 +648,7 @@ export const SettingsView: React.FC<Props> = ({
               <h3 className="text-sm font-extrabold text-[#102A43] truncate leading-tight">
                 {profile.shopName || 'Sahoj Dokan - সহজ দোকান'}
               </h3>
-              <p className="text-[11px] text-[#64748B] truncate mt-0.5">
+              <p className="text-[11px] text-[#486581] font-semibold truncate mt-0.5">
                 {profile.ownerName ? `${profile.ownerName} • ` : ''}
                 {profile.phone || '01733225566'}
               </p>
@@ -621,271 +658,333 @@ export const SettingsView: React.FC<Props> = ({
           <button
             type="button"
             onClick={() => setShowEditInfoModal(true)}
-            className="px-2.5 py-1.5 rounded-lg bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#0E6B6B] hover:text-white text-[11px] font-bold flex items-center gap-1 transition shrink-0 cursor-pointer"
+            className="px-2.5 py-1.5 rounded-xl bg-[#0E6B6B] text-white hover:bg-[#094747] text-[11px] font-bold flex items-center gap-1 transition shrink-0 cursor-pointer shadow-2xs"
           >
-            <Edit3 className="w-3.5 h-3.5" />
+            <Edit3 className="w-3 h-3" />
             <span>{language === 'bn' ? 'এডিট' : 'Edit'}</span>
           </button>
         </div>
 
-        {/* ================= গ্রুপ ক: দোকান ও প্রিন্টার সেটিংস ================= */}
-        <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-2xs overflow-hidden">
-          <div className="px-3 py-1.5 bg-[#F8FAFC] border-b border-[#E2E8F0] flex items-center justify-between">
-            <span className="text-[11px] font-extrabold text-[#0E6B6B] tracking-wide">
-              {language === 'bn' ? 'ক. দোকান ও প্রিন্টার সেটিংস' : 'A. Shop & Printer Settings'}
-            </span>
-          </div>
-
-          <div className="divide-y divide-[#F1F5F9]">
-            {/* ১. ভাষা পরিবর্তন (বাংলা / English টগল) */}
-            <div className="px-3 py-2 flex items-center justify-between">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-[#E0F2F1] text-[#0E6B6B] flex items-center justify-center shrink-0">
-                  <Languages className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <span className="font-bold text-xs sm:text-sm text-[#102A43] block leading-tight">
-                    {language === 'bn' ? 'ভাষা পরিবর্তন' : 'Language'}
-                  </span>
-                  <span className="text-[10px] text-[#64748B] block truncate">
-                    {language === 'bn' ? 'বাংলা / English ইন্টারফেস' : 'Switch app language'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center bg-[#F1F5F9] p-0.5 rounded-lg border border-[#E2E8F0] shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onLanguageChange('bn');
-                    showToast('ভাষা বাংলায় পরিবর্তন করা হয়েছে', 'success');
-                  }}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
-                    language === 'bn'
-                      ? 'bg-[#0E6B6B] text-white shadow-2xs'
-                      : 'text-[#64748B] hover:text-[#102A43]'
-                  }`}
-                >
-                  বাংলা
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onLanguageChange('en');
-                    showToast('Language changed to English', 'success');
-                  }}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
-                    language === 'en'
-                      ? 'bg-[#0E6B6B] text-white shadow-2xs'
-                      : 'text-[#64748B] hover:text-[#102A43]'
-                  }`}
-                >
-                  English
-                </button>
-              </div>
+        {/* ২. ভাষা পরিবর্তন (স্বতন্ত্র কার্ড) */}
+        <div className="bg-white rounded-2xl px-3.5 py-2.5 border border-sky-200/80 shadow-2xs flex items-center justify-between">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 border border-sky-200">
+              <Languages className="w-4 h-4" />
             </div>
-
-            {/* ২. ব্লুটুথ থার্মাল প্রিন্টার সেটআপ ও টেস্ট প্রিন্ট */}
-            <div
-              onClick={() => setShowPrinterModal(true)}
-              className="px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-[#F8FAFC] transition active:bg-slate-100"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-[#E0F2F1] text-[#0E6B6B] flex items-center justify-center shrink-0">
-                  <Printer className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <span className="font-bold text-xs sm:text-sm text-[#102A43] block leading-tight">
-                    {language === 'bn'
-                      ? 'ব্লুটুথ থার্মাল প্রিন্টার সেটআপ ও টেস্ট প্রিন্ট'
-                      : 'Bluetooth Thermal Printer & Test Print'}
-                  </span>
-                  <span className="text-[10px] text-[#64748B] block truncate">
-                    {connectedPrinter
-                      ? `${connectedPrinter} (${printerPaperSize})`
-                      : `কাগজ সাইজ: ${printerPaperSize} • স্ক্যান ও টেস্ট প্রিন্ট`}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5 shrink-0">
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                    connectedPrinter
-                      ? 'bg-[#E8F5E9] text-[#2E7D32] border border-[#A5D6A7]'
-                      : 'bg-[#F1F5F9] text-[#64748B]'
-                  }`}
-                >
-                  {connectedPrinter ? 'কানেক্টেড' : printerPaperSize}
-                </span>
-                <ChevronRight className="w-4 h-4 text-[#64748B]" />
-              </div>
+            <div className="min-w-0">
+              <span className="font-extrabold text-xs sm:text-sm text-[#102A43] block leading-tight">
+                {language === 'bn' ? 'ভাষা পরিবর্তন' : 'Language'}
+              </span>
+              <span className="text-[10.5px] text-[#64748B] block truncate">
+                {language === 'bn' ? 'বাংলা / English ইন্টারফেস' : 'Switch app language'}
+              </span>
             </div>
           </div>
-        </div>
 
-        {/* ================= গ্রুপ খ: সিকিউরিটি ও ডাটা ব্যাকআপ ================= */}
-        <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-2xs overflow-hidden">
-          <div className="px-3 py-1.5 bg-[#F8FAFC] border-b border-[#E2E8F0] flex items-center justify-between">
-            <span className="text-[11px] font-extrabold text-[#0E6B6B] tracking-wide">
-              {language === 'bn' ? 'খ. সিকিউরিটি ও ডাটা ব্যাকআপ' : 'B. Security & Data Backup'}
-            </span>
-          </div>
-
-          <div className="divide-y divide-[#F1F5F9]">
-            {/* ১. অ্যাপ লক / পিন পরিবর্তন */}
-            <div
+          <div className="flex items-center bg-[#F1F5F9] p-0.5 rounded-xl border border-[#E2E8F0] shrink-0">
+            <button
+              type="button"
               onClick={() => {
-                setOldPin('');
-                setNewPin('');
-                setConfirmPin('');
-                setPinError('');
-                setShowPinModal(true);
+                onLanguageChange('bn');
+                showToast('ভাষা বাংলায় পরিবর্তন করা হয়েছে', 'success');
               }}
-              className="px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-[#F8FAFC] transition active:bg-slate-100"
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition cursor-pointer ${
+                language === 'bn'
+                  ? 'bg-[#0E6B6B] text-white shadow-2xs'
+                  : 'text-[#64748B] hover:text-[#102A43]'
+              }`}
             >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-[#F1F5F9] text-[#102A43] flex items-center justify-center shrink-0">
-                  <KeyRound className="w-4 h-4 text-[#0E6B6B]" />
-                </div>
-                <div className="min-w-0">
-                  <span className="font-bold text-xs sm:text-sm text-[#102A43] block leading-tight">
-                    {language === 'bn' ? 'অ্যাপ লক / পিন পরিবর্তন' : 'App Lock / Change PIN'}
-                  </span>
-                  <span className="text-[10px] text-[#64748B] block truncate">
-                    {language === 'bn'
-                      ? 'বর্তমান পিন যাচাই করে নতুন ৪-সংখ্যার পিন সেট করুন'
-                      : 'Verify current PIN and set new 4-digit PIN'}
-                  </span>
-                </div>
-              </div>
-              <ChevronRight className="w-4 h-4 text-[#64748B] shrink-0" />
-            </div>
-
-            {/* ২. ডাটা ব্যাকআপ ও রিসেট */}
-            <div
-              onClick={() => setShowDataBackupView(true)}
-              className="px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-[#F8FAFC] transition active:bg-slate-100"
+              বাংলা
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onLanguageChange('en');
+                showToast('Language changed to English', 'success');
+              }}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition cursor-pointer ${
+                language === 'en'
+                  ? 'bg-[#0E6B6B] text-white shadow-2xs'
+                  : 'text-[#64748B] hover:text-[#102A43]'
+              }`}
             >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-[#F1F5F9] text-[#102A43] flex items-center justify-center shrink-0">
-                  <RotateCcw className="w-4 h-4 text-[#0E6B6B]" />
-                </div>
-                <div className="min-w-0">
-                  <span className="font-bold text-xs sm:text-sm text-[#102A43] block leading-tight">
-                    {language === 'bn' ? 'ডাটা ব্যাকআপ ও রিসেট' : 'Data Backup & Reset'}
-                  </span>
-                  <span className="text-[10px] text-[#64748B] block truncate">
-                    {language === 'bn'
-                      ? 'ক্লাউড সিঙ্ক, ফাইল ব্যাকআপ ডাউনলোড ও রিস্টোর'
-                      : 'Cloud sync, export backup & restore'}
-                  </span>
-                </div>
-              </div>
-              <ChevronRight className="w-4 h-4 text-[#64748B] shrink-0" />
-            </div>
+              English
+            </button>
           </div>
         </div>
 
-        {/* ================= গ্রুপ গ: অন্যান্য ও সাপোর্ট ================= */}
-        <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-2xs overflow-hidden">
-          <div className="px-3 py-1.5 bg-[#F8FAFC] border-b border-[#E2E8F0] flex items-center justify-between">
-            <span className="text-[11px] font-extrabold text-[#0E6B6B] tracking-wide">
-              {language === 'bn' ? 'গ. অন্যান্য ও সাপোর্ট' : 'C. Others & Support'}
+        {/* ৩. ব্লুটুথ থার্মাল প্রিন্টার সেটআপ ও টেস্ট প্রিন্ট (স্বতন্ত্র কার্ড) */}
+        <div
+          onClick={() => setShowPrinterModal(true)}
+          className="bg-white rounded-2xl px-3.5 py-2.5 border border-indigo-200/80 shadow-2xs flex items-center justify-between cursor-pointer hover:border-indigo-400 transition active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0 border border-indigo-200">
+              <Printer className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="font-extrabold text-xs sm:text-sm text-[#102A43] block leading-tight">
+                {language === 'bn'
+                  ? 'ব্লুটুথ থার্মাল প্রিন্টার সেটআপ ও টেস্ট প্রিন্ট'
+                  : 'Bluetooth Thermal Printer & Test Print'}
+              </span>
+              <span className="text-[10.5px] text-[#64748B] block truncate">
+                {connectedPrinter
+                  ? `${connectedPrinter} (${printerPaperSize})`
+                  : `কাগজ সাইজ: ${printerPaperSize} • স্ক্যান ও টেস্ট প্রিন্ট`}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span
+              className={`text-[10px] font-extrabold px-2 py-0.5 rounded-lg ${
+                connectedPrinter
+                  ? 'bg-[#E8F5E9] text-[#2E7D32] border border-[#A5D6A7]'
+                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+              }`}
+            >
+              {connectedPrinter ? 'কানেক্টেড' : printerPaperSize}
             </span>
+            <ChevronRight className="w-4 h-4 text-[#64748B]" />
+          </div>
+        </div>
+
+        {/* ৪. দ্রুত বিক্রির ডিফল্ট লাভের হার (%) (স্বতন্ত্র কার্ড) */}
+        <div className="bg-white rounded-2xl px-3.5 py-2.5 border border-emerald-200/90 shadow-2xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#2E7D32] flex items-center justify-center shrink-0 border border-emerald-200">
+              <TrendingUp className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="font-extrabold text-xs sm:text-sm text-[#102A43] block leading-tight">
+                {language === 'bn'
+                  ? 'দ্রুত বিক্রির ডিফল্ট লাভের হার (%)'
+                  : 'Quick Sale Default Profit Margin (%)'}
+              </span>
+              <span className="text-[10.5px] text-[#64748B] block truncate">
+                {language === 'bn'
+                  ? `দ্রুত বিক্রিতে স্বয়ংক্রিয়ভাবে ${quickSaleMargin}% লাভ যোগ হবে`
+                  : `Auto-calculates ${quickSaleMargin}% profit on Quick Sales`}
+              </span>
+            </div>
           </div>
 
-          <div className="divide-y divide-[#F1F5F9]">
-            {/* ১. অ্যাপ আপডেট ও ভার্সন + অ্যাপ শেয়ার করুন (In-App Updater & Share) */}
-            <div className="px-3 py-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-[#E0F2F1] text-[#0E6B6B] flex items-center justify-center shrink-0">
-                  <Smartphone className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <span className="font-bold text-xs sm:text-sm text-[#102A43] block leading-tight">
-                    {language === 'bn' ? 'অ্যাপ আপডেট ও ভার্সন' : 'App Update & Version'}
-                  </span>
-                  <span className="text-[10px] font-semibold text-[#64748B] block truncate">
-                    বর্তমান ভার্সন: v{CURRENT_APP_VERSION}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5 shrink-0">
-                {/* আপডেট দেখুন বাটন */}
-                <button
-                  type="button"
-                  onClick={handleCheckForUpdate}
-                  disabled={isCheckingUpdate}
-                  className="px-2.5 py-1.5 rounded-lg bg-[#0E6B6B] hover:bg-[#094747] text-white text-[11px] font-bold flex items-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer disabled:opacity-60"
-                >
-                  <RefreshCw
-                    className={`w-3 h-3 ${isCheckingUpdate ? 'animate-spin' : ''}`}
-                  />
-                  <span>{isCheckingUpdate ? 'চেক হচ্ছে...' : 'আপডেট দেখুন'}</span>
-                </button>
-
-                {/* অ্যাপ শেয়ার করুন বাটন */}
-                <button
-                  type="button"
-                  onClick={handleShareApp}
-                  className="px-2.5 py-1.5 rounded-lg bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] text-[11px] font-bold flex items-center gap-1 border border-[#B2DFDB] transition active:scale-95 cursor-pointer"
-                  title="অন্য দোকানদারকে অ্যাপ শেয়ার করুন"
-                >
-                  <Share2 className="w-3 h-3" />
-                  <span>অ্যাপ শেয়ার করুন</span>
-                </button>
-              </div>
-            </div>
-
-            {/* ২. ব্যবহার নির্দেশিকা ও শর্তাবলী */}
-            <div
-              onClick={() => setShowTermsModal(true)}
-              className="px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-[#F8FAFC] transition active:bg-slate-100"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-[#F1F5F9] text-[#102A43] flex items-center justify-center shrink-0">
-                  <FileText className="w-4 h-4 text-[#0E6B6B]" />
-                </div>
-                <span className="font-bold text-xs sm:text-sm text-[#102A43] truncate">
-                  {language === 'bn'
-                    ? 'ব্যবহার নির্দেশিকা ও শর্তাবলী'
-                    : 'User Guide & Terms'}
-                </span>
-              </div>
-              <ChevronRight className="w-4 h-4 text-[#64748B] shrink-0" />
-            </div>
-
-            {/* ৩. অ্যাপ রেটিং দিন */}
-            <div
-              onClick={() => setShowReviewModal(true)}
-              className="px-3 py-2 flex items-center justify-between cursor-pointer hover:bg-[#F8FAFC] transition active:bg-slate-100"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center shrink-0">
-                  <Star className="w-4 h-4 fill-amber-500" />
-                </div>
-                <span className="font-bold text-xs sm:text-sm text-[#102A43] truncate">
-                  {language === 'bn' ? 'অ্যাপ রেটিং দিন' : 'Rate This App'}
-                </span>
-              </div>
-              <ChevronRight className="w-4 h-4 text-[#64748B] shrink-0" />
-            </div>
-
-            {/* ৪. লগ আউট (কমপ্যাক্ট লাল বাটন) */}
-            <div className="p-2 bg-[#FFFDFD]">
+          <div className="flex items-center gap-1 shrink-0">
+            {[10, 15, 20].map((pct) => (
               <button
+                key={pct}
                 type="button"
-                onClick={() => setShowLogoutModal(true)}
-                className="w-full py-2 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-[#D32F2F] border border-rose-200/80 flex items-center justify-center gap-2 text-xs font-extrabold transition active:scale-[0.99] cursor-pointer"
+                onClick={() => {
+                  setQuickSaleMargin(pct);
+                  DB.saveQuickSaleProfitMargin(pct);
+                  onDataRestored();
+                  showToast(`দ্রুত বিক্রির ডিফল্ট লাভ ${pct}% সেট করা হয়েছে`, 'success');
+                }}
+                className={`px-2 py-1 rounded-lg text-[11px] font-extrabold border transition cursor-pointer ${
+                  quickSaleMargin === pct
+                    ? 'bg-[#2E7D32] text-white border-[#2E7D32]'
+                    : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:bg-emerald-50'
+                }`}
               >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>{language === 'bn' ? 'লগ আউট' : 'Log Out'}</span>
+                {pct}%
               </button>
+            ))}
+            <div className="relative w-13">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={quickSaleMargin}
+                onChange={(e) => {
+                  const val = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                  setQuickSaleMargin(val);
+                  DB.saveQuickSaleProfitMargin(val);
+                  onDataRestored();
+                }}
+                className="w-full pl-1.5 pr-4 py-1 rounded-lg border border-[#CBD5E1] text-[11px] font-black text-[#102A43] text-center focus:outline-none focus:border-[#0E6B6B]"
+              />
+              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-[#64748B]">
+                %
+              </span>
             </div>
           </div>
         </div>
+
+        {/* ৫. অ্যাপ লক / পিন পরিবর্তন (স্বতন্ত্র কার্ড) */}
+        <div
+          onClick={() => {
+            setOldPin('');
+            setNewPin('');
+            setConfirmPin('');
+            setPinError('');
+            setShowPinModal(true);
+          }}
+          className="bg-white rounded-2xl px-3.5 py-2.5 border border-amber-200/90 shadow-2xs flex items-center justify-between cursor-pointer hover:border-amber-400 transition active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0 border border-amber-200">
+              <KeyRound className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="font-extrabold text-xs sm:text-sm text-[#102A43] block leading-tight">
+                {language === 'bn' ? 'অ্যাপ লক / পিন পরিবর্তন' : 'App Lock / Change PIN'}
+              </span>
+              <span className="text-[10.5px] text-[#64748B] block truncate">
+                {language === 'bn'
+                  ? 'বর্তমান পিন যাচাই করে নতুন ৪-সংখ্যার পিন সেট করুন'
+                  : 'Verify current PIN and set new 4-digit PIN'}
+              </span>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-[#64748B] shrink-0" />
+        </div>
+
+        {/* ৬. ডাটা ব্যাকআপ ও রিসেট (স্বতন্ত্র কার্ড) */}
+        <div
+          onClick={() => setShowDataBackupView(true)}
+          className="bg-white rounded-2xl px-3.5 py-2.5 border border-teal-200/90 shadow-2xs flex items-center justify-between cursor-pointer hover:border-[#0E6B6B] transition active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-[#E0F2F1] text-[#0E6B6B] flex items-center justify-center shrink-0 border border-[#B2DFDB]">
+              <RotateCcw className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="font-extrabold text-xs sm:text-sm text-[#102A43] block leading-tight">
+                {language === 'bn' ? 'ডাটা ব্যাকআপ ও রিসেট' : 'Data Backup & Reset'}
+              </span>
+              <span className="text-[10.5px] text-[#64748B] block truncate">
+                {language === 'bn'
+                  ? 'ক্লাউড সিঙ্ক, ফাইল ব্যাকআপ ডাউনলোড ও রিস্টোর'
+                  : 'Cloud sync, export backup & restore'}
+              </span>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-[#64748B] shrink-0" />
+        </div>
+
+        {/* ৭. সব ডেমো ও পরীক্ষামূলক ডাটা চিরস্থায়ী মুছুন (স্বতন্ত্র কার্ড) */}
+        <div
+          onClick={() => setShowWipeDemoModal(true)}
+          className="bg-white rounded-2xl px-3.5 py-2.5 border border-rose-200 shadow-2xs flex items-center justify-between cursor-pointer hover:bg-rose-50/40 transition active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-rose-50 text-[#D32F2F] flex items-center justify-center shrink-0 border border-rose-200">
+              <Trash2 className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="font-extrabold text-xs sm:text-sm text-[#D32F2F] block leading-tight">
+                {language === 'bn'
+                  ? 'সব ডেমো ও পরীক্ষামূলক ডাটা চিরস্থায়ী মুছুন'
+                  : 'Wipe All Demo & Test Data Permanently'}
+              </span>
+              <span className="text-[10.5px] text-[#64748B] block truncate">
+                {language === 'bn'
+                  ? 'পণ্য অক্ষুণ্ণ রেখে সকল ডেমো বিক্রি, খরচ ও বকেয়া ৳০ করে ফ্রেশ শুরু করুন'
+                  : 'Reset all demo sales, expenses, capital & dues to ৳0'}
+              </span>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-[#D32F2F] shrink-0" />
+        </div>
+
+        {/* ৮. অ্যাপ আপডেট ও ভার্সন + মিনিমাইজড অটো আপডেট ও শেয়ার বাটন (স্বতন্ত্র কার্ড) */}
+        <div className="bg-white rounded-2xl px-3.5 py-2.5 border border-cyan-200/90 shadow-2xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-cyan-50 text-[#0E6B6B] flex items-center justify-center shrink-0 border border-cyan-200">
+              <Smartphone className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="font-extrabold text-xs sm:text-sm text-[#102A43] block leading-tight truncate">
+                {language === 'bn' ? 'অ্যাপ আপডেট ও শেয়ার' : 'App Update & Share'}
+              </span>
+              <span className="text-[10px] font-semibold text-[#64748B] block truncate">
+                ভার্সন: v{CURRENT_APP_VERSION} • অনলাইন অটো-আপডেট
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0">
+            {/* মিনিমাইজড অটো আপডেট বাটন */}
+            <button
+              type="button"
+              onClick={handleCheckForUpdate}
+              disabled={isCheckingUpdate}
+              className="px-2 py-1 rounded-lg bg-[#0E6B6B] hover:bg-[#094747] text-white text-[10px] font-extrabold flex items-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer disabled:opacity-60 whitespace-nowrap"
+              title="অনলাইনে ক্লিক করলে স্বয়ংক্রিয়ভাবে সর্বশেষ আপডেট হবে"
+            >
+              <RefreshCw
+                className={`w-2.5 h-2.5 ${isCheckingUpdate ? 'animate-spin' : ''}`}
+              />
+              <span>{isCheckingUpdate ? 'আপডেট হচ্ছে...' : 'আপডেট দেখুন'}</span>
+            </button>
+
+            {/* মিনিমাইজড অ্যাপ শেয়ার বাটন */}
+            <button
+              type="button"
+              onClick={handleShareApp}
+              className="px-2 py-1 rounded-lg bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] text-[10px] font-extrabold flex items-center gap-1 border border-[#80CBC4] transition active:scale-95 cursor-pointer whitespace-nowrap"
+              title="অন্য দোকানদারকে অ্যাপ শেয়ার করুন"
+            >
+              <Share2 className="w-2.5 h-2.5" />
+              <span>অ্যাপ শেয়ার</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ৯. ব্যবহার নির্দেশিকা ও শর্তাবলী (স্বতন্ত্র কার্ড) */}
+        <div
+          onClick={() => setShowTermsModal(true)}
+          className="bg-white rounded-2xl px-3.5 py-2.5 border border-purple-200/80 shadow-2xs flex items-center justify-between cursor-pointer hover:border-purple-400 transition active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 border border-purple-200">
+              <FileText className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="font-extrabold text-xs sm:text-sm text-[#102A43] block leading-tight truncate">
+                {language === 'bn'
+                  ? 'ব্যবহার নির্দেশিকা ও শর্তাবলী'
+                  : 'User Guide & Terms'}
+              </span>
+              <span className="text-[10.5px] text-[#64748B] block truncate">
+                অ্যাপ ব্যবহারের নিয়ম ও গোপনীয়তা নীতিমালা
+              </span>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-[#64748B] shrink-0" />
+        </div>
+
+        {/* ১০. অ্যাপ রেটিং দিন (স্বতন্ত্র কার্ড) */}
+        <div
+          onClick={() => setShowReviewModal(true)}
+          className="bg-white rounded-2xl px-3.5 py-2.5 border border-yellow-300/80 shadow-2xs flex items-center justify-between cursor-pointer hover:border-amber-400 transition active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center shrink-0 border border-amber-200">
+              <Star className="w-4 h-4 fill-amber-500" />
+            </div>
+            <div className="min-w-0">
+              <span className="font-extrabold text-xs sm:text-sm text-[#102A43] block leading-tight truncate">
+                {language === 'bn' ? 'অ্যাপ রেটিং দিন' : 'Rate This App'}
+              </span>
+              <span className="text-[10.5px] text-[#64748B] block truncate">
+                আপনার মতামত ও ৫-স্টার রেটিং দিন
+              </span>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-[#64748B] shrink-0" />
+        </div>
+
+        {/* ১১. লগ আউট (স্বতন্ত্র কার্ড বাটন) */}
+        <button
+          type="button"
+          onClick={() => setShowLogoutModal(true)}
+          className="w-full py-2.5 px-3.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-[#D32F2F] border border-rose-200 shadow-2xs flex items-center justify-center gap-2 text-xs font-extrabold transition active:scale-[0.99] cursor-pointer"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>{language === 'bn' ? 'লগ আউট করুন' : 'Log Out'}</span>
+        </button>
       </div>
 
       {/* ================= MODAL: IN-APP UPDATE CONFIRMATION ================= */}
@@ -1586,6 +1685,62 @@ export const SettingsView: React.FC<Props> = ({
                 className="py-2.5 rounded-xl bg-[#D32F2F] text-white text-xs font-bold hover:bg-rose-700 cursor-pointer"
               >
                 হ্যাঁ, লগ আউট করুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: WIPE ALL DEMO & TEST DATA ================= */}
+      {showWipeDemoModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl border border-rose-200 space-y-3.5">
+            <div className="w-12 h-12 rounded-full bg-rose-50 text-[#D32F2F] mx-auto flex items-center justify-center border border-rose-200">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="font-extrabold text-base text-[#102A43]">
+                আপনি কি নিশ্চিত সব ডাটা মুছে ফ্রেশ শুরু করতে চান?
+              </h3>
+              <p className="text-xs text-[#64748B] leading-relaxed">
+                এটি সকল ডেমো ও পরীক্ষামূলক বিক্রি, দ্রুত বিক্রি, ইনভয়েস, খরচের খাতা, মালিকের লেনদেন, শুরুর পুঁজি এবং কাস্টমার/মহাজনের বকেয়া চিরস্থায়ীভাবে মুছে <strong>৳০</strong> করে দেবে।
+              </p>
+            </div>
+
+            <label className="flex items-center gap-2.5 p-3 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={keepProductsOnWipe}
+                onChange={(e) => setKeepProductsOnWipe(e.target.checked)}
+                className="w-4 h-4 accent-[#0E6B6B] rounded cursor-pointer"
+              />
+              <span className="text-xs font-bold text-[#102A43]">
+                পণ্য ও স্টক তালিকা অক্ষুণ্ণ রাখুন (প্রোফাইল ও পণ্য থাকবে)
+              </span>
+            </label>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowWipeDemoModal(false)}
+                className="py-2.5 rounded-xl bg-slate-100 text-[#64748B] text-xs font-bold cursor-pointer"
+              >
+                বাতিল
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  DB.wipeAllDemoData(keepProductsOnWipe);
+                  onDataRestored();
+                  setShowWipeDemoModal(false);
+                  showToast(
+                    'সব ডেমো ও পরীক্ষামূলক হিসাব চিরস্থায়ীভাবে মুছে ৳০ করা হয়েছে!',
+                    'success'
+                  );
+                }}
+                className="py-2.5 rounded-xl bg-[#D32F2F] hover:bg-rose-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+              >
+                হ্যাঁ, মুছে ফ্রেশ শুরু করুন
               </button>
             </div>
           </div>

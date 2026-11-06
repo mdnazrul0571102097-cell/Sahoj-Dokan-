@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { playSuccessChime } from '../utils/audio';
 import { calculateRunningCapital } from './RunningCapitalCard';
+import { DB } from '../storage/db';
 import {
   Zap,
   X,
@@ -78,9 +79,10 @@ export const QuickSaleModal: React.FC<Props> = ({
   }, [isOpen, initialMode]);
 
   // Quick Sale States
+  const defaultMargin = DB.getQuickSaleProfitMargin();
   const [amountInput, setAmountInput] = useState<string>('');
   const [noteInput, setNoteInput] = useState<string>('');
-  const [profitMode, setProfitMode] = useState<'none' | '10' | '15' | '20' | 'custom'>('none');
+  const [profitMode, setProfitMode] = useState<'default' | '10' | '15' | '20' | 'custom' | 'none'>('default');
   const [customProfitInput, setCustomProfitInput] = useState<string>('');
   const [paymentMode, setPaymentMode] = useState<'cash' | 'due'>('cash');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
@@ -133,8 +135,17 @@ export const QuickSaleModal: React.FC<Props> = ({
   }, [todaySales]);
 
   const todayTotalProfit = useMemo(() => {
-    return Math.round(todaySales.reduce((sum, s) => sum + (s.profit || 0), 0));
-  }, [todaySales]);
+    return Math.round(
+      todaySales.reduce((sum, s) => {
+        const isQuick =
+          s.items && s.items.some((it) => it.productId === 'quick_sale_entry');
+        if (isQuick && (s.profit === undefined || s.profit === 0) && (s.grandTotal || 0) > 0) {
+          return sum + Math.round((s.grandTotal || 0) * (defaultMargin / 100));
+        }
+        return sum + (s.profit || 0);
+      }, 0)
+    );
+  }, [todaySales, defaultMargin]);
 
   const capitalBreakdown = useMemo(
     () =>
@@ -156,6 +167,7 @@ export const QuickSaleModal: React.FC<Props> = ({
 
   const calculatedProfit = (() => {
     if (numericAmount <= 0) return 0;
+    if (profitMode === 'default') return Math.round(numericAmount * (defaultMargin / 100));
     if (profitMode === '10') return Math.round(numericAmount * 0.1);
     if (profitMode === '15') return Math.round(numericAmount * 0.15);
     if (profitMode === '20') return Math.round(numericAmount * 0.2);
@@ -476,14 +488,14 @@ export const QuickSaleModal: React.FC<Props> = ({
           </button>
         </div>
 
-        {/* ২. আজকের হিসাব ও চলমান পুঁজি বার (Slim Single Strip) */}
-        <div className="px-2.5 py-1 bg-[#E0F2F1] border-b border-[#B2DFDB] shrink-0">
-          <div className="flex items-center justify-between gap-1.5 text-[11px]">
+        {/* ২. আজকের হিসাব ও চলমান পুঁজি বার (Virtual Goods Capital + Drawer Cash + Profit + Total Capital) */}
+        <div className="px-2.5 py-1.5 bg-[#E0F2F1] border-b border-[#B2DFDB] shrink-0 space-y-1">
+          <div className="flex items-center justify-between gap-1.5 text-[11px] flex-wrap">
             <div className="flex items-center gap-1 min-w-0">
               <ShoppingBag className="w-3 h-3 text-[#0E6B6B] shrink-0" />
-              <span className="font-bold text-[#102A43] truncate">বিক্রি:</span>
+              <span className="font-bold text-[#102A43] truncate">আজকের বিক্রি:</span>
               <span className="font-black text-[#0E6B6B] tabular-nums">
-                ৳{todayTotalAmount.toLocaleString()}
+                ৳{todayTotalAmount.toLocaleString('bn-BD')}
               </span>
             </div>
 
@@ -495,7 +507,7 @@ export const QuickSaleModal: React.FC<Props> = ({
                   todayTotalProfit >= 0 ? 'text-[#2E7D32]' : 'text-[#D32F2F]'
                 }`}
               >
-                ৳{todayTotalProfit.toLocaleString()}
+                ৳{todayTotalProfit.toLocaleString('bn-BD')}
               </span>
             </div>
 
@@ -508,21 +520,19 @@ export const QuickSaleModal: React.FC<Props> = ({
                 setIsEditingCapital(!isEditingCapital);
               }}
               className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/80 hover:bg-white border border-[#80CBC4] cursor-pointer transition shrink-0"
-              title="শুরুর মূলধন সেট বা এডিট করতে ট্যাপ করুন"
+              title="শুরুর মালের পুঁজি সেট বা এডিট করতে ট্যাপ করুন"
             >
               <Landmark className="w-3 h-3 text-[#0E6B6B]" />
-              <span className="font-bold text-[#102A43]">পুঁজি:</span>
-              <span
-                className={`font-black tabular-nums ${
-                  capitalBreakdown.currentRunningCapital >= 0
-                    ? 'text-[#0E6B6B]'
-                    : 'text-[#D32F2F]'
-                }`}
-              >
-                ৳{capitalBreakdown.currentRunningCapital.toLocaleString()}
+              <span className="font-bold text-[#102A43]">শুরুর পুঁজি:</span>
+              <span className="font-black text-[#0E6B6B] tabular-nums">
+                ৳{capitalBreakdown.initialCapital.toLocaleString('bn-BD')}
               </span>
               <Edit3 className="w-2.5 h-2.5 text-[#0E6B6B]" />
             </button>
+          </div>
+
+          <div className="px-2 py-1 rounded-lg bg-white/85 border border-[#B2DFDB] text-[10.5px] font-extrabold text-[#102A43] leading-snug">
+            মূল মালের পুঁজি: <span className="text-[#0E6B6B]">৳{capitalBreakdown.remainingGoodsCapital.toLocaleString('bn-BD')}</span> | ক্যাশ বাক্সে নগদ: <span className="text-[#0E6B6B]">৳{capitalBreakdown.drawerCash.toLocaleString('bn-BD')}</span> | লাভ: <span className="text-[#2E7D32]">৳{capitalBreakdown.displayProfit.toLocaleString('bn-BD')}</span> | মোট পুঁজি: <span className="text-[#0E6B6B]">৳{capitalBreakdown.currentRunningCapital.toLocaleString('bn-BD')}</span>
           </div>
 
           {isEditingCapital && onSaveInitialStoreCapital && (
@@ -537,7 +547,7 @@ export const QuickSaleModal: React.FC<Props> = ({
               className="mt-1 pt-1 border-t border-[#B2DFDB] flex items-center justify-between gap-1.5"
             >
               <span className="text-[10.5px] font-extrabold text-[#102A43] whitespace-nowrap">
-                শুরুর মূলধন (৳):
+                শুরুর মালের পুঁজি (৳):
               </span>
               <input
                 type="number"
@@ -545,7 +555,7 @@ export const QuickSaleModal: React.FC<Props> = ({
                 min="0"
                 value={capitalInputVal}
                 onChange={(e) => setCapitalInputVal(e.target.value)}
-                placeholder="যেমন: 50000"
+                placeholder="যেমন: 10000"
                 className="flex-1 px-2 py-0.5 rounded-lg bg-white border border-[#0E6B6B] text-xs font-black text-[#102A43] focus:outline-none"
               />
               <button
@@ -768,7 +778,7 @@ export const QuickSaleModal: React.FC<Props> = ({
                 </div>
                 <div className="grid grid-cols-5 gap-1">
                   {[
-                    { id: 'none', label: 'শুধু বিক্রি' },
+                    { id: 'default', label: `ডিফল্ট (${defaultMargin}%)` },
                     { id: '10', label: '১০% লাভ' },
                     { id: '15', label: '১৫% লাভ' },
                     { id: '20', label: '২০% লাভ' },

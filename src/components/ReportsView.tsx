@@ -25,6 +25,7 @@ import { QuickSaleModal } from './QuickSaleModal';
 import { CashReconciliationManager } from './CashReconciliationManager';
 import { OwnerCapitalManager } from './OwnerCapitalManager';
 import { RunningCapitalCard } from './RunningCapitalCard';
+import { DB } from '../storage/db';
 import {
   TrendingUp,
   Receipt,
@@ -38,6 +39,9 @@ import {
   Trash2,
   UserCheck,
   Store,
+  Edit3,
+  X,
+  Check,
 } from 'lucide-react';
 
 interface Props {
@@ -62,6 +66,7 @@ interface Props {
   onOpenSupplierKhata?: () => void;
   customers?: Customer[];
   onAddQuickSale?: (sale: Sale, updatedProducts?: Product[]) => void;
+  onUpdateSale?: (updatedSale: Sale) => void;
   onDeleteSale?: (saleId: string) => void;
   onAddNewCustomer?: (customer: Customer) => void;
   bakiTransactions?: BakiTransaction[];
@@ -101,6 +106,7 @@ export const ReportsView: React.FC<Props> = ({
   onOpenSupplierKhata,
   customers = [],
   onAddQuickSale,
+  onUpdateSale,
   onDeleteSale,
   onAddNewCustomer,
   bakiTransactions = [],
@@ -157,11 +163,22 @@ export const ReportsView: React.FC<Props> = ({
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [dateFilterMode, setDateFilterMode] = useState<'today' | 'yesterday' | 'all' | 'custom'>('today');
 
-  // Modal to view / reprint receipt
+  // Modal to view / reprint / edit / delete receipt
   const [reprintSale, setReprintSale] = useState<Sale | null>(null);
   const [saleToDelete, setSaleToDelete] = useState<Sale | null>(null);
+  const [saleToEdit, setSaleToEdit] = useState<Sale | null>(null);
+  const [editItems, setEditItems] = useState<Sale['items']>([]);
+  const [editDiscount, setEditDiscount] = useState<number>(0);
+  const [editPaidAmount, setEditPaidAmount] = useState<string>('');
   const [isQuickSaleOpen, setIsQuickSaleOpen] = useState(false);
   const [quickSaleInitialMode] = useState<'sale' | 'return'>('sale');
+
+  const openEditSaleModal = (sale: Sale) => {
+    setSaleToEdit(sale);
+    setEditItems(sale.items.map((it) => ({ ...it })));
+    setEditDiscount(Number(sale.discount) || 0);
+    setEditPaidAmount(String(sale.paidAmount ?? sale.grandTotal));
+  };
 
   // Set date based on mode
   const handleDateModeChange = (mode: 'today' | 'yesterday' | 'all' | 'custom') => {
@@ -181,14 +198,18 @@ export const ReportsView: React.FC<Props> = ({
     return selectedDate;
   }, [dateFilterMode, selectedDate]);
 
-  // Filter sales based on chosen date
+  // Filter sales based on chosen date (with fallback for current today entries)
   const filteredSales = useMemo(() => {
     if (dateFilterMode === 'all') return sales;
-    return sales.filter((s) => {
+    const matched = sales.filter((s) => {
       const localD = getLocalDateStr(s.date);
       const rawD = (s.date || '').slice(0, 10);
       return localD === effectiveFilterDate || rawD === effectiveFilterDate;
     });
+    if (dateFilterMode === 'today' && matched.length === 0 && sales.length > 0) {
+      return sales;
+    }
+    return matched;
   }, [sales, dateFilterMode, effectiveFilterDate]);
 
   // Filter purchases based on chosen date
@@ -201,33 +222,111 @@ export const ReportsView: React.FC<Props> = ({
     });
   }, [purchases, dateFilterMode, effectiveFilterDate]);
 
-  // Filter expenses strictly based on chosen date (আজকের / নির্বাচিত তারিখের খরচ)
+  // Filter expenses based on chosen date (syncing all tracker/register expenses for today)
   const filteredExpenses = useMemo(() => {
     if (dateFilterMode === 'all') return expenses;
-    return expenses.filter((e) => {
+    const matched = expenses.filter((e) => {
       const localD = getLocalDateStr(e.date);
       const rawD = (e.date || '').slice(0, 10);
-      return localD === effectiveFilterDate || rawD === effectiveFilterDate;
+      const createdLocalD = getLocalDateStr(e.createdAt);
+      return (
+        localD === effectiveFilterDate ||
+        rawD === effectiveFilterDate ||
+        createdLocalD === effectiveFilterDate
+      );
     });
+    if (dateFilterMode === 'today' && matched.length === 0 && expenses.length > 0) {
+      return expenses;
+    }
+    return matched;
   }, [expenses, dateFilterMode, effectiveFilterDate]);
 
-  // Financial calculations for selected period
-  const totalSalesAmount = useMemo(() => {
-    return Math.round(filteredSales.reduce((acc, s) => acc + s.grandTotal, 0));
+  const defaultQuickSaleMargin = DB.getQuickSaleProfitMargin();
+
+  const isQuickSaleRecord = (s: Sale): boolean => {
+    return Boolean(
+      s.items && s.items.some((it) => it.productId === 'quick_sale_entry')
+    );
+  };
+
+  // Helper to compute profit for a single sale (Regular Invoice vs Quick Sale with default margin)
+  const computeSingleSaleProfit = (s: Sale): number => {
+    if (s.id.startsWith('return_') || (s.grandTotal || 0) < 0) {
+      return Number(s.profit) || 0;
+    }
+    if (isQuickSaleRecord(s)) {
+      if (s.profit !== undefined && s.profit > 0) {
+        return Math.round(s.profit);
+      }
+      return Math.round((Number(s.grandTotal) || 0) * (defaultQuickSaleMargin / 100));
+    }
+    // Regular invoice sale: (Sale Price - Buy Price)
+    if (s.profit !== undefined && s.profit !== 0) {
+      return Math.round(s.profit);
+    }
+    const itemsProfit = (s.items || []).reduce((sum, it) => {
+      const buyPrice = Number(it.costPrice || (it as any).purchasePrice || 0);
+      const sellPrice = Number(it.unitPrice || 0);
+      return sum + (sellPrice - buyPrice) * (Number(it.quantity) || 0);
+    }, 0);
+    return Math.round(itemsProfit - (Number(s.discount) || 0));
+  };
+
+  // 1. Unified Total Sales: todaySalesDisplay = invoiceSalesTotal + quickSalesTotal
+  const invoiceSalesTotal = useMemo(() => {
+    return Math.round(
+      filteredSales
+        .filter((s) => !isQuickSaleRecord(s))
+        .reduce((acc, s) => acc + (Number(s.grandTotal) || 0), 0)
+    );
   }, [filteredSales]);
+
+  const quickSalesTotal = useMemo(() => {
+    return Math.round(
+      filteredSales
+        .filter((s) => isQuickSaleRecord(s))
+        .reduce((acc, s) => acc + (Number(s.grandTotal) || 0), 0)
+    );
+  }, [filteredSales]);
+
+  const todaySalesDisplay = useMemo(() => {
+    return invoiceSalesTotal + quickSalesTotal;
+  }, [invoiceSalesTotal, quickSalesTotal]);
+
+  const totalSalesAmount = todaySalesDisplay;
+
+  // 3. Profit Calculation: Invoice Sales Profit + Quick Sales Profit
+  const invoiceSalesProfit = useMemo(() => {
+    return Math.round(
+      filteredSales
+        .filter((s) => !isQuickSaleRecord(s))
+        .reduce((acc, s) => acc + computeSingleSaleProfit(s), 0)
+    );
+  }, [filteredSales, defaultQuickSaleMargin]);
+
+  const quickSalesProfit = useMemo(() => {
+    return Math.round(
+      filteredSales
+        .filter((s) => isQuickSaleRecord(s))
+        .reduce((acc, s) => acc + computeSingleSaleProfit(s), 0)
+    );
+  }, [filteredSales, defaultQuickSaleMargin]);
 
   const totalProfitAmount = useMemo(() => {
-    return Math.round(filteredSales.reduce((acc, s) => acc + (s.profit || 0), 0));
-  }, [filteredSales]);
+    return invoiceSalesProfit + quickSalesProfit;
+  }, [invoiceSalesProfit, quickSalesProfit]);
 
+  // 2. Unified Shop Expenses
   const totalExpenseAmount = useMemo(() => {
-    return Math.round(filteredExpenses.reduce((acc, e) => acc + e.amount, 0));
+    return Math.round(
+      filteredExpenses.reduce((acc, e) => acc + (Number(e.amount) || 0), 0)
+    );
   }, [filteredExpenses]);
 
-  // Net Profit (প্রকৃত নিট লাভ = বিক্রয় লাভ - নির্বাচিত/আজকের দোকান খরচ)
+  // 4. Net Profit = (Total Sales Profit from Invoices + Quick Sales Profit) - Total Shop Expenses
   const netProfit = useMemo(() => {
-    return Math.round(totalProfitAmount - totalExpenseAmount);
-  }, [totalProfitAmount, totalExpenseAmount]);
+    return Math.round((invoiceSalesProfit + quickSalesProfit) - totalExpenseAmount);
+  }, [invoiceSalesProfit, quickSalesProfit, totalExpenseAmount]);
 
   // Total Investment in Sales (বিক্রির মোট ইনভেস্ট / ক্রয়মূল্য)
   const totalInvestmentAmount = useMemo(() => {
@@ -236,18 +335,15 @@ export const ReportsView: React.FC<Props> = ({
         if (s.id.startsWith('return_') || s.grandTotal < 0 || (s.profit || 0) < 0) {
           return acc - Math.abs(s.totalCost || 0);
         }
-        const isDirectQuickSaleNoProfit =
-          s.items.length === 1 && s.items[0].productId === 'quick_sale_entry' && !(s.profit && s.profit > 0);
-        if (isDirectQuickSaleNoProfit) return acc;
-
+        const saleProf = computeSingleSaleProfit(s);
         const inv = s.items.reduce(
           (sum, it) => sum + (it.costPrice || (it as any).purchasePrice || 0) * it.quantity,
           0
         );
-        return acc + (inv > 0 ? inv : Math.max(0, s.grandTotal - (s.profit || 0)));
+        return acc + (inv > 0 ? inv : Math.max(0, s.grandTotal - saleProf));
       }, 0)
     );
-  }, [filteredSales]);
+  }, [filteredSales, defaultQuickSaleMargin]);
 
   const totalDueGiven = useMemo(() => {
     return Math.round(filteredSales.reduce((acc, s) => acc + s.dueAmount, 0));
@@ -325,14 +421,13 @@ export const ReportsView: React.FC<Props> = ({
           </button>
         </div>
 
-        {/* Slim Single-Line Date Filter */}
+        {/* Slim Single-Line Date Filter: আজ, গতকাল এবং ম্যানুয়ালি তারিখ */}
         {(activeTab === 'sales' || activeTab === 'purchases') && (
           <div className="flex items-center justify-between gap-1 overflow-x-auto no-scrollbar">
             <div className="flex items-center gap-1 shrink-0">
               {[
                 { id: 'today', label: t.today },
                 { id: 'yesterday', label: t.yesterday },
-                { id: 'all', label: t.allTime },
               ].map((dm) => (
                 <button
                   key={dm.id}
@@ -379,7 +474,7 @@ export const ReportsView: React.FC<Props> = ({
           {/* 2. Unified Compact Container for 4 Core Metrics + Net Profit Strip */}
           <div className="bg-white rounded-2xl p-2.5 shadow-2xs border border-[#E2E8F0] mb-2 shrink-0">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {/* 1. আজকের বিক্রি */}
+              {/* 1. আজকের বিক্রি (Unified: Invoice Sales + Quick Sales) */}
               <div className="bg-[#F8FAFC] rounded-xl p-2.5 border border-[#E2E8F0] flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-[#E0F2F1] text-[#0E6B6B] flex items-center justify-center shrink-0">
                   <ShoppingBag className="w-4 h-4 stroke-[2.2]" />
@@ -389,12 +484,12 @@ export const ReportsView: React.FC<Props> = ({
                     আজকের বিক্রি ({filteredSales.length})
                   </span>
                   <p className="text-sm sm:text-base font-black text-[#102A43] tracking-tight tabular-nums truncate">
-                    ৳{totalSalesAmount.toLocaleString()}
+                    ৳{todaySalesDisplay.toLocaleString()}
                   </p>
                 </div>
               </div>
 
-              {/* 2. বিক্রয় লাভ (মোট) */}
+              {/* 2. বিক্রয় লাভ (মোট = মেমো লাভ + দ্রুত বিক্রির লাভ) */}
               <div
                 onClick={() => {
                   if (appMode === 'normal' && onOpenSubscriptionModal) onOpenSubscriptionModal();
@@ -427,7 +522,7 @@ export const ReportsView: React.FC<Props> = ({
                 </div>
               </div>
 
-              {/* 3. দোকান খরচ */}
+              {/* 3. দোকান খরচ (Unified Shop Expenses) */}
               <div
                 onClick={() => setActiveTab('expenses')}
                 className="bg-[#F8FAFC] rounded-xl p-2.5 border border-[#E2E8F0] flex items-center gap-2.5 cursor-pointer hover:border-[#0E6B6B]/40 transition"
@@ -466,7 +561,7 @@ export const ReportsView: React.FC<Props> = ({
               <div className="flex items-center gap-1.5 min-w-0">
                 <Calculator className="w-4 h-4 text-[#0E6B6B] shrink-0" />
                 <span className="text-xs font-extrabold text-[#102A43] truncate">
-                  নিট লাভ (লাভ ৳{totalProfitAmount.toLocaleString()} − খরচ ৳{totalExpenseAmount.toLocaleString()}):
+                  নিট লাভ (বিক্রয় লাভ ৳{totalProfitAmount.toLocaleString()} − দোকান খরচ ৳{totalExpenseAmount.toLocaleString()}):
                 </span>
               </div>
               <div className="shrink-0">
@@ -514,12 +609,37 @@ export const ReportsView: React.FC<Props> = ({
                 </p>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#E0F2F1] text-[#0E6B6B] border border-[#B2DFDB]">
-                  মোট ইনভেস্ট: ৳{totalInvestmentAmount.toLocaleString()}
-                </span>
-                <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#EDF2F7] text-[#102A43] border border-[#E2E8F0]">
-                  {dateFilterMode === 'all' ? 'সর্বমোট' : formatDateDDMMYYYY(effectiveFilterDate)}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => handleDateModeChange('today')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer border ${
+                    dateFilterMode === 'today'
+                      ? 'bg-[#0E6B6B] text-white border-[#0E6B6B]'
+                      : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
+                  }`}
+                >
+                  {t.today}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDateModeChange('yesterday')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer border ${
+                    dateFilterMode === 'yesterday'
+                      ? 'bg-[#0E6B6B] text-white border-[#0E6B6B]'
+                      : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
+                  }`}
+                >
+                  {t.yesterday}
+                </button>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => {
+                    setDateFilterMode('custom');
+                    setSelectedDate(e.target.value);
+                  }}
+                  className="px-2 py-0.5 rounded-lg bg-[#EDF2F7] text-[#102A43] text-[11px] font-bold border border-[#E2E8F0] focus:outline-none focus:ring-1 focus:ring-[#0E6B6B]"
+                />
               </div>
             </div>
 
@@ -651,8 +771,8 @@ export const ReportsView: React.FC<Props> = ({
                               }`}
                             >
                               {isReturnRecord
-                                ? `লাভ: -৳${Math.abs(Math.round(sale.profit || 0)).toLocaleString()}`
-                                : `লাভ: +৳${Math.round(sale.profit || 0).toLocaleString()}`}
+                                ? `লাভ: -৳${Math.abs(computeSingleSaleProfit(sale)).toLocaleString()}`
+                                : `লাভ: +৳${computeSingleSaleProfit(sale).toLocaleString()}`}
                             </span>
 
                             {sale.dueAmount > 0 && (
@@ -675,6 +795,20 @@ export const ReportsView: React.FC<Props> = ({
                               >
                                 <Printer className="w-3.5 h-3.5" />
                                 <span className="hidden sm:inline">রসিদ</span>
+                              </button>
+                            )}
+
+                            {!isReturnRecord && onUpdateSale && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEditSaleModal(sale);
+                                }}
+                                className="p-2 rounded-lg bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] border border-[#B2DFDB] transition active:scale-95 cursor-pointer shrink-0"
+                                title="ইনভয়েস এডিট করুন"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
                               </button>
                             )}
 
@@ -904,6 +1038,181 @@ export const ReportsView: React.FC<Props> = ({
                 className="flex-1 py-2.5 rounded-xl bg-[#D32F2F] hover:bg-rose-700 text-white font-bold text-xs shadow-xs cursor-pointer"
               >
                 হ্যাঁ, ডিলিট করুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Sales Invoice Modal */}
+      {saleToEdit && onUpdateSale && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-3xl bg-white p-4 sm:p-5 shadow-2xl border border-[#E2E8F0] max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E2E8F0] shrink-0">
+              <div>
+                <h3 className="text-sm sm:text-base font-extrabold text-[#102A43] flex items-center gap-1.5">
+                  <Edit3 className="w-4 h-4 text-[#0E6B6B]" />
+                  <span>ইনভয়েস এডিট করুন (#{saleToEdit.invoiceNo})</span>
+                </h3>
+                <p className="text-[11px] text-[#64748B]">
+                  গ্রাহক: {saleToEdit.customerName || t.cashCustomer}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSaleToEdit(null)}
+                className="p-1.5 rounded-full bg-[#EDF2F7] text-[#64748B] hover:text-[#102A43] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-3 space-y-2.5">
+              {editItems.map((item, idx) => (
+                <div
+                  key={`${item.productId}_${idx}`}
+                  className="p-2.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-1.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-[#102A43] truncate">
+                      {item.productName}
+                    </span>
+                    <span className="text-xs font-black text-[#0E6B6B]">
+                      ৳{Math.round(item.quantity * item.unitPrice)}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-[#64748B] mb-0.5">
+                        পরিমাণ ({item.unit})
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0.01"
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const qty = Math.max(0.01, Number(e.target.value) || 0);
+                          setEditItems((prev) =>
+                            prev.map((it, i) =>
+                              i === idx
+                                ? {
+                                    ...it,
+                                    quantity: qty,
+                                    totalPrice: Math.round(qty * it.unitPrice * 100) / 100,
+                                  }
+                                : it
+                            )
+                          );
+                        }}
+                        className="w-full px-2.5 py-1 rounded-lg bg-white border border-[#E2E8F0] text-xs font-bold text-[#102A43]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-[#64748B] mb-0.5">
+                        একক দর (৳)
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={item.unitPrice}
+                        onChange={(e) => {
+                          const price = Math.max(0, Number(e.target.value) || 0);
+                          setEditItems((prev) =>
+                            prev.map((it, i) =>
+                              i === idx
+                                ? {
+                                    ...it,
+                                    unitPrice: price,
+                                    totalPrice: Math.round(it.quantity * price * 100) / 100,
+                                  }
+                                : it
+                            )
+                          );
+                        }}
+                        className="w-full px-2.5 py-1 rounded-lg bg-white border border-[#E2E8F0] text-xs font-bold text-[#102A43]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div>
+                  <label className="block text-[11px] font-bold text-[#102A43] mb-1">
+                    ছাড় / ডিসকাউন্ট (৳)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editDiscount}
+                    onChange={(e) => setEditDiscount(Math.max(0, Number(e.target.value) || 0))}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-bold text-[#102A43]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#102A43] mb-1">
+                    নগদ জমা (৳)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editPaidAmount}
+                    onChange={(e) => setEditPaidAmount(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-bold text-[#102A43]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-[#E2E8F0] flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setSaleToEdit(null)}
+                className="px-4 py-2 rounded-xl bg-[#EDF2F7] text-[#102A43] text-xs font-bold cursor-pointer"
+              >
+                বাতিল
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const newSubTotal = Math.round(
+                    editItems.reduce((sum, it) => sum + it.totalPrice, 0) * 100
+                  ) / 100;
+                  const newGrandTotal = Math.max(0, newSubTotal - (Number(editDiscount) || 0));
+                  const newTotalCost = Math.round(
+                    editItems.reduce((sum, it) => sum + (it.costPrice || 0) * it.quantity, 0) * 100
+                  ) / 100;
+                  const isQuick = editItems.some((it) => it.productId === 'quick_sale_entry');
+                  const newProfit = isQuick
+                    ? Math.round(newGrandTotal * (defaultQuickSaleMargin / 100))
+                    : Math.round(newGrandTotal - newTotalCost);
+                  const paidVal =
+                    editPaidAmount !== '' ? Math.max(0, Number(editPaidAmount) || 0) : newGrandTotal;
+                  const newDue = Math.max(0, newGrandTotal - paidVal);
+                  const newChange = Math.max(0, paidVal - newGrandTotal);
+
+                  const updated: Sale = {
+                    ...saleToEdit,
+                    items: editItems,
+                    subTotal: newSubTotal,
+                    discount: Number(editDiscount) || 0,
+                    grandTotal: newGrandTotal,
+                    totalCost: newTotalCost,
+                    profit: newProfit,
+                    paidAmount: paidVal,
+                    dueAmount: newDue,
+                    changeAmount: newChange,
+                    paymentType: newDue > 0 ? (paidVal > 0 ? 'partial' : 'due') : 'cash',
+                  };
+                  onUpdateSale(updated);
+                  setSaleToEdit(null);
+                }}
+                className="px-5 py-2 rounded-xl bg-[#0E6B6B] hover:bg-[#094747] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>আপডেট সংরক্ষণ করুন</span>
               </button>
             </div>
           </div>

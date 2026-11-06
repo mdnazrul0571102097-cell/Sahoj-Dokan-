@@ -282,8 +282,8 @@ export const OwnerCapitalManager: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* 4 Summary Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      {/* 2 Top Summary Metric Cards */}
+      <div className="grid grid-cols-2 gap-2.5">
         {/* 1. মালিকের ব্যক্তিগত খরচ/নেওয়া */}
         <div className="bg-white rounded-[22px] p-3.5 border border-[#E2E8F0] shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
@@ -315,67 +315,43 @@ export const OwnerCapitalManager: React.FC<Props> = ({
             মালিকের ফেরত দেওয়া টাকা
           </span>
         </div>
-
-        {/* 3. মালিকের নতুন পুঁজি জমা */}
-        <div className="bg-white rounded-[22px] p-3.5 border border-[#E2E8F0] shadow-2xs">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-bold text-[#64748B]">মালিকের নতুন পুঁজি জমা</span>
-            <span className="w-7 h-7 rounded-full bg-[#E8F5E9] text-[#2E7D32] flex items-center justify-center shrink-0">
-              <Landmark className="w-4 h-4" />
-            </span>
-          </div>
-          <p className="text-lg sm:text-xl font-black text-[#2E7D32]">
-            ৳ {summary.totalNewCapital.toLocaleString()}
-          </p>
-          <span className="text-[11px] text-[#64748B] block mt-0.5">
-            ব্যবসায় যুক্ত নতুন মূলধন
-          </span>
-        </div>
-
-        {/* 4. বকেয়া উত্তোলন / নিট নেওয়া টাকা */}
-        <div className="bg-white rounded-[22px] p-3.5 border-2 border-[#80CBC4] shadow-2xs">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-extrabold text-[#102A43]">বকেয়া উত্তোলন (নিট নেওয়া)</span>
-            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#E0F2F1] text-[#0E6B6B]">
-              নেওয়া − ফেরত
-            </span>
-          </div>
-          <p className="text-lg sm:text-xl font-black text-[#102A43]">
-            ৳ {summary.netWithdrawal.toLocaleString()}
-          </p>
-          <span className="text-[11px] text-[#0E6B6B] font-bold block mt-0.5">
-            মালিকের কাছে থাকা বাকি উত্তোলন
-          </span>
-        </div>
       </div>
 
-      {/* 3 Quick Action Buttons for the 3 Owner Transaction Types */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-        <button
-          type="button"
-          onClick={() => handleOpenAddModal('withdrawal')}
-          className="py-3 px-4 rounded-2xl bg-[#D32F2F] hover:bg-rose-800 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
-        >
-          <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
-          <span>মালিকের ব্যক্তিগত খরচ/নেওয়া (−)</span>
-        </button>
+      {/* উপরের দুইটি বাটন: মালিক ব্যক্তিগত খরচ নেওয়া এবং নেওয়া টাকা ফেরত দেওয়া + নিচে মালিক থেকে মোট পাওনা টাকা বাটন */}
+      <div className="space-y-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => handleOpenAddModal('withdrawal')}
+            className="py-3 px-4 rounded-2xl bg-[#D32F2F] hover:bg-rose-800 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
+          >
+            <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
+            <span>মালিকের ব্যক্তিগত খরচ/নেওয়া (−)</span>
+          </button>
 
+          <button
+            type="button"
+            onClick={() => handleOpenAddModal('withdrawal_return')}
+            className="py-3 px-4 rounded-2xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
+          >
+            <ArrowDownLeft className="w-4 h-4 stroke-[2.5]" />
+            <span>নেওয়া টাকা ক্যাশে ফেরত (+)</span>
+          </button>
+        </div>
+
+        {/* নিচে একটি বাটন: মালিক থেকে মোট পাওনা টাকা */}
         <button
           type="button"
           onClick={() => handleOpenAddModal('withdrawal_return')}
-          className="py-3 px-4 rounded-2xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
+          className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-[#102A43] to-[#0E6B6B] hover:opacity-95 text-white font-extrabold text-xs sm:text-sm flex items-center justify-between gap-2 shadow-sm border border-[#80CBC4]/40 transition active:scale-[0.99] cursor-pointer"
         >
-          <ArrowDownLeft className="w-4 h-4 stroke-[2.5]" />
-          <span>নেওয়া টাকা ক্যাশে ফেরত (+)</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleOpenAddModal('capital_deposit')}
-          className="py-3 px-4 rounded-2xl bg-[#2E7D32] hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>মালিকের নতুন পুঁজি জমা (+)</span>
+          <div className="flex items-center gap-2">
+            <Landmark className="w-4 h-4 text-amber-300 shrink-0" />
+            <span>মালিক থেকে মোট পাওনা টাকা (নেওয়া − ফেরত):</span>
+          </div>
+          <span className="text-base sm:text-lg font-black text-amber-300 tabular-nums">
+            ৳ {summary.netWithdrawal.toLocaleString()}
+          </span>
         </button>
       </div>
 
@@ -396,7 +372,6 @@ export const OwnerCapitalManager: React.FC<Props> = ({
               { id: 'all', label: 'সব ধরন' },
               { id: 'withdrawal', label: 'মালিকের ব্যক্তিগত খরচ/নেওয়া' },
               { id: 'withdrawal_return', label: 'নেওয়া টাকা ক্যাশে ফেরত' },
-              { id: 'capital_deposit', label: 'মালিকের নতুন পুঁজি জমা' },
             ].map((tf) => (
               <button
                 key={tf.id}
@@ -522,11 +497,10 @@ export const OwnerCapitalManager: React.FC<Props> = ({
 
             <form onSubmit={handleSubmit} className="p-5 space-y-4">
               {/* Transaction Type Selector */}
-              <div className="grid grid-cols-3 gap-1.5 bg-[#EDF2F7] p-1 rounded-2xl border border-[#E2E8F0]">
+              <div className="grid grid-cols-2 gap-1.5 bg-[#EDF2F7] p-1 rounded-2xl border border-[#E2E8F0]">
                 {[
                   { id: 'withdrawal', label: 'ব্যক্তিগত খরচ/নেওয়া' },
                   { id: 'withdrawal_return', label: 'নেওয়া টাকা ফেরত' },
-                  { id: 'capital_deposit', label: 'নতুন পুঁজি জমা' },
                 ].map((opt) => (
                   <button
                     key={opt.id}

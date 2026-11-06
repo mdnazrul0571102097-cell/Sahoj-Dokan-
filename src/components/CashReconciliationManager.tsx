@@ -17,6 +17,7 @@ import {
 } from '../types';
 import { DayCloseModal } from './DayCloseModal';
 import { MonthlyReportModal } from './MonthlyReportModal';
+import { DB } from '../storage/db';
 import {
   Calculator,
   CheckCircle2,
@@ -69,6 +70,7 @@ export const CashReconciliationManager: React.FC<Props> = ({
   expenses,
   ownerTransactions,
   otherCashEntries,
+  dailyReconciliations = [],
   initialOpeningCash,
   products,
   customers,
@@ -262,10 +264,19 @@ export const CashReconciliationManager: React.FC<Props> = ({
         .reduce((sum, e) => sum + (e.amount || 0), 0)
     );
 
+    const defaultMargin = DB.getQuickSaleProfitMargin();
     const daySalesList = sales.filter((s) => matchesDate(s.date, dateStr));
     const totalSales = Math.round(daySalesList.reduce((sum, s) => sum + (s.grandTotal || 0), 0));
     const dueSales = Math.round(daySalesList.reduce((sum, s) => sum + (s.dueAmount || 0), 0));
-    const totalProfit = Math.round(daySalesList.reduce((sum, s) => sum + (s.profit || 0), 0));
+    const totalProfit = Math.round(
+      daySalesList.reduce((sum, s) => {
+        const isQuick = s.items && s.items.some((it) => it.productId === 'quick_sale_entry');
+        if (isQuick && (s.profit === undefined || s.profit === 0) && (s.grandTotal || 0) > 0) {
+          return sum + Math.round((s.grandTotal || 0) * (defaultMargin / 100));
+        }
+        return sum + (s.profit || 0);
+      }, 0)
+    );
     const totalSalesCount = daySalesList.length;
 
     const totalCashIn =
@@ -376,7 +387,9 @@ export const CashReconciliationManager: React.FC<Props> = ({
     otherCashEntries,
   ]);
 
-  // Automated recent daily history (last 15 active dates)
+  // Automated recent daily history:
+  // Only include completed days (after 12:00 AM midnight: d < todayStr) OR days where the user
+  // explicitly clicked "ডে অফ / দোকান ক্লোজ (Day Close)" before midnight.
   const automatedDailyHistory = useMemo(() => {
     let runningBalance = Math.max(0, Math.round(initialOpeningCash || 0));
     const rows = allRecordedDates.map((d) => {
@@ -385,6 +398,7 @@ export const CashReconciliationManager: React.FC<Props> = ({
       const rawClosing = opening + flow.totalCashIn - flow.totalCashOut;
       const closing = Math.max(0, rawClosing);
       runningBalance = closing;
+      const isClosedManually = dailyReconciliations.some((r) => r.date === d && r.isClosed);
       return {
         date: d,
         openingCash: opening,
@@ -393,12 +407,18 @@ export const CashReconciliationManager: React.FC<Props> = ({
         closingCash: closing,
         isDeficit: rawClosing < 0,
         deficitAmount: rawClosing < 0 ? Math.abs(rawClosing) : 0,
+        isCompletedOrClosed: d < todayStr || isClosedManually,
       };
     });
-    return rows.reverse().slice(0, 15);
+    return rows
+      .filter((r) => r.isCompletedOrClosed)
+      .reverse()
+      .slice(0, 15);
   }, [
     allRecordedDates,
     initialOpeningCash,
+    dailyReconciliations,
+    todayStr,
     sales,
     bakiTransactions,
     ownerTransactions,
@@ -508,10 +528,19 @@ export const CashReconciliationManager: React.FC<Props> = ({
     const totalCashOut =
       cashPurchases + shopExpenses + supplierDuePaid + ownerWithdrawal + otherCashOut;
 
+    const defaultMargin = DB.getQuickSaleProfitMargin();
     const monthSalesList = sales.filter((s) => matchesMonth(s.date, selectedMonth));
     const totalSales = Math.round(monthSalesList.reduce((sum, s) => sum + (s.grandTotal || 0), 0));
     const dueSales = Math.round(monthSalesList.reduce((sum, s) => sum + (s.dueAmount || 0), 0));
-    const totalProfit = Math.round(monthSalesList.reduce((sum, s) => sum + (s.profit || 0), 0));
+    const totalProfit = Math.round(
+      monthSalesList.reduce((sum, s) => {
+        const isQuick = s.items && s.items.some((it) => it.productId === 'quick_sale_entry');
+        if (isQuick && (s.profit === undefined || s.profit === 0) && (s.grandTotal || 0) > 0) {
+          return sum + Math.round((s.grandTotal || 0) * (defaultMargin / 100));
+        }
+        return sum + (s.profit || 0);
+      }, 0)
+    );
     const netProfit = Math.round(totalProfit - shopExpenses);
 
     const rawClosingCash = openingCash + totalCashIn - totalCashOut;
@@ -732,7 +761,7 @@ export const CashReconciliationManager: React.FC<Props> = ({
                   className="px-4 py-2 rounded-2xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer shrink-0"
                 >
                   <Store className="w-4 h-4 text-emerald-300" />
-                  <span>আজকের দোকান ক্লোজ ও হিসাব মিলান (Day Close)</span>
+                  <span>ডে অফ / আজকের দোকান ক্লোজ করুন</span>
                 </button>
                 <span className="text-xs font-bold px-3 py-2 rounded-xl bg-[#EDF2F7] text-[#102A43] border border-[#E2E8F0]">
                   তারিখ: {formatDateDDMMYYYY(selectedDate)}
@@ -906,46 +935,71 @@ export const CashReconciliationManager: React.FC<Props> = ({
 
           {/* Automated Daily Cash Rollover History */}
           <div className="bg-white rounded-[24px] p-4 border border-[#E2E8F0] shadow-xs">
-            <h4 className="font-extrabold text-sm sm:text-base text-[#102A43] mb-3">
-              প্রতিদিনের স্বয়ংক্রিয় ক্যাশ হিসাব তালিকা ({automatedDailyHistory.length} দিন)
-            </h4>
-            <div className="space-y-2">
-              {automatedDailyHistory.map((row) => (
-                <div
-                  key={row.date}
-                  onClick={() => setSelectedDate(row.date)}
-                  className={`p-3 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer text-xs ${
-                    selectedDate === row.date
-                      ? 'bg-[#E0F2F1]/60 border-[#0E6B6B]'
-                      : 'bg-[#F8FAFC] hover:bg-white border-[#E2E8F0]'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-black text-[#102A43] flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5 text-[#0E6B6B]" />
-                      {formatDateDDMMYYYY(row.date)}
-                    </span>
-                    <span className="text-[#64748B]">
-                      সকালের ক্যাশ: <strong className="text-[#102A43]">৳{row.openingCash.toLocaleString()}</strong>
-                    </span>
-                    <span className="text-[#2E7D32] font-bold">
-                      + জমা: ৳{row.totalCashIn.toLocaleString()}
-                    </span>
-                    <span className="text-[#D32F2F] font-bold">
-                      − খরচ ও পরিশোধ: ৳{row.totalCashOut.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 font-black text-[#0E6B6B]">
-                    <span>ক্যাশ বাক্সে থাকার কথা: ৳{row.closingCash.toLocaleString()}</span>
-                    {row.isDeficit && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#FFEBEE] text-[#D32F2F] border border-rose-200">
-                        খরচ ৳{row.deficitAmount.toLocaleString()} বেশি
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              <div>
+                <h4 className="font-extrabold text-sm sm:text-base text-[#102A43]">
+                  প্রতিদিনের স্বয়ংক্রিয় ক্যাশ হিসাব তালিকা ({automatedDailyHistory.length} দিন)
+                </h4>
+                <p className="text-[11px] text-[#64748B]">
+                  সারাদিন বিক্রির পর রাত ১২:০০ টায় স্বয়ংক্রিয়ভাবে অথবা &apos;ডে অফ / দোকান ক্লোজ&apos; বাটনে ক্লিক করলে হিসাব যুক্ত হয়
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDayCloseOpen(true)}
+                className="px-3 py-1.5 rounded-xl bg-[#E0F2F1] hover:bg-[#0E6B6B] text-[#0E6B6B] hover:text-white font-extrabold text-xs border border-[#80CBC4] transition cursor-pointer self-start sm:self-center shrink-0"
+              >
+                ডে অফ / হিসাব ক্লোজ করুন
+              </button>
             </div>
+            {automatedDailyHistory.length === 0 ? (
+              <div className="p-4 rounded-2xl bg-[#F8FAFC] border border-dashed border-[#CBD5E1] text-center space-y-1.5">
+                <p className="text-xs sm:text-sm font-bold text-[#102A43]">
+                  আজকের দিনের চূড়ান্ত হিসাব এখনো তালিকায় যুক্ত হয়নি
+                </p>
+                <p className="text-[11px] text-[#64748B] max-w-md mx-auto">
+                  সারাদিন বিক্রি করার পর রাত ১২:০০ টায় স্বয়ংক্রিয়ভাবে এখানে হিসাব চলে আসবে। এর আগে দোকান বন্ধ করতে চাইলে উপরের <strong>&quot;ডে অফ / আজকের দোকান ক্লোজ করুন&quot;</strong> বাটনে ক্লিক করুন।
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {automatedDailyHistory.map((row) => (
+                  <div
+                    key={row.date}
+                    onClick={() => setSelectedDate(row.date)}
+                    className={`p-3 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer text-xs ${
+                      selectedDate === row.date
+                        ? 'bg-[#E0F2F1]/60 border-[#0E6B6B]'
+                        : 'bg-[#F8FAFC] hover:bg-white border-[#E2E8F0]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-black text-[#102A43] flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-[#0E6B6B]" />
+                        {formatDateDDMMYYYY(row.date)}
+                      </span>
+                      <span className="text-[#64748B]">
+                        সকালের ক্যাশ: <strong className="text-[#102A43]">৳{row.openingCash.toLocaleString()}</strong>
+                      </span>
+                      <span className="text-[#2E7D32] font-bold">
+                        + জমা: ৳{row.totalCashIn.toLocaleString()}
+                      </span>
+                      <span className="text-[#D32F2F] font-bold">
+                        − খরচ ও পরিশোধ: ৳{row.totalCashOut.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 font-black text-[#0E6B6B]">
+                      <span>ক্যাশ বাক্সে থাকার কথা: ৳{row.closingCash.toLocaleString()}</span>
+                      {row.isDeficit && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#FFEBEE] text-[#D32F2F] border border-rose-200">
+                          খরচ ৳{row.deficitAmount.toLocaleString()} বেশি
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </>
       )}

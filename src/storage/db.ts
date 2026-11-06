@@ -45,6 +45,8 @@ const STORAGE_KEYS = {
   BLOCKED_USERS_MAP: 'sahoj_dokan_blocked_users_map',
   REGISTERED_USERS_LIST: 'sahoj_dokan_registered_users_list',
   APK_DOWNLOAD_COUNT: 'sahoj_dokan_apk_download_count',
+  QUICK_SALE_MARGIN: 'sahoj_dokan_quick_sale_margin',
+  DEMO_WIPED: 'sahoj_dokan_demo_wiped',
 };
 
 // Curated authentic Bangladeshi grocery items
@@ -718,6 +720,7 @@ export const DB = {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
       if (data) return JSON.parse(data);
+      if (localStorage.getItem(STORAGE_KEYS.DEMO_WIPED) === 'true') return [];
     } catch (e) {
       console.error(e);
     }
@@ -753,6 +756,7 @@ export const DB = {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.BAKI_TXS);
       if (data) return JSON.parse(data);
+      if (localStorage.getItem(STORAGE_KEYS.DEMO_WIPED) === 'true') return [];
     } catch (e) {
       console.error(e);
     }
@@ -789,6 +793,7 @@ export const DB = {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.SUPPLIERS);
       if (data) return JSON.parse(data);
+      if (localStorage.getItem(STORAGE_KEYS.DEMO_WIPED) === 'true') return [];
     } catch (e) {
       console.error(e);
     }
@@ -807,6 +812,7 @@ export const DB = {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.SUPPLIER_TXS);
       if (data) return JSON.parse(data);
+      if (localStorage.getItem(STORAGE_KEYS.DEMO_WIPED) === 'true') return [];
     } catch (e) {
       console.error(e);
     }
@@ -825,12 +831,19 @@ export const DB = {
   getExpenses(): Expense[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.EXPENSES);
-      if (data) return JSON.parse(data);
+      if (data) {
+        const parsed: Expense[] = JSON.parse(data);
+        const seedIds = new Set(['exp_1', 'exp_2', 'exp_3']);
+        const cleaned = parsed.filter((e) => e && !seedIds.has(e.id));
+        if (cleaned.length !== parsed.length) {
+          this.saveExpenses(cleaned);
+        }
+        return cleaned;
+      }
     } catch (e) {
       console.error(e);
     }
-    this.saveExpenses(INITIAL_EXPENSES);
-    return INITIAL_EXPENSES;
+    return [];
   },
 
   saveExpenses(expenses: Expense[]) {
@@ -844,12 +857,19 @@ export const DB = {
   getBulkPurchases(): BulkPurchase[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.BULK_PURCHASES);
-      if (data) return JSON.parse(data);
+      if (data) {
+        const parsed: BulkPurchase[] = JSON.parse(data);
+        const seedIds = new Set(['bp_1']);
+        const cleaned = parsed.filter((bp) => bp && !seedIds.has(bp.id));
+        if (cleaned.length !== parsed.length) {
+          this.saveBulkPurchases(cleaned);
+        }
+        return cleaned;
+      }
     } catch (e) {
       console.error(e);
     }
-    this.saveBulkPurchases(INITIAL_BULK_PURCHASES);
-    return INITIAL_BULK_PURCHASES;
+    return [];
   },
 
   saveBulkPurchases(purchases: BulkPurchase[]) {
@@ -1003,6 +1023,68 @@ export const DB = {
         (window as any).__sd_schedule_sync();
       }
     } catch (_) {}
+  },
+
+  getQuickSaleProfitMargin(): number {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.QUICK_SALE_MARGIN);
+      if (raw === null) return 10;
+      const val = parseFloat(raw);
+      return isNaN(val) ? 10 : Math.max(0, Math.min(100, val));
+    } catch (_) {
+      return 10;
+    }
+  },
+
+  saveQuickSaleProfitMargin(margin: number) {
+    try {
+      const clean = Math.max(0, Math.min(100, Number(margin) || 0));
+      localStorage.setItem(STORAGE_KEYS.QUICK_SALE_MARGIN, String(clean));
+      if (typeof window !== 'undefined' && (window as any).__sd_schedule_sync) {
+        (window as any).__sd_schedule_sync();
+      }
+    } catch (_) {}
+  },
+
+  wipeAllDemoData(keepProducts: boolean = true) {
+    try {
+      localStorage.setItem(STORAGE_KEYS.DEMO_WIPED, 'true');
+      this.saveSales([]);
+      this.saveExpenses([]);
+      this.savePurchases([]);
+      this.saveBulkPurchases([]);
+      this.saveBakiTransactions([]);
+      this.saveSupplierTransactions([]);
+      this.saveOwnerTransactions([]);
+      this.saveOtherCashEntries([]);
+      this.saveDailyReconciliations([]);
+      this.saveMonthlyReconciliations([]);
+      this.saveInitialOpeningCash(0);
+      this.saveInitialStoreCapital(0);
+
+      // Remove seeded demo customers & suppliers, and reset any user-created customer/supplier dues to 0
+      const seedCustIds = new Set(['cust_1', 'cust_2', 'cust_3']);
+      const remainingCusts = this.getCustomers()
+        .filter((c) => !seedCustIds.has(c.id))
+        .map((c) => ({ ...c, totalDue: 0 }));
+      this.saveCustomers(remainingCusts);
+
+      const seedSuppIds = new Set(['supp_1', 'supp_2', 'supp_3']);
+      const remainingSupps = this.getSuppliers()
+        .filter((s) => !seedSuppIds.has(s.id))
+        .map((s) => ({ ...s, totalDue: 0, totalPayableDue: 0 }));
+      this.saveSuppliers(remainingSupps);
+
+      if (!keepProducts) {
+        this.saveProducts([]);
+      }
+
+      if (typeof window !== 'undefined' && (window as any).__sd_schedule_sync) {
+        (window as any).__sd_schedule_sync();
+      }
+    } catch (e) {
+      console.error('Error wiping demo data:', e);
+    }
   },
 
   isFirstRun(): boolean {

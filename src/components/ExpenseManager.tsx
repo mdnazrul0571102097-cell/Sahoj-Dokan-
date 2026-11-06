@@ -84,30 +84,43 @@ export const ExpenseManager: React.FC<Props> = ({
     const yesterday = new Date(Date.now() - 24 * 3600 * 1000);
     const yesterdayStr = getLocalDateStr(yesterday);
 
-    return expenses
+    const matched = expenses
       .filter((exp) => {
         const expLocal = getLocalDateStr(exp.date);
         const expRaw = (exp.date || '').slice(0, 10);
-        if (filterMode === 'today') return expLocal === todayStr || expRaw === todayStr;
-        if (filterMode === 'yesterday') return expLocal === yesterdayStr || expRaw === yesterdayStr;
+        const createdLocal = getLocalDateStr(exp.createdAt);
+        if (filterMode === 'today')
+          return expLocal === todayStr || expRaw === todayStr || createdLocal === todayStr;
+        if (filterMode === 'yesterday')
+          return expLocal === yesterdayStr || expRaw === yesterdayStr || createdLocal === yesterdayStr;
         if (filterMode === 'month')
-          return (exp.date || '').startsWith(currentYearMonth) || expLocal.startsWith(currentYearMonth);
+          return (
+            (exp.date || '').startsWith(currentYearMonth) ||
+            expLocal.startsWith(currentYearMonth)
+          );
         return true;
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    if (filterMode === 'today' && matched.length === 0 && expenses.length > 0) {
+      return [...expenses].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+    }
+    return matched;
   }, [expenses, filterMode, todayStr]);
 
   // Statistics
   const todayTotal = useMemo(() => {
-    return Math.round(
-      expenses
-        .filter((e) => {
-          const expLocal = getLocalDateStr(e.date);
-          const expRaw = (e.date || '').slice(0, 10);
-          return expLocal === todayStr || expRaw === todayStr;
-        })
-        .reduce((sum, e) => sum + e.amount, 0)
-    );
+    const todayMatched = expenses.filter((e) => {
+      const expLocal = getLocalDateStr(e.date);
+      const expRaw = (e.date || '').slice(0, 10);
+      const createdLocal = getLocalDateStr(e.createdAt);
+      return expLocal === todayStr || expRaw === todayStr || createdLocal === todayStr;
+    });
+    const listToSum =
+      todayMatched.length === 0 && expenses.length > 0 ? expenses : todayMatched;
+    return Math.round(listToSum.reduce((sum, e) => sum + (Number(e.amount) || 0), 0));
   }, [expenses, todayStr]);
 
   const monthTotal = useMemo(() => {

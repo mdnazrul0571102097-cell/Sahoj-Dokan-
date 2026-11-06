@@ -5,6 +5,9 @@ on:
   push:
     branches: [ main, master ]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build & Sign Universal Release APK
@@ -34,7 +37,7 @@ jobs:
         run: |
           npm run build
 
-      - name: Sync Web Assets, Set App Icon & Configure Unstripped Universal APK
+      - name: Sync Web Assets, Generate Debug Keystore & Configure Universal Release APK
         run: |
           # Backup existing pre-resized mipmap icons if present in repo
           rm -rf /tmp/saved_mipmaps
@@ -56,6 +59,17 @@ jobs:
           npx cap add android
           npx cap sync android
 
+          # 1. Auto-generate default Debug Keystore inside android/app/debug-signing.keystore
+          keytool -genkeypair -v \
+            -keystore android/app/debug-signing.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
           # Remove Capacitor default blue-X vector launcher icons completely
           rm -rf android/app/src/main/res/mipmap-anydpi-v26
           rm -rf android/app/src/main/res/drawable-v24
@@ -65,7 +79,7 @@ jobs:
           cp -r /tmp/saved_mipmaps/mipmap-* android/app/src/main/res/ 2>/dev/null || true
           rm -rf android/app/src/main/res/mipmap-anydpi-v26
 
-          # Guaranteed Node.js icon copy fallback (no external tools required)
+          # Guaranteed Node.js icon copy fallback (ensures Sahoj Dokan logo appears on every phone)
           node -e '
             const fs = require("fs");
             const path = require("path");
@@ -92,7 +106,7 @@ jobs:
               fs.writeFileSync(varsPath, vars, "utf8");
             }
 
-            // Write complete unstripped Universal build.gradle (minifyEnabled false, shrinkResources false)
+            // Write complete unstripped Universal build.gradle (minifyEnabled false, shrinkResources false + signingConfig)
             const gradleContent = `apply plugin: "com.android.application"
 
           android {
@@ -103,14 +117,25 @@ jobs:
                   applicationId "com.sahojdokan.pos"
                   minSdkVersion 21
                   targetSdkVersion 33
-                  versionCode 500
-                  versionName "5.0.0"
+                  versionCode 501
+                  versionName "5.0.1"
                   testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
                   ndk {
                       abiFilters "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
                   }
                   aaptOptions {
                       ignoreAssetsPattern "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
+                  }
+              }
+
+              signingConfigs {
+                  universalDebugKey {
+                      storeFile file("debug-signing.keystore")
+                      storePassword "android"
+                      keyAlias "androiddebugkey"
+                      keyPassword "android"
+                      v1SigningEnabled true
+                      v2SigningEnabled true
                   }
               }
 
@@ -130,11 +155,13 @@ jobs:
 
               buildTypes {
                   debug {
+                      signingConfig signingConfigs.universalDebugKey
                       minifyEnabled false
                       shrinkResources false
                       debuggable true
                   }
                   release {
+                      signingConfig signingConfigs.universalDebugKey
                       minifyEnabled false
                       shrinkResources false
                       debuggable false
@@ -182,37 +209,25 @@ jobs:
             }
           '
 
-      - name: Build Unstripped Universal Release APK & Digitally Sign with apksigner
+      - name: Build Universal Release APK & Re-Sign with zipalign + apksigner
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease --stacktrace --no-daemon
 
-          # 1. Auto-generate standard Debug Keystore using JDK keytool
-          rm -f debug-signing.keystore
-          keytool -genkeypair -v \
-            -keystore debug-signing.keystore \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
-
-          # 2. Locate zipalign and apksigner from Android SDK build-tools
+          # Locate zipalign and apksigner from Android SDK build-tools
           BUILD_TOOLS_DIR=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
           ZIPALIGN="$BUILD_TOOLS_DIR/zipalign"
           APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
 
-          # 3. Find the built release APK and zipalign it
+          # Find the built release APK and zipalign it (4-byte page alignment)
           RAW_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
           "$ZIPALIGN" -p -f -v 4 "$RAW_APK" aligned-universal.apk
 
-          # 4. Digitally sign with apksigner (v1 + v2 + v3 schemes enabled) into single SahojDokan-Signed-Universal.apk
+          # Digitally sign with apksigner (v1 + v2 + v3 schemes enabled) into single SahojDokan-Signed-Universal.apk
           mkdir -p signed-output
           "$APKSIGNER" sign \
-            --ks debug-signing.keystore \
+            --ks app/debug-signing.keystore \
             --ks-key-alias androiddebugkey \
             --ks-pass pass:android \
             --key-pass pass:android \
@@ -222,11 +237,14 @@ jobs:
             --out signed-output/SahojDokan-Signed-Universal.apk \
             aligned-universal.apk
 
-          # 5. Verify signature
-          "$APKSIGNER" verify --verbose signed-output/SahojDokan-Signed-Universal.apk
+          # Verify APK signature and print certificate summary
+          "$APKSIGNER" verify --verbose --print-certs signed-output/SahojDokan-Signed-Universal.apk
+          ls -lh signed-output/SahojDokan-Signed-Universal.apk
 
-      - name: Upload Single Signed Universal APK
+      - name: Upload Single Signed Universal APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SahojDokan-Signed-Universal-APK
+          name: SahojDokan-Signed-Universal.apk
           path: android/signed-output/SahojDokan-Signed-Universal.apk
+          if-no-files-found: error
+          compression-level: 0

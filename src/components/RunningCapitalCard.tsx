@@ -1,328 +1,414 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Sale,
+  Expense,
   BulkPurchase,
   PurchaseRecord,
-  Expense,
   OwnerTransaction,
 } from '../types';
+import { DB } from '../storage/db';
 import { playSuccessChime } from '../utils/audio';
 import {
   Landmark,
   Edit3,
   Check,
   X,
-  TrendingUp,
-  PackagePlus,
-  Wallet,
-  ArrowUpRight,
 } from 'lucide-react';
-
-const SEED_BULK_IDS = new Set(['bp_1']);
-const SEED_EXPENSE_IDS = new Set(['exp_1', 'exp_2', 'exp_3']);
-
-export interface RunningCapitalBreakdown {
-  initialCapital: number;
-  totalQuickSales: number;
-  totalOwnerAdded: number;
-  totalPurchases: number;
-  totalExpenses: number;
-  totalWithdrawals: number;
-  currentRunningCapital: number;
-}
-
-export function calculateRunningCapital(params: {
-  initialStoreCapital: number;
-  sales: Sale[];
-  bulkPurchases?: BulkPurchase[];
-  purchases?: PurchaseRecord[];
-  expenses?: Expense[];
-  ownerTransactions?: OwnerTransaction[];
-}): RunningCapitalBreakdown {
-  const {
-    initialStoreCapital = 0,
-    sales = [],
-    bulkPurchases = [],
-    purchases = [],
-    expenses = [],
-    ownerTransactions = [],
-  } = params;
-
-  const initialCapital = Math.max(0, Math.round(Number(initialStoreCapital) || 0));
-
-  // (+) প্রতিটি দ্রুত বিক্রি (এবং বিক্রি/ফেরত সমন্বয়)
-  const totalQuickSales = Math.round(
-    sales.reduce((sum, s) => sum + (Number(s.grandTotal) || 0), 0)
-  );
-
-  // (+) মালিকের নতুন পুঁজি জমা বা ফেরত (যদি থাকে)
-  const totalOwnerAdded = Math.round(
-    ownerTransactions
-      .filter((tx) => tx.type === 'capital_deposit' || tx.type === 'withdrawal_return')
-      .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
-  );
-
-  // (-) নগদ ক্রয় রসিদ / পাইকারি মাল কেনা
-  const realBulkTotal = bulkPurchases
-    .filter((bp) => !SEED_BULK_IDS.has(bp.id))
-    .reduce((sum, bp) => sum + (Number(bp.totalAmount) || 0), 0);
-
-  const directPurchaseTotal = purchases.reduce(
-    (sum, p) => sum + (Number(p.totalCost) || 0),
-    0
-  );
-
-  const totalPurchases = Math.round(realBulkTotal + directPurchaseTotal);
-
-  // (-) দোকানের খরচ
-  const totalExpenses = Math.round(
-    expenses
-      .filter((e) => !SEED_EXPENSE_IDS.has(e.id))
-      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
-  );
-
-  // (-) মালিকের উত্তোলন
-  const totalWithdrawals = Math.round(
-    ownerTransactions
-      .filter((tx) => tx.type === 'withdrawal')
-      .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
-  );
-
-  const currentRunningCapital = Math.round(
-    initialCapital +
-      totalQuickSales +
-      totalOwnerAdded -
-      totalPurchases -
-      totalExpenses -
-      totalWithdrawals
-  );
-
-  return {
-    initialCapital,
-    totalQuickSales,
-    totalOwnerAdded,
-    totalPurchases,
-    totalExpenses,
-    totalWithdrawals,
-    currentRunningCapital,
-  };
-}
 
 interface Props {
   initialStoreCapital: number;
   onSaveInitialStoreCapital: (amount: number) => void;
   sales: Sale[];
-  bulkPurchases?: BulkPurchase[];
+  bulkPurchases: BulkPurchase[];
   purchases?: PurchaseRecord[];
-  expenses?: Expense[];
-  ownerTransactions?: OwnerTransaction[];
+  expenses: Expense[];
+  ownerTransactions: OwnerTransaction[];
+  compact?: boolean;
+  onOpenOwnerCapital?: () => void;
+}
+
+const getLocalDateStr = (d?: string | Date): string => {
+  if (!d) return '';
+  try {
+    if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    const dt = typeof d === 'string' ? new Date(d) : d;
+    if (isNaN(dt.getTime())) return typeof d === 'string' ? d.slice(0, 10) : '';
+    const year = dt.getFullYear();
+    const month = String(dt.getMonth() + 1).padStart(2, '0');
+    const day = String(dt.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  } catch {
+    return typeof d === 'string' ? d.slice(0, 10) : '';
+  }
+};
+
+export const formatBnNumber = (num: number): string => {
+  try {
+    return Math.round(num || 0).toLocaleString('bn-BD');
+  } catch {
+    return String(Math.round(num || 0));
+  }
+};
+
+export function calculateRunningCapital({
+  initialStoreCapital,
+  sales,
+  bulkPurchases,
+  purchases = [],
+  expenses,
+  ownerTransactions,
+}: {
+  initialStoreCapital: number;
+  sales: Sale[];
+  bulkPurchases: BulkPurchase[];
+  purchases?: PurchaseRecord[];
+  expenses: Expense[];
+  ownerTransactions: OwnerTransaction[];
+}) {
+  const defaultMargin = DB.getQuickSaleProfitMargin();
+  const todayStr = getLocalDateStr(new Date());
+  const initialCapital = Math.max(0, Math.round(Number(initialStoreCapital) || 0));
+
+  let totalSalesAll = 0;
+  let quickSalesTotal = 0;
+  let totalSalesProfit = 0;
+  let todaySalesProfit = 0;
+  let totalCostOfGoodsSold = 0;
+  let totalCashSalesCollected = 0;
+
+  for (const s of sales) {
+    const grand = Number(s.grandTotal) || 0;
+    totalSalesAll += grand;
+
+    const isQuick =
+      Boolean(
+        s.items &&
+          s.items.some(
+            (it) =>
+              it.productId === 'quick_sale_entry' ||
+              it.productId === 'product_return_entry'
+          )
+      ) ||
+      s.id.startsWith('return_') ||
+      grand < 0;
+
+    if (isQuick) {
+      quickSalesTotal += grand;
+    }
+
+    const isQuickSaleEntry = Boolean(
+      s.items && s.items.some((it) => it.productId === 'quick_sale_entry')
+    );
+
+    const sProfit =
+      isQuickSaleEntry && (s.profit === undefined || s.profit === 0) && grand > 0
+        ? Math.round(grand * (defaultMargin / 100))
+        : Math.round(Number(s.profit) || 0);
+
+    totalSalesProfit += sProfit;
+
+    const sDate = getLocalDateStr(s.date);
+    const rawDate = (s.date || '').slice(0, 10);
+    if (sDate === todayStr || rawDate === todayStr) {
+      todaySalesProfit += sProfit;
+    }
+
+    // Cost of goods sold (মালের কেনা দাম যা পুঁজি থেকে কমেছে)
+    const sCost =
+      s.id.startsWith('return_') && grand === 0 ? 0 : Math.round(grand - sProfit);
+    totalCostOfGoodsSold += sCost;
+
+    // Physical cash collected in drawer from this sale
+    const sCash =
+      s.id.startsWith('return_') || grand < 0 || (s.paidAmount || 0) < 0
+        ? Number(
+            s.paidAmount !== undefined && s.paidAmount !== 0
+              ? s.paidAmount
+              : grand !== 0
+              ? grand
+              : s.profit || 0
+          )
+        : Math.max(0, grand - (Number(s.dueAmount) || 0));
+    totalCashSalesCollected += sCash;
+  }
+
+  totalSalesAll = Math.round(totalSalesAll);
+  quickSalesTotal = Math.round(quickSalesTotal);
+  totalSalesProfit = Math.round(totalSalesProfit);
+  todaySalesProfit = Math.round(todaySalesProfit);
+  totalCostOfGoodsSold = Math.round(totalCostOfGoodsSold);
+  totalCashSalesCollected = Math.round(totalCashSalesCollected);
+
+  // ৩. মাল ক্রয় / রিস্টক (Bulk Purchases + Direct Product Restocks)
+  const bulkPurchaseCost = Math.round(
+    bulkPurchases.reduce((sum, bp) => sum + (Number(bp.totalAmount) || 0), 0)
+  );
+  const bulkCashPaid = Math.round(
+    bulkPurchases.reduce(
+      (sum, bp) =>
+        sum +
+        Math.max(
+          0,
+          bp.paidAmount !== undefined
+            ? Number(bp.paidAmount) || 0
+            : (Number(bp.totalAmount) || 0) - (Number(bp.dueAmount) || 0)
+        ),
+      0
+    )
+  );
+  const singlePurchaseCost = Math.round(
+    purchases.reduce((sum, p) => sum + (Number(p.totalCost) || 0), 0)
+  );
+  const totalPurchases = bulkPurchaseCost + singlePurchaseCost;
+  const cashPurchasesPaid = bulkCashPaid + singlePurchaseCost;
+
+  // ৪. দোকান খরচ (সকল দোকান খরচ ও আজকের খরচ)
+  const totalExpenses = Math.round(
+    expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+  );
+  const todayExpenses = Math.round(
+    expenses
+      .filter((e) => {
+        const eDate = getLocalDateStr(e.date);
+        const rawDate = (e.date || '').slice(0, 10);
+        return eDate === todayStr || rawDate === todayStr;
+      })
+      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+  );
+
+  // ৫. মালিকের উত্তোলন ও অতিরিক্ত পুঁজি জমা
+  const totalWithdrawals = Math.round(
+    ownerTransactions
+      .filter((tx) => tx.type === 'withdrawal')
+      .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
+  );
+  const totalOwnerAdded = Math.round(
+    ownerTransactions
+      .filter((tx) => tx.type === 'withdrawal_return' || tx.type === 'capital_deposit')
+      .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
+  );
+  const netOwnerWithdrawal = Math.max(0, totalWithdrawals - totalOwnerAdded);
+
+  // ৬. ভার্চুয়াল পুঁজি ট্র্যাকার (Quick Sales & Virtual Capital Breakdown):
+  // - অবশিষ্ট/মূল মালের পুঁজি (Remaining Goods Capital) = শুরুর মালের পুঁজি - বিক্রিত মালের কেনা দাম + নতুন মাল ক্রয়
+  const remainingGoodsCapital = Math.max(
+    0,
+    Math.round(initialCapital - totalCostOfGoodsSold + totalPurchases)
+  );
+
+  // - ক্যাশ বাক্সে নগদ (Cash in Drawer) = নগদ বিক্রি আদায় + মালিকের জমা - দোকান খরচ - নগদ মাল কেনা - মালিকের উত্তোলন (শুরুর ড্রয়ার ক্যাশ ৳০)
+  const drawerCash = Math.max(
+    0,
+    Math.round(
+      totalCashSalesCollected +
+        totalOwnerAdded -
+        totalExpenses -
+        cashPurchasesPaid -
+        totalWithdrawals
+    )
+  );
+
+  // - আজকের লাভ / নিট লাভ (Today's Profit)
+  const todayNetProfit = Math.round(todaySalesProfit - todayExpenses);
+  const totalNetProfit = Math.round(totalSalesProfit - totalExpenses);
+  const displayProfit =
+    todaySalesProfit !== 0 || todayExpenses !== 0 ? todayNetProfit : totalNetProfit;
+
+  // - মোট চলমান পুঁজি (Total Capital) = অবশিষ্ট মালের পুঁজি + ক্যাশ বাক্সে নগদ
+  const currentRunningCapital = remainingGoodsCapital + drawerCash;
+
+  return {
+    initialCapital,
+    remainingGoodsCapital,
+    drawerCash,
+    todaySalesProfit,
+    todayNetProfit,
+    totalSalesProfit,
+    totalNetProfit,
+    displayProfit,
+    totalCostOfGoodsSold,
+    totalSalesAll,
+    quickSalesTotal,
+    totalPurchases,
+    totalExpenses,
+    totalWithdrawals,
+    totalOwnerAdded,
+    netOwnerWithdrawal,
+    currentRunningCapital,
+  };
 }
 
 export const RunningCapitalCard: React.FC<Props> = ({
   initialStoreCapital,
   onSaveInitialStoreCapital,
   sales,
-  bulkPurchases = [],
+  bulkPurchases,
   purchases = [],
-  expenses = [],
-  ownerTransactions = [],
+  expenses,
+  ownerTransactions,
 }) => {
-  const [isEditing, setIsEditing] = useState<boolean>(initialStoreCapital <= 0);
-  const [inputVal, setInputVal] = useState<string>(
+  const [isEditingCapital, setIsEditingCapital] = useState(false);
+  const [capitalInput, setCapitalInput] = useState<string>(
     initialStoreCapital > 0 ? String(initialStoreCapital) : ''
   );
+  const [savedToast, setSavedToast] = useState(false);
 
-  useEffect(() => {
-    if (initialStoreCapital > 0) {
-      setInputVal(String(initialStoreCapital));
-      setIsEditing(false);
-    }
-  }, [initialStoreCapital]);
+  const stats = useMemo(
+    () =>
+      calculateRunningCapital({
+        initialStoreCapital,
+        sales,
+        bulkPurchases,
+        purchases,
+        expenses,
+        ownerTransactions,
+      }),
+    [initialStoreCapital, sales, bulkPurchases, purchases, expenses, ownerTransactions]
+  );
 
-  const breakdown = calculateRunningCapital({
-    initialStoreCapital,
-    sales,
-    bulkPurchases,
-    purchases,
-    expenses,
-    ownerTransactions,
-  });
-
-  const handleSave = (e: React.FormEvent) => {
+  const handleSaveCapital = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanAmount = Math.max(0, Math.round(Number(inputVal) || 0));
-    onSaveInitialStoreCapital(cleanAmount);
+    const val = Math.max(0, Math.round(Number(capitalInput) || 0));
+    onSaveInitialStoreCapital(val);
     playSuccessChime();
-    setIsEditing(false);
+    setIsEditingCapital(false);
+    setSavedToast(true);
+    setTimeout(() => setSavedToast(false), 2500);
   };
 
   return (
-    <div className="bg-white rounded-2xl p-2.5 sm:p-3 shadow-2xs border border-[#80CBC4] mb-2 shrink-0">
-      {/* Top Row: Running Capital Title, Live Balance & Set/Edit Initial Capital */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#E2E8F0]">
-        <div className="flex items-center justify-between sm:justify-start gap-2.5">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-[#0E6B6B] text-white flex items-center justify-center shrink-0 shadow-2xs">
-              <Landmark className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <h4 className="font-extrabold text-xs sm:text-sm text-[#102A43] truncate">
-                  চলমান মোট পুঁজি / মূলধন ট্র্যাকার
-                </h4>
-              </div>
-              <p className="text-[10.5px] text-[#64748B] truncate">
-                শুরুর পুঁজি + দ্রুত বিক্রি − মাল কেনা − খরচ ও উত্তোলন
-              </p>
-            </div>
+    <div className="bg-gradient-to-br from-[#0F2942] via-[#0E4D58] to-[#0E6B6B] text-white rounded-2xl p-2.5 sm:p-3 mb-2 shadow-sm border border-[#0E6B6B]/40">
+      {/* Top Row: Title + Total Running Capital + Edit Initial Goods Capital Button */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shadow-2xs shrink-0">
+            <Landmark className="w-4 h-4 stroke-[2.5]" />
           </div>
-
-          {/* Mobile Current Capital Readout */}
-          <div className="text-right sm:hidden shrink-0">
-            <span className="text-[10px] font-bold text-[#64748B] block leading-none">
-              বর্তমান মোট পুঁজি
-            </span>
-            <span
-              className={`text-base font-black tabular-nums tracking-tight ${
-                breakdown.currentRunningCapital >= 0 ? 'text-[#0E6B6B]' : 'text-[#D32F2F]'
-              }`}
-            >
-              {breakdown.currentRunningCapital < 0
-                ? `-৳${Math.abs(breakdown.currentRunningCapital).toLocaleString()}`
-                : `৳${breakdown.currentRunningCapital.toLocaleString()}`}
-            </span>
-          </div>
-        </div>
-
-        {/* Right Side: Initial Capital Set/Edit or Desktop Current Capital */}
-        <div className="flex items-center justify-between sm:justify-end gap-2.5">
-          {isEditing ? (
-            <form onSubmit={handleSave} className="flex items-center gap-1.5 w-full sm:w-auto">
-              <div className="relative flex-1 sm:w-40">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-[#0E6B6B]">
-                  ৳
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-200 leading-none">
+                ভার্চুয়াল পুঁজি ও নগদ ক্যাশ ট্র্যাকার (শুরুর পুঁজি: ৳{formatBnNumber(stats.initialCapital)})
+              </span>
+              {savedToast && (
+                <span className="px-1.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 text-[9px] font-black leading-none">
+                  ✓ আপডেট হয়েছে
                 </span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  step="any"
-                  value={inputVal}
-                  onChange={(e) => setInputVal(e.target.value)}
-                  placeholder="শুরুর পুঁজি (যেমন: 50000)"
-                  className="w-full pl-6 pr-2 py-1 rounded-xl bg-[#F8FAFC] border-2 border-[#0E6B6B] text-xs font-black text-[#102A43] focus:outline-none"
-                />
-              </div>
-              <button
-                type="submit"
-                className="px-2.5 py-1 rounded-xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-extrabold text-xs flex items-center gap-1 shadow-2xs cursor-pointer shrink-0"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>সেভ</span>
-              </button>
-              {initialStoreCapital > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputVal(String(initialStoreCapital));
-                    setIsEditing(false);
-                  }}
-                  className="p-1 rounded-xl bg-[#EDF2F7] text-[#64748B] hover:text-[#102A43] cursor-pointer shrink-0"
-                  title="বাতিল"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
               )}
-            </form>
-          ) : (
-            <div className="flex items-center justify-between w-full sm:w-auto gap-2">
-              <div className="flex items-center gap-1.5 bg-[#F8FAFC] px-2.5 py-1 rounded-xl border border-[#E2E8F0]">
-                <span className="text-[11px] font-bold text-[#64748B]">শুরুর মূলধন:</span>
-                <span className="text-xs font-black text-[#102A43] tabular-nums">
-                  ৳{breakdown.initialCapital.toLocaleString()}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputVal(
-                      breakdown.initialCapital > 0 ? String(breakdown.initialCapital) : ''
-                    );
-                    setIsEditing(true);
-                  }}
-                  className="ml-1 px-1.5 py-0.5 rounded-md bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#0E6B6B] hover:text-white text-[10px] font-extrabold flex items-center gap-0.5 transition cursor-pointer"
-                  title="শুরুর মূলধন পরিবর্তন করুন"
-                >
-                  <Edit3 className="w-2.5 h-2.5" />
-                  <span>এডিট</span>
-                </button>
-              </div>
-
-              {/* Desktop Current Capital Readout */}
-              <div className="hidden sm:block text-right pl-2 border-l border-[#E2E8F0]">
-                <span className="text-[10px] font-bold text-[#64748B] block leading-none">
-                  বর্তমান মোট পুঁজি
-                </span>
-                <span
-                  className={`text-lg font-black tabular-nums tracking-tight ${
-                    breakdown.currentRunningCapital >= 0 ? 'text-[#0E6B6B]' : 'text-[#D32F2F]'
-                  }`}
-                >
-                  {breakdown.currentRunningCapital < 0
-                    ? `-৳${Math.abs(breakdown.currentRunningCapital).toLocaleString()}`
-                    : `৳${breakdown.currentRunningCapital.toLocaleString()}`}
-                </span>
-              </div>
             </div>
-          )}
+            <p className="text-[11px] sm:text-xs font-extrabold text-amber-200 leading-snug mt-0.5">
+              মূল মালের পুঁজি: ৳{formatBnNumber(stats.remainingGoodsCapital)} | ক্যাশ বাক্সে নগদ: ৳{formatBnNumber(stats.drawerCash)} | লাভ: ৳{formatBnNumber(stats.displayProfit)} | মোট পুঁজি: ৳{formatBnNumber(stats.currentRunningCapital)}
+            </p>
+          </div>
+        </div>
+
+        {/* Action Button to Set / Edit Initial Store Capital */}
+        <button
+          type="button"
+          onClick={() => {
+            setCapitalInput(
+              stats.initialCapital > 0 ? String(stats.initialCapital) : ''
+            );
+            setIsEditingCapital(!isEditingCapital);
+          }}
+          className="px-2.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 border border-white/25 text-[11px] font-extrabold text-white flex items-center gap-1 transition cursor-pointer shrink-0 active:scale-95"
+        >
+          <Edit3 className="w-3 h-3 text-amber-300" />
+          <span>
+            {stats.initialCapital > 0 ? 'শুরুর পুঁজি এডিট' : '+ শুরুর পুঁজি দিন'}
+          </span>
+        </button>
+      </div>
+
+      {/* 4-Column Clear Virtual Capital Breakdown Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mt-2">
+        <div className="rounded-xl bg-white/10 border border-white/15 px-2.5 py-1.5">
+          <span className="block text-[10px] font-bold text-emerald-100/90 leading-tight">
+            মূল মালের পুঁজি
+          </span>
+          <span className="text-sm sm:text-base font-black text-white tabular-nums">
+            ৳{formatBnNumber(stats.remainingGoodsCapital)}
+          </span>
+        </div>
+
+        <div className="rounded-xl bg-white/10 border border-white/15 px-2.5 py-1.5">
+          <span className="block text-[10px] font-bold text-emerald-100/90 leading-tight">
+            ক্যাশ বাক্সে নগদ
+          </span>
+          <span className="text-sm sm:text-base font-black text-amber-300 tabular-nums">
+            ৳{formatBnNumber(stats.drawerCash)}
+          </span>
+        </div>
+
+        <div className="rounded-xl bg-white/10 border border-white/15 px-2.5 py-1.5">
+          <span className="block text-[10px] font-bold text-emerald-100/90 leading-tight">
+            লাভ (আজকের লাভ)
+          </span>
+          <span
+            className={`text-sm sm:text-base font-black tabular-nums ${
+              stats.displayProfit >= 0 ? 'text-emerald-300' : 'text-rose-300'
+            }`}
+          >
+            ৳{formatBnNumber(stats.displayProfit)}
+          </span>
+        </div>
+
+        <div className="rounded-xl bg-amber-400/20 border border-amber-300/40 px-2.5 py-1.5">
+          <span className="block text-[10px] font-extrabold text-amber-200 leading-tight">
+            মোট পুঁজি (মাল + নগদ)
+          </span>
+          <span className="text-sm sm:text-base font-black text-white tabular-nums">
+            ৳{formatBnNumber(stats.currentRunningCapital)}
+          </span>
         </div>
       </div>
 
-      {/* Bottom Row: 4 Compact Auto Plus/Minus Pillars */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-2">
-        {/* 1. + দ্রুত বিক্রি */}
-        <div className="px-2 py-1.5 rounded-xl bg-[#E8F5E9]/70 border border-emerald-200/80 flex items-center justify-between gap-1">
-          <span className="text-[10.5px] font-bold text-[#102A43] flex items-center gap-1 truncate">
-            <TrendingUp className="w-3 h-3 text-[#2E7D32] shrink-0" />
-            <span className="truncate">+ দ্রুত বিক্রি</span>
-          </span>
-          <span className="text-xs font-black text-[#2E7D32] tabular-nums shrink-0">
-            +৳{(breakdown.totalQuickSales + breakdown.totalOwnerAdded).toLocaleString()}
-          </span>
-        </div>
-
-        {/* 2. - মাল কেনা / ক্রয় রসিদ */}
-        <div className="px-2 py-1.5 rounded-xl bg-amber-50/80 border border-amber-200/80 flex items-center justify-between gap-1">
-          <span className="text-[10.5px] font-bold text-[#102A43] flex items-center gap-1 truncate">
-            <PackagePlus className="w-3 h-3 text-amber-700 shrink-0" />
-            <span className="truncate">− মাল ক্রয়</span>
-          </span>
-          <span className="text-xs font-black text-amber-800 tabular-nums shrink-0">
-            −৳{breakdown.totalPurchases.toLocaleString()}
-          </span>
-        </div>
-
-        {/* 3. - দোকানের খরচ */}
-        <div className="px-2 py-1.5 rounded-xl bg-[#FFEBEE]/60 border border-rose-200/80 flex items-center justify-between gap-1">
-          <span className="text-[10.5px] font-bold text-[#102A43] flex items-center gap-1 truncate">
-            <Wallet className="w-3 h-3 text-[#D32F2F] shrink-0" />
-            <span className="truncate">− দোকান খরচ</span>
-          </span>
-          <span className="text-xs font-black text-[#D32F2F] tabular-nums shrink-0">
-            −৳{breakdown.totalExpenses.toLocaleString()}
-          </span>
-        </div>
-
-        {/* 4. - মালিকের উত্তোলন */}
-        <div className="px-2 py-1.5 rounded-xl bg-[#FFEBEE]/60 border border-rose-200/80 flex items-center justify-between gap-1">
-          <span className="text-[10.5px] font-bold text-[#102A43] flex items-center gap-1 truncate">
-            <ArrowUpRight className="w-3 h-3 text-[#D32F2F] shrink-0" />
-            <span className="truncate">− মালিকের উত্তোলন</span>
-          </span>
-          <span className="text-xs font-black text-[#D32F2F] tabular-nums shrink-0">
-            −৳{breakdown.totalWithdrawals.toLocaleString()}
-          </span>
-        </div>
-      </div>
+      {/* Inline Initial Capital Editor */}
+      {isEditingCapital && (
+        <form
+          onSubmit={handleSaveCapital}
+          className="mt-2 p-2 rounded-xl bg-slate-950/50 border border-white/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2 animate-in fade-in duration-150"
+        >
+          <div className="min-w-0">
+            <label className="block text-[11px] font-extrabold text-amber-300 leading-tight">
+              দোকানের শুরুর মালের পুঁজি লিখুন (৳)
+            </label>
+            <p className="text-[10px] text-emerald-100/80 leading-tight mt-0.5">
+              বিক্রি হলে কেনা দাম মালের পুঁজি থেকে কমবে এবং নগদ টাকা ক্যাশ বাক্সে জমা হবে (শুরুর ক্যাশ বাক্স ৳০)।
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <div className="relative">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-amber-300">
+                ৳
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="0"
+                autoFocus
+                value={capitalInput}
+                onChange={(e) => setCapitalInput(e.target.value)}
+                placeholder="যেমন: 10000"
+                className="w-32 sm:w-36 pl-6 pr-2 py-1 rounded-lg bg-white text-[#102A43] font-black text-xs focus:outline-none"
+              />
+            </div>
+            <button
+              type="submit"
+              className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-1 cursor-pointer transition"
+            >
+              <Check className="w-3.5 h-3.5 stroke-[3]" />
+              <span>সেভ</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsEditingCapital(false)}
+              className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 };

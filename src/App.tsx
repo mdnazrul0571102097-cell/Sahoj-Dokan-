@@ -222,6 +222,89 @@ export default function App() {
     }
   };
 
+  // Handle Update / Edit Sale Invoice (Adjusts product stock and customer due)
+  const handleUpdateSale = (updatedSale: Sale) => {
+    const oldSale = sales.find((s) => s.id === updatedSale.id);
+    if (!oldSale) return;
+
+    // 1. Update sales list
+    setSales((prevSales) => {
+      const nextSales = prevSales.map((s) => (s.id === updatedSale.id ? updatedSale : s));
+      DB.saveSales(nextSales);
+      return nextSales;
+    });
+
+    // 2. Adjust product stock based on difference between oldSale.items and updatedSale.items
+    const isReturnRecord = updatedSale.id.startsWith('return_') || updatedSale.grandTotal < 0;
+    if (!isReturnRecord) {
+      setProducts((prevProducts) => {
+        let changed = false;
+        const nextProducts = prevProducts.map((p) => {
+          const oldQty = (oldSale.items || [])
+            .filter((it) => it.productId === p.id)
+            .reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
+          const newQty = (updatedSale.items || [])
+            .filter((it) => it.productId === p.id)
+            .reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
+          const diff = oldQty - newQty; // positive if quantity decreased (restore stock), negative if increased (deduct stock)
+          if (diff !== 0) {
+            changed = true;
+            return {
+              ...p,
+              stock: Math.max(0, Math.round(((p.stock || 0) + diff) * 1000) / 1000),
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return p;
+        });
+        if (changed) {
+          DB.saveProducts(nextProducts);
+          return nextProducts;
+        }
+        return prevProducts;
+      });
+    }
+
+    // 3. Adjust customer due if dueAmount changed
+    const oldDue = Number(oldSale.dueAmount) || 0;
+    const newDue = Number(updatedSale.dueAmount) || 0;
+    const dueDelta = newDue - oldDue;
+    if (dueDelta !== 0 && updatedSale.customerId) {
+      setCustomers((prevCusts) => {
+        const nextCustomers = prevCusts.map((c) => {
+          if (c.id === updatedSale.customerId) {
+            const nextTotalDue = Math.max(
+              0,
+              Math.round(((c.totalDue || 0) + dueDelta) * 100) / 100
+            );
+            return {
+              ...c,
+              totalDue: nextTotalDue,
+            };
+          }
+          return c;
+        });
+        DB.saveCustomers(nextCustomers);
+        return nextCustomers;
+      });
+
+      setBakiTransactions((prevTxs) => {
+        const nextTxs = prevTxs.map((tx) => {
+          if (tx.saleId === updatedSale.id || (tx.customerId === updatedSale.customerId && tx.type === 'sale_due' && tx.note?.includes(updatedSale.invoiceNo))) {
+            return {
+              ...tx,
+              amount: newDue,
+              balanceAfter: Math.max(0, (tx.balanceAfter || 0) + dueDelta),
+            };
+          }
+          return tx;
+        });
+        DB.saveBakiTransactions(nextTxs);
+        return nextTxs;
+      });
+    }
+  };
+
   // Handle Delete Sale / Cash Memo (Restores product stock and reverses customer due if any)
   const handleDeleteSale = (saleId: string) => {
     const targetSale = sales.find((s) => s.id === saleId);
@@ -953,6 +1036,7 @@ export default function App() {
             onOpenSupplierKhata={() => setActiveTab('baki')}
             customers={customers}
             onAddQuickSale={(sale, updatedProds) => handleCompleteSale(sale, updatedProds || products)}
+            onUpdateSale={handleUpdateSale}
             onDeleteSale={handleDeleteSale}
             onAddNewCustomer={handleAddNewCustomer}
             bakiTransactions={bakiTransactions}
