@@ -20,7 +20,6 @@ jobs:
 
       - name: Build Universal Debug APK
         run: |
-          rm -rf public/assets/aistudio android/app/src/main/assets/public/assets/aistudio
           if [ -f "./gradlew" ]; then
             chmod +x gradlew
             ./gradlew clean assembleDebug --stacktrace
@@ -37,3 +36,4 @@ jobs:
         with:
           name: SahojDokan.apk
           path: SahojDokan.apk
+          compression-level: 0

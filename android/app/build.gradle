@@ -6,18 +6,18 @@ if (!permanentKsFile.exists() || permanentKsFile.length() == 0) {
     permanentKsFile.bytes = permanentKeystoreBase64.decodeBase64()
 }
 
-def autoRunNum = System.getenv("GITHUB_RUN_NUMBER") ? System.getenv("GITHUB_RUN_NUMBER").toInteger() : 100
+def autoRunNum = System.getenv("GITHUB_RUN_NUMBER") ? System.getenv("GITHUB_RUN_NUMBER").toInteger() : 26
 
 android {
     namespace "com.sahojdokan.pos"
     compileSdkVersion 34
 
     defaultConfig {
-        applicationId "com.sahojdokan.universal"
+        applicationId "com.sahojdokan.pos"
         minSdkVersion 21
         targetSdkVersion 34
-        versionCode 2000 + autoRunNum
-        versionName "2.0.${autoRunNum}"
+        versionCode 1000 + autoRunNum
+        versionName "5.1.${autoRunNum}"
         multiDexEnabled true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
@@ -31,6 +31,14 @@ android {
     splits {
         abi {
             enable false
+            universalApk true
+        }
+    }
+
+    packagingOptions {
+        doNotStrip "**/*.so"
+        jniLibs {
+            useLegacyPackaging true
         }
     }
 
@@ -65,7 +73,6 @@ android {
             minifyEnabled false
             shrinkResources false
             debuggable false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
 }
