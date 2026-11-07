@@ -613,26 +613,6 @@ export const DB = {
           }
           return updated;
         });
-        const hasParachute200 = cleaned.some(
-          (p: Product) => p.id === 'prod_14' || p.name.includes('প্যারাসুট ২০০') || p.name.includes('প্যারাসুট 200')
-        );
-        const hasParachute250 = cleaned.some(
-          (p: Product) => p.id === 'prod_15' || p.name.includes('প্যারাসুট ২৫০') || p.name.includes('প্যারাসুট 250')
-        );
-        if (!hasParachute200) {
-          const p14 = INITIAL_PRODUCTS.find((p) => p.id === 'prod_14');
-          if (p14) {
-            cleaned.push(p14);
-            needsCleanup = true;
-          }
-        }
-        if (!hasParachute250) {
-          const p15 = INITIAL_PRODUCTS.find((p) => p.id === 'prod_15');
-          if (p15) {
-            cleaned.push(p15);
-            needsCleanup = true;
-          }
-        }
         if (needsCleanup) {
           try {
             localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(cleaned));
@@ -644,6 +624,11 @@ export const DB = {
       }
     } catch (e) {
       console.error(e);
+    }
+
+    // If user previously wiped demo data or reset, do NOT reseed INITIAL_PRODUCTS
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEYS.DEMO_WIPED) === 'true') {
+      return [];
     }
 
     // Check if persistent backup exists on Android external storage before setting defaults

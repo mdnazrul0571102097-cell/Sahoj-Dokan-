@@ -22,13 +22,13 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew clean assembleDebug --stacktrace --no-daemon
+          ./gradlew clean assembleRelease --stacktrace --no-daemon
 
           BUILD_TOOLS_DIR=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
           ZIPALIGN="$BUILD_TOOLS_DIR/zipalign"
           APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
 
-          RAW_APK="app/build/outputs/apk/debug/app-debug.apk"
+          RAW_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
           "$ZIPALIGN" -p -f -v 4 "$RAW_APK" aligned.apk
 
           "$APKSIGNER" sign \
@@ -44,9 +44,9 @@ jobs:
 
           "$APKSIGNER" verify --verbose --print-certs ../SahojDokan.apk
 
-      - name: Upload APK
+      - name: Upload Single SahojDokan.apk Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SahojDokan-Universal-APK
+          name: SahojDokan.apk
           path: SahojDokan.apk
           compression-level: 0

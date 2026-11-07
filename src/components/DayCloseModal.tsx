@@ -51,6 +51,9 @@ interface Props {
   profile: ShopProfile;
   dayData: DayCloseData;
   onSaveDailyReconciliation?: (recon: DailyCashReconciliation) => void;
+  onAddOwnerTransaction?: (tx: any) => void;
+  appMode?: string;
+  onOpenSubscriptionModal?: () => void;
 }
 
 export const DayCloseModal: React.FC<Props> = ({
@@ -59,6 +62,9 @@ export const DayCloseModal: React.FC<Props> = ({
   profile,
   dayData,
   onSaveDailyReconciliation,
+  onAddOwnerTransaction,
+  appMode = 'trial',
+  onOpenSubscriptionModal,
 }) => {
   if (!isOpen) return null;
 
@@ -89,6 +95,10 @@ export const DayCloseModal: React.FC<Props> = ({
 
   // 1. Direct Thermal Bluetooth Print
   const handleThermalBluetoothPrint = async () => {
+    if (appMode === 'normal') {
+      onOpenSubscriptionModal?.();
+      return;
+    }
     setIsEscPosPrinting(true);
     setToastMessage(null);
 
@@ -158,6 +168,10 @@ export const DayCloseModal: React.FC<Props> = ({
 
   // 2. Download Clean PDF
   const handleDownloadPdf = async () => {
+    if (appMode === 'normal') {
+      onOpenSubscriptionModal?.();
+      return;
+    }
     if (!printableSlipRef.current) return;
     setIsGeneratingPdf(true);
     setToastMessage(null);
@@ -187,8 +201,24 @@ export const DayCloseModal: React.FC<Props> = ({
     }
   };
 
-  // 3. Save Day Close Reconciliation
+  // 3. Save Day Close Reconciliation & Automatically Log Cash Home Takeout
   const handleSaveAndConfirm = () => {
+    const takeHomeAmount = hasDrawerCount && drawerCash !== null && drawerCash > 0
+      ? drawerCash
+      : dayData.displayClosingCash;
+
+    if (takeHomeAmount > 0 && onAddOwnerTransaction) {
+      const withdrawalTx = {
+        id: `tx_close_${dayData.dateStr}_${Date.now()}`,
+        type: 'withdrawal' as const,
+        amount: takeHomeAmount,
+        note: 'দোকান ক্লোজ: রাতের ক্যাশ টাকা বাসায় নেওয়া',
+        date: dayData.dateStr,
+        createdAt: new Date().toISOString(),
+      };
+      onAddOwnerTransaction(withdrawalTx);
+    }
+
     if (onSaveDailyReconciliation) {
       const recon: DailyCashReconciliation = {
         id: `recon_${dayData.dateStr}`,
@@ -201,12 +231,12 @@ export const DayCloseModal: React.FC<Props> = ({
         cashPurchases: dayData.cashPurchases,
         supplierDuePaid: dayData.supplierDuePaid,
         shopExpenses: dayData.shopExpenses,
-        ownerWithdrawal: dayData.ownerWithdrawal,
+        ownerWithdrawal: dayData.ownerWithdrawal + (takeHomeAmount > 0 ? takeHomeAmount : 0),
         otherCashOut: dayData.otherCashOut,
         expectedClosingCash: dayData.displayClosingCash,
         actualClosingCash: hasDrawerCount ? drawerCash : dayData.displayClosingCash,
         difference: hasDrawerCount ? difference : 0,
-        note: closingNote.trim() || undefined,
+        note: closingNote.trim() || 'দোকান ক্লোজ: রাতের টাকা বাসায় নেওয়া (ক্যাশ শূন্য)',
         isClosed: true,
         closedAt: new Date().toISOString(),
       };
@@ -494,6 +524,17 @@ export const DayCloseModal: React.FC<Props> = ({
             </div>
           </div>
 
+          {/* Auto Reset Notice */}
+          <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-[#0E6B6B] space-y-1">
+            <span className="font-black flex items-center gap-1.5 text-sm text-[#102A43]">
+              <CheckCircle2 className="w-4 h-4 text-[#2E7D32]" />
+              দোকান ক্লোজ ও রাতের ক্যাশ নিয়ম:
+            </span>
+            <p className="text-[#486581] font-medium leading-relaxed">
+              ক্লোজিং সম্পন্ন করলে ক্যাশ বাক্সে থাকা অবশিষ্ট সমস্ত টাকা (<strong>৳ {dayData.displayClosingCash.toLocaleString()}</strong>) স্বয়ংক্রিয়ভাবে &quot;মালিকের টাকা বাসায় নেওয়া&quot; হিসেবে হিসাবভুক্ত হয়ে ক্যাশ ড্রয়ার <strong>৳০</strong> হয়ে যাবে। পরের দিন সকালে ক্যাশ ড্রয়ার একদম ফ্রেশ (৳০) থেকে শুরু হবে।
+            </p>
+          </div>
+
           {/* Two Specific Required Buttons: Thermal Bluetooth Print & PDF Download */}
           <div className="space-y-2 pt-1">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -506,7 +547,12 @@ export const DayCloseModal: React.FC<Props> = ({
               >
                 <Bluetooth className="w-4 h-4 text-emerald-300" />
                 <Printer className="w-4 h-4" />
-                <span>দৈনিক ক্লোজিং স্লিপ প্রিন্ট (Thermal Bluetooth)</span>
+                <span>দৈনিক ক্লোজিং স্লিপ প্রিন্ট</span>
+                {appMode === 'normal' && (
+                  <span className="text-[10px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-md font-black">
+                    🔒 Pro
+                  </span>
+                )}
               </button>
 
               {/* Button 2: PDF Download */}
@@ -519,6 +565,11 @@ export const DayCloseModal: React.FC<Props> = ({
                 <Download className="w-4 h-4 text-amber-300" />
                 <FileSpreadsheet className="w-4 h-4" />
                 <span>{isGeneratingPdf ? 'PDF তৈরি হচ্ছে...' : 'PDF ডাউনলোড'}</span>
+                {appMode === 'normal' && (
+                  <span className="text-[10px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-md font-black">
+                    🔒 Pro
+                  </span>
+                )}
               </button>
             </div>
 
@@ -526,9 +577,10 @@ export const DayCloseModal: React.FC<Props> = ({
             <button
               type="button"
               onClick={handleSaveAndConfirm}
-              className="w-full py-3 rounded-2xl bg-[#EDF2F7] hover:bg-[#E2E8F0] text-[#102A43] font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 transition cursor-pointer"
+              className="w-full py-3.5 rounded-2xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition active:scale-95 cursor-pointer"
             >
-              <span>দোকান ক্লোজিং সম্পন্ন করুন</span>
+              <CheckCircle2 className="w-5 h-5 text-emerald-300" />
+              <span>টাকা বাসায় নিয়ে দোকান ক্লোজিং সম্পন্ন করুন (৳০ রিসেট)</span>
             </button>
           </div>
         </div>

@@ -587,10 +587,10 @@ export const SettingsView: React.FC<Props> = ({
           <button
             type="button"
             onClick={onOpenAdminPanel}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#0E6B6B] hover:text-white text-[11px] font-bold transition cursor-pointer border border-[#B2DFDB]"
+            aria-label="এডমিন প্যানেল"
+            className="w-8 h-8 rounded-xl bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#0E6B6B] hover:text-white flex items-center justify-center transition cursor-pointer border border-[#B2DFDB] shadow-2xs active:scale-95"
           >
-            <Lock className="w-3 h-3" />
-            <span>এডমিন প্যানেল</span>
+            <Lock className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
@@ -750,28 +750,28 @@ export const SettingsView: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* ৪. দ্রুত বিক্রির ডিফল্ট লাভের হার (%) (স্বতন্ত্র কার্ড) */}
-        <div className="bg-white rounded-2xl px-3.5 py-2.5 border border-emerald-200/90 shadow-2xs flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-[#2E7D32] flex items-center justify-center shrink-0 border border-emerald-200">
-              <TrendingUp className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <span className="font-extrabold text-xs sm:text-sm text-[#102A43] block leading-tight">
+        {/* ৪. দ্রুত বিক্রির ডিফল্ট লাভের হার (%) (স্বতন্ত্র কমপ্যাক্ট কার্ড) */}
+        <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-emerald-200/90 shadow-2xs space-y-2">
+          {/* Top Row: বাংলা লেখা এক লাইনে উপরে */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-7 h-7 rounded-xl bg-emerald-50 text-[#2E7D32] flex items-center justify-center shrink-0 border border-emerald-200">
+                <TrendingUp className="w-3.5 h-3.5" />
+              </div>
+              <span className="font-extrabold text-xs sm:text-sm text-[#102A43] truncate">
                 {language === 'bn'
                   ? 'দ্রুত বিক্রির ডিফল্ট লাভের হার (%)'
                   : 'Quick Sale Default Profit Margin (%)'}
               </span>
-              <span className="text-[10.5px] text-[#64748B] block truncate">
-                {language === 'bn'
-                  ? `দ্রুত বিক্রিতে স্বয়ংক্রিয়ভাবে ${quickSaleMargin}% লাভ যোগ হবে`
-                  : `Auto-calculates ${quickSaleMargin}% profit on Quick Sales`}
-              </span>
             </div>
+            <span className="text-[11px] font-black text-[#2E7D32] bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 shrink-0">
+              {quickSaleMargin}% সেট করা
+            </span>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
-            {[10, 15, 20].map((pct) => (
+          {/* Bottom Row: নিচে বাটন ও কাস্টম ইনপুট */}
+          <div className="flex items-center gap-1.5 pt-0.5">
+            {[0, 10, 15, 20].map((pct) => (
               <button
                 key={pct}
                 type="button"
@@ -781,16 +781,16 @@ export const SettingsView: React.FC<Props> = ({
                   onDataRestored();
                   showToast(`দ্রুত বিক্রির ডিফল্ট লাভ ${pct}% সেট করা হয়েছে`, 'success');
                 }}
-                className={`px-2 py-1 rounded-lg text-[11px] font-extrabold border transition cursor-pointer ${
+                className={`flex-1 py-1.5 rounded-xl text-xs font-black border transition cursor-pointer text-center active:scale-95 ${
                   quickSaleMargin === pct
-                    ? 'bg-[#2E7D32] text-white border-[#2E7D32]'
+                    ? 'bg-[#2E7D32] text-white border-[#2E7D32] shadow-2xs'
                     : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:bg-emerald-50'
                 }`}
               >
                 {pct}%
               </button>
             ))}
-            <div className="relative w-13">
+            <div className="relative w-16 shrink-0">
               <input
                 type="number"
                 min="0"
@@ -802,9 +802,9 @@ export const SettingsView: React.FC<Props> = ({
                   DB.saveQuickSaleProfitMargin(val);
                   onDataRestored();
                 }}
-                className="w-full pl-1.5 pr-4 py-1 rounded-lg border border-[#CBD5E1] text-[11px] font-black text-[#102A43] text-center focus:outline-none focus:border-[#0E6B6B]"
+                className="w-full pl-2 pr-5 py-1.5 rounded-xl border border-[#CBD5E1] text-xs font-black text-[#102A43] text-center focus:outline-none focus:border-[#0E6B6B]"
               />
-              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-[#64748B]">
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-[#64748B]">
                 %
               </span>
             </div>

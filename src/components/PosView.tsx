@@ -817,6 +817,8 @@ export const PosView: React.FC<Props> = ({
           profile={profile}
           language={language}
           onClose={() => setCompletedSale(null)}
+          appMode={appMode}
+          onOpenSubscriptionModal={onOpenSubscriptionModal}
         />
       )}
 

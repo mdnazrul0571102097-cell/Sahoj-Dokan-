@@ -198,18 +198,14 @@ export const ReportsView: React.FC<Props> = ({
     return selectedDate;
   }, [dateFilterMode, selectedDate]);
 
-  // Filter sales based on chosen date (with fallback for current today entries)
+  // Filter sales based on chosen date strictly
   const filteredSales = useMemo(() => {
     if (dateFilterMode === 'all') return sales;
-    const matched = sales.filter((s) => {
+    return sales.filter((s) => {
       const localD = getLocalDateStr(s.date);
       const rawD = (s.date || '').slice(0, 10);
       return localD === effectiveFilterDate || rawD === effectiveFilterDate;
     });
-    if (dateFilterMode === 'today' && matched.length === 0 && sales.length > 0) {
-      return sales;
-    }
-    return matched;
   }, [sales, dateFilterMode, effectiveFilterDate]);
 
   // Filter purchases based on chosen date
@@ -222,10 +218,10 @@ export const ReportsView: React.FC<Props> = ({
     });
   }, [purchases, dateFilterMode, effectiveFilterDate]);
 
-  // Filter expenses based on chosen date (syncing all tracker/register expenses for today)
+  // Filter expenses based on chosen date strictly
   const filteredExpenses = useMemo(() => {
     if (dateFilterMode === 'all') return expenses;
-    const matched = expenses.filter((e) => {
+    return expenses.filter((e) => {
       const localD = getLocalDateStr(e.date);
       const rawD = (e.date || '').slice(0, 10);
       const createdLocalD = getLocalDateStr(e.createdAt);
@@ -235,10 +231,6 @@ export const ReportsView: React.FC<Props> = ({
         createdLocalD === effectiveFilterDate
       );
     });
-    if (dateFilterMode === 'today' && matched.length === 0 && expenses.length > 0) {
-      return expenses;
-    }
-    return matched;
   }, [expenses, dateFilterMode, effectiveFilterDate]);
 
   const defaultQuickSaleMargin = DB.getQuickSaleProfitMargin();
@@ -887,6 +879,8 @@ export const ReportsView: React.FC<Props> = ({
           onSaveMonthlyReconciliation={onSaveMonthlyReconciliation}
           onAddOwnerTransaction={onAddOwnerTransaction}
           onDeleteOwnerTransaction={onDeleteOwnerTransaction}
+          appMode={appMode}
+          onOpenSubscriptionModal={onOpenSubscriptionModal}
         />
       )}
 
@@ -976,6 +970,8 @@ export const ReportsView: React.FC<Props> = ({
           profile={profile}
           language={language}
           onClose={() => setReprintSale(null)}
+          appMode={appMode}
+          onOpenSubscriptionModal={onOpenSubscriptionModal}
         />
       )}
 

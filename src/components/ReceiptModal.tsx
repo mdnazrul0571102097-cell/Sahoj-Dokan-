@@ -26,6 +26,8 @@ interface Props {
   profile: ShopProfile;
   language: Language;
   onClose: () => void;
+  appMode?: string;
+  onOpenSubscriptionModal?: () => void;
 }
 
 export const ReceiptModal: React.FC<Props> = ({
@@ -33,6 +35,8 @@ export const ReceiptModal: React.FC<Props> = ({
   profile,
   language,
   onClose,
+  appMode = 'trial',
+  onOpenSubscriptionModal,
 }) => {
   const t = translations[language];
   const [copiedReceipt, setCopiedReceipt] = useState(false);
@@ -76,6 +80,10 @@ ${sale.dueAmount > 0 ? `*বাকি টাকা: ৳${sale.dueAmount}*` : `�
 
   // Direct Bluetooth ESC/POS Print for small 58mm / 80mm thermal printers
   const handleDirectEscPosPrint = async () => {
+    if (appMode === 'normal') {
+      onOpenSubscriptionModal?.();
+      return;
+    }
     setIsEscPosPrinting(true);
     setEscPosToast(null);
 
@@ -131,6 +139,10 @@ ${sale.dueAmount > 0 ? `*বাকি টাকা: ৳${sale.dueAmount}*` : `�
   };
 
   const handlePrint = () => {
+    if (appMode === 'normal') {
+      onOpenSubscriptionModal?.();
+      return;
+    }
     // 1. If running inside Android APK, trigger native Android PrintManager
     if (typeof window !== 'undefined' && (window as any).AndroidApp?.printReceipt) {
       try {
@@ -146,6 +158,10 @@ ${sale.dueAmount > 0 ? `*বাকি টাকা: ৳${sale.dueAmount}*` : `�
   };
 
   const handleShareWhatsApp = () => {
+    if (appMode === 'normal') {
+      onOpenSubscriptionModal?.();
+      return;
+    }
     const msg = buildReceiptText();
     const targetPhone = customerPhoneInput.trim().replace(/\D/g, '');
     let waUrl = '';
@@ -386,6 +402,11 @@ ${sale.dueAmount > 0 ? `*বাকি টাকা: ৳${sale.dueAmount}*` : `�
               <>
                 <Bluetooth className="w-4 h-4 text-cyan-200 stroke-[2.5]" />
                 <span>ব্লুটুথ থার্মাল প্রিন্ট (ছোট ৫৮ মিমি / ESC/POS)</span>
+                {appMode === 'normal' && (
+                  <span className="text-[10px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-md font-black">
+                    🔒 Pro
+                  </span>
+                )}
               </>
             )}
           </button>
@@ -402,6 +423,11 @@ ${sale.dueAmount > 0 ? `*বাকি টাকা: ৳${sale.dueAmount}*` : `�
             >
               <Printer className="w-4 h-4" />
               <span>{language === 'bn' ? 'প্রিন্ট করুন' : 'Print Receipt'}</span>
+              {appMode === 'normal' && (
+                <span className="text-[10px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-md font-black">
+                  🔒
+                </span>
+              )}
             </button>
 
             <button
@@ -411,7 +437,12 @@ ${sale.dueAmount > 0 ? `*বাকি টাকা: ৳${sale.dueAmount}*` : `�
               title="হোয়াটসঅ্যাপে রসিদ পাঠান"
             >
               <MessageCircle className="w-4 h-4 fill-slate-950" />
-              <span>{language === 'bn' ? 'হোয়াটসঅ্যাপে পাঠান' : 'Share WhatsApp'}</span>
+              <span>{language === 'bn' ? 'হোয়াটসঅ্যাপ' : 'WhatsApp'}</span>
+              {appMode === 'normal' && (
+                <span className="text-[10px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-md font-black">
+                  🔒
+                </span>
+              )}
             </button>
           </div>
 

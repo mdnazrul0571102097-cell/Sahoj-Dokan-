@@ -510,7 +510,13 @@ export const ProductManagement: React.FC<Props> = ({
           </div>
 
           <div
-            onClick={() => setFilterType(filterType === 'lowStock' ? 'all' : 'lowStock')}
+            onClick={() => {
+              if (appMode === 'normal') {
+                onOpenSubscriptionModal?.();
+                return;
+              }
+              setFilterType(filterType === 'lowStock' ? 'all' : 'lowStock');
+            }}
             className={`text-center px-1 cursor-pointer transition rounded-xl ${
               filterType === 'lowStock' ? 'bg-rose-50 ring-2 ring-rose-300' : 'hover:bg-slate-50'
             }`}
@@ -519,6 +525,11 @@ export const ProductManagement: React.FC<Props> = ({
             <p className="text-[11px] sm:text-xs font-semibold text-rose-600 mb-0.5 flex items-center justify-center gap-1">
               <AlertTriangle className="w-3 h-3 text-rose-500" />
               <span>লো স্টক</span>
+              {appMode === 'normal' && (
+                <span className="text-[9px] bg-amber-400 text-slate-950 px-1 rounded-sm font-black">
+                  🔒
+                </span>
+              )}
             </p>
             <p className="text-base sm:text-xl font-extrabold tracking-tight text-[#D32F2F]">
               {lowStockCount} টি
@@ -530,7 +541,13 @@ export const ProductManagement: React.FC<Props> = ({
       {/* Low Stock Alert Alert Bar */}
       {lowStockCount > 0 && (
         <div
-          onClick={() => setFilterType(filterType === 'lowStock' ? 'all' : 'lowStock')}
+          onClick={() => {
+            if (appMode === 'normal') {
+              onOpenSubscriptionModal?.();
+              return;
+            }
+            setFilterType(filterType === 'lowStock' ? 'all' : 'lowStock');
+          }}
           className="mb-2.5 px-3 py-2 rounded-2xl bg-gradient-to-r from-amber-50 to-rose-50 border border-amber-200 flex items-center justify-between gap-2 shadow-2xs shrink-0 cursor-pointer hover:border-amber-300 transition"
         >
           <div className="flex items-center gap-2 text-xs font-bold text-amber-950 min-w-0">
@@ -539,8 +556,19 @@ export const ProductManagement: React.FC<Props> = ({
               ⚠️ সতর্কবার্তা: <strong className="text-rose-700">{lowStockCount}</strong>টি পণ্যের স্টক কম!
             </span>
           </div>
-          <span className="text-[10px] sm:text-xs font-black text-rose-700 bg-white px-2 py-0.5 rounded-lg border border-rose-200 shrink-0">
-            {filterType === 'lowStock' ? 'সব পণ্য দেখান' : 'লো স্টক ফিল্টার'}
+          <span className="text-[10px] sm:text-xs font-black text-rose-700 bg-white px-2 py-0.5 rounded-lg border border-rose-200 shrink-0 flex items-center gap-1">
+            {appMode === 'normal' ? (
+              <>
+                <span>লো স্টক</span>
+                <span className="text-[9px] bg-amber-400 text-slate-950 px-1 py-0.2 rounded-sm font-black">
+                  🔒 Pro
+                </span>
+              </>
+            ) : filterType === 'lowStock' ? (
+              'সব পণ্য দেখান'
+            ) : (
+              'লো স্টক ফিল্টার'
+            )}
           </span>
         </div>
       )}

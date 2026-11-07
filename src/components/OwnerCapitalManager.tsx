@@ -231,16 +231,6 @@ export const OwnerCapitalManager: React.FC<Props> = ({
 
   return (
     <div className="flex-1 flex flex-col space-y-3">
-      {/* Running Store Capital Tracker (চলমান মোট পুঁজি / মূলধন ট্র্যাকার) */}
-      <RunningCapitalCard
-        initialStoreCapital={initialStoreCapital}
-        onSaveInitialStoreCapital={onSaveInitialStoreCapital}
-        sales={sales}
-        bulkPurchases={bulkPurchases}
-        purchases={purchases}
-        expenses={expenses}
-        ownerTransactions={ownerTransactions}
-      />
 
       {/* Info Banner: Accounting Isolation Guarantee */}
       <div className="bg-gradient-to-r from-[#E0F2F1] via-white to-[#E8F5E9] rounded-[22px] p-3.5 border border-[#80CBC4] flex items-start gap-3 shadow-2xs">
@@ -339,20 +329,19 @@ export const OwnerCapitalManager: React.FC<Props> = ({
           </button>
         </div>
 
-        {/* নিচে একটি বাটন: মালিক থেকে মোট পাওনা টাকা */}
-        <button
-          type="button"
+        {/* নিচে একটি বাটন: মালিক থেকে মোট পাওনা টাকা (কালার ম্যাচিং ও স্পষ্ট ভিউ) */}
+        <div
           onClick={() => handleOpenAddModal('withdrawal_return')}
-          className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-[#102A43] to-[#0E6B6B] hover:opacity-95 text-white font-extrabold text-xs sm:text-sm flex items-center justify-between gap-2 shadow-sm border border-[#80CBC4]/40 transition active:scale-[0.99] cursor-pointer"
+          className="w-full py-3.5 px-4 rounded-2xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-extrabold text-xs sm:text-sm flex items-center justify-between gap-2 shadow-sm border border-[#80CBC4] transition active:scale-[0.99] cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            <Landmark className="w-4 h-4 text-amber-300 shrink-0" />
-            <span>মালিক থেকে মোট পাওনা টাকা (নেওয়া − ফেরত):</span>
+            <Landmark className="w-4 h-4 text-emerald-200 shrink-0" />
+            <span className="text-white">মালিক থেকে মোট পাওনা টাকা (নেওয়া − ফেরত):</span>
           </div>
-          <span className="text-base sm:text-lg font-black text-amber-300 tabular-nums">
+          <span className="text-base sm:text-lg font-black text-amber-300 tabular-nums bg-[#094747] px-2.5 py-0.5 rounded-xl border border-[#80CBC4]/40">
             ৳ {summary.netWithdrawal.toLocaleString()}
           </span>
-        </button>
+        </div>
       </div>
 
       {/* Transactions History Card */}

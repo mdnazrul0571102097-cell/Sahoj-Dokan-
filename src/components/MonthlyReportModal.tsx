@@ -50,6 +50,8 @@ interface Props {
   onClose: () => void;
   profile: ShopProfile;
   reportData: MonthlyReportData;
+  appMode?: string;
+  onOpenSubscriptionModal?: () => void;
 }
 
 export const MonthlyReportModal: React.FC<Props> = ({
@@ -57,6 +59,8 @@ export const MonthlyReportModal: React.FC<Props> = ({
   onClose,
   profile,
   reportData,
+  appMode = 'trial',
+  onOpenSubscriptionModal,
 }) => {
   if (!isOpen) return null;
 
@@ -83,6 +87,10 @@ export const MonthlyReportModal: React.FC<Props> = ({
   const formattedMonthStr = `${monthName} ${yyyy} (${mm}-${yyyy})`;
 
   const handleDownloadPdf = async () => {
+    if (appMode === 'normal') {
+      onOpenSubscriptionModal?.();
+      return;
+    }
     if (!reportRef.current) return;
     setIsExporting(true);
     setToastMessage(null);
@@ -113,7 +121,19 @@ export const MonthlyReportModal: React.FC<Props> = ({
   };
 
   const handlePrint = () => {
-    window.print();
+    if (appMode === 'normal') {
+      onOpenSubscriptionModal?.();
+      return;
+    }
+    if (typeof window !== 'undefined' && (window as any).AndroidApp?.printReceipt) {
+      try {
+        (window as any).AndroidApp.printReceipt();
+        return;
+      } catch (_) {}
+    }
+    try {
+      window.print();
+    } catch (_) {}
   };
 
   return (
@@ -405,6 +425,11 @@ export const MonthlyReportModal: React.FC<Props> = ({
           >
             <Download className="w-4 h-4 text-amber-300" />
             <span>{isExporting ? 'PDF ডাউনলোড হচ্ছে...' : '📥 মাসিক রিপোর্ট ডাউনলোড (PDF)'}</span>
+            {appMode === 'normal' && (
+              <span className="text-[10px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-md font-black">
+                🔒 Pro
+              </span>
+            )}
           </button>
         </div>
       </div>

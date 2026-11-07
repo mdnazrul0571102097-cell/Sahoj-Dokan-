@@ -102,11 +102,6 @@ export const ExpenseManager: React.FC<Props> = ({
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    if (filterMode === 'today' && matched.length === 0 && expenses.length > 0) {
-      return [...expenses].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
-    }
     return matched;
   }, [expenses, filterMode, todayStr]);
 
