@@ -750,27 +750,27 @@ export const SettingsView: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* ৪. দ্রুত বিক্রির ডিফল্ট লাভের হার (%) (স্বতন্ত্র কমপ্যাক্ট কার্ড) */}
-        <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-emerald-200/90 shadow-2xs space-y-2">
+        {/* ৪. দ্রুত বিক্রির ডিফল্ট লাভের হার (%) (স্বতন্ত্র সুপার-কমপ্যাক্ট কার্ড) */}
+        <div className="bg-white rounded-2xl px-3 py-2 border border-emerald-200/90 shadow-2xs space-y-1.5">
           {/* Top Row: বাংলা লেখা এক লাইনে উপরে */}
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-7 h-7 rounded-xl bg-emerald-50 text-[#2E7D32] flex items-center justify-center shrink-0 border border-emerald-200">
-                <TrendingUp className="w-3.5 h-3.5" />
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="w-5 h-5 rounded-md bg-emerald-50 text-[#2E7D32] flex items-center justify-center shrink-0 border border-emerald-200">
+                <TrendingUp className="w-3 h-3" />
               </div>
-              <span className="font-extrabold text-xs sm:text-sm text-[#102A43] truncate">
+              <span className="font-black text-xs text-[#102A43] whitespace-nowrap">
                 {language === 'bn'
                   ? 'দ্রুত বিক্রির ডিফল্ট লাভের হার (%)'
                   : 'Quick Sale Default Profit Margin (%)'}
               </span>
             </div>
-            <span className="text-[11px] font-black text-[#2E7D32] bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 shrink-0">
-              {quickSaleMargin}% সেট করা
+            <span className="text-[10px] font-black text-[#2E7D32] bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 shrink-0">
+              {quickSaleMargin}%
             </span>
           </div>
 
           {/* Bottom Row: নিচে বাটন ও কাস্টম ইনপুট */}
-          <div className="flex items-center gap-1.5 pt-0.5">
+          <div className="flex items-center gap-1.5">
             {[0, 10, 15, 20].map((pct) => (
               <button
                 key={pct}
@@ -781,7 +781,7 @@ export const SettingsView: React.FC<Props> = ({
                   onDataRestored();
                   showToast(`দ্রুত বিক্রির ডিফল্ট লাভ ${pct}% সেট করা হয়েছে`, 'success');
                 }}
-                className={`flex-1 py-1.5 rounded-xl text-xs font-black border transition cursor-pointer text-center active:scale-95 ${
+                className={`flex-1 py-1 rounded-lg text-xs font-black border transition cursor-pointer text-center active:scale-95 leading-tight ${
                   quickSaleMargin === pct
                     ? 'bg-[#2E7D32] text-white border-[#2E7D32] shadow-2xs'
                     : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:bg-emerald-50'
@@ -790,7 +790,7 @@ export const SettingsView: React.FC<Props> = ({
                 {pct}%
               </button>
             ))}
-            <div className="relative w-16 shrink-0">
+            <div className="relative w-14 shrink-0">
               <input
                 type="number"
                 min="0"
@@ -802,9 +802,9 @@ export const SettingsView: React.FC<Props> = ({
                   DB.saveQuickSaleProfitMargin(val);
                   onDataRestored();
                 }}
-                className="w-full pl-2 pr-5 py-1.5 rounded-xl border border-[#CBD5E1] text-xs font-black text-[#102A43] text-center focus:outline-none focus:border-[#0E6B6B]"
+                className="w-full pl-1.5 pr-4 py-1 rounded-lg border border-[#CBD5E1] text-xs font-black text-[#102A43] text-center focus:outline-none focus:border-[#0E6B6B] h-6"
               />
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-[#64748B]">
+              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-black text-[#64748B]">
                 %
               </span>
             </div>

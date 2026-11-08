@@ -1037,8 +1037,60 @@ export const CashReconciliationManager: React.FC<Props> = ({
                 </div>
               </div>
             </div>
-          </div>
 
+            {/* Step 3: দিন ক্লোজ ও স্বয়ংক্রিয় হিসাব খতিয়ান (Day Close & Completed Rollover History Cards) */}
+            <div className="pt-2 space-y-3 border-t border-[#E2E8F0]">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDayCloseOpen(true)}
+                  className="px-4 py-2 rounded-2xl border-2 border-[#80CBC4] bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 cursor-pointer"
+                >
+                  <Store className="w-4 h-4 text-[#0E6B6B]" />
+                  <span>ডে অফ / হিসাব ক্লোজ করুন</span>
+                </button>
+                <span className="text-[11px] font-semibold text-[#64748B]">
+                  * রাত ১২:০০ টায় স্বয়ংক্রিয়ভাবে অথবা বাটনে ক্লিক করলে দিনটি ক্লোজ হয়ে নিচে রেকর্ড যুক্ত হয়
+                </span>
+              </div>
+
+              {/* ক্লোজ করা দিনের হিসাব কার্ডসমূহ (Circled in user's screenshot) */}
+              {automatedDailyHistory.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  {automatedDailyHistory.map((row) => (
+                    <div
+                      key={row.date}
+                      className="rounded-2xl p-3 sm:p-3.5 border-2 border-[#80CBC4] bg-[#F0FDF4] space-y-1 shadow-2xs"
+                    >
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-black text-xs sm:text-sm text-[#102A43] flex items-center gap-1">
+                            <Calendar className="w-4 h-4 text-[#0E6B6B]" />
+                            {formatDateDDMMYYYY(row.date)}
+                          </span>
+                          <span className="text-xs text-[#486581]">
+                            সকালের ক্যাশ: <strong className="text-[#102A43]">৳{row.openingCash.toLocaleString()}</strong>
+                          </span>
+                          <span className="text-xs font-bold text-[#2E7D32]">
+                            + জমা: ৳{row.totalCashIn.toLocaleString()}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-[#2E7D32] border border-emerald-300">
+                          ✓ ক্লোজড
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold text-[#D32F2F]">
+                        − খরচ ও পরিশোধ: ৳{row.totalCashOut.toLocaleString()}
+                      </div>
+                      <div className="text-xs sm:text-sm font-black text-[#0E6B6B]">
+                        ক্যাশ বাক্সে থাকার কথা: ৳{row.closingCash.toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </>
       )}
 

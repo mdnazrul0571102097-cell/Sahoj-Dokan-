@@ -762,181 +762,112 @@ export const ProductManagement: React.FC<Props> = ({
       {isProductModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-2 sm:p-4 backdrop-blur-sm">
           <div className="w-full max-w-lg max-h-[92vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
-            {/* 1. Modal Sticky Header */}
-            <div className="shrink-0 p-4 bg-[#0E6B6B] text-white flex items-center justify-between shadow-sm">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-white/10 text-emerald-300">
-                  <Package className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-base leading-tight">
-                    {editingProduct ? t.editProduct : t.addProduct}
-                  </h3>
-                  {!editingProduct && (
-                    <p className="text-[11px] text-emerald-200">
-                      {sessionAddedCount > 0
-                        ? `এই সেশনে ${sessionAddedCount}টি পণ্য সেভ হয়েছে • পরবর্তী পণ্য দিন`
-                        : 'সেভ করার সাথে সাথে ফর্ম খালি হয়ে নতুন পণ্যের জন্য প্রস্তুত হবে'}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {sessionAddedCount > 0 && !editingProduct && (
-                  <span className="px-2.5 py-1 rounded-full bg-emerald-700 text-emerald-100 font-bold text-xs border border-emerald-500/50">
-                    +{sessionAddedCount} সেভ হয়েছে
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsProductModalOpen(false);
-                    setDuplicateProduct(null);
-                    setErrorMessage(null);
-                  }}
-                  className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition"
-                  title="বন্ধ করুন"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+            {/* 1. Modal Header (Clean & Compact) */}
+            <div className="shrink-0 px-4 py-3 bg-[#0E6B6B] text-white flex items-center justify-between shadow-sm">
+              <h3 className="font-black text-base sm:text-lg text-white">
+                {editingProduct ? 'পণ্য এডিট' : 'পণ্য যোগ করুন'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsProductModalOpen(false);
+                  setDuplicateProduct(null);
+                  setErrorMessage(null);
+                }}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 flex items-center justify-center transition cursor-pointer"
+                title="বন্ধ করুন"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
             </div>
 
-            {/* 2. Scrollable Body */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+            {/* 2. Compact Body */}
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2.5">
               {/* Prominent Success Notification after Save */}
               {modalSuccessMessage && (
-                <div className="p-3 rounded-2xl bg-emerald-600 text-white shadow-md flex items-center justify-between gap-2 animate-in fade-in zoom-in-95 duration-200">
+                <div className="p-2.5 rounded-xl bg-emerald-600 text-white shadow-xs flex items-center justify-between gap-2 animate-in fade-in zoom-in-95 duration-200">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-200 shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-200 shrink-0" />
                     <span className="text-xs sm:text-sm font-bold">{modalSuccessMessage}</span>
                   </div>
-                  <span className="text-[10px] bg-white/20 px-2.5 py-0.5 rounded-full font-bold shrink-0">
+                  <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold shrink-0">
                     পাতা খালি হয়েছে
                   </span>
                 </div>
               )}
 
-              {/* Product Photo Upload / Snapshot */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-2">
-                  পণ্যের ছবি নির্বাচন করুন
-                </label>
-                <div className="flex items-center gap-3">
-                  <div className="relative w-20 h-20 rounded-2xl overflow-hidden border-2 border-dashed border-emerald-500 bg-slate-100 dark:bg-slate-800 shrink-0 shadow-sm flex items-center justify-center">
-                    {isCompressingImage ? (
-                      <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
-                    ) : formImage ? (
-                      <div className="relative w-full h-full">
-                        <img
-                          src={formImage}
-                          alt="Product Preview"
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute top-1 right-1 p-0.5 rounded-full bg-emerald-600 text-white shadow">
-                          <Check className="w-3 h-3 stroke-[3]" />
-                        </div>
+              {/* Product Photo Upload / Snapshot (Compact, No guide texts, No mobile camera button, No preset tags) */}
+              <div className="flex items-center gap-3">
+                <div className="relative w-16 h-16 rounded-2xl overflow-hidden border-2 border-dashed border-emerald-500 bg-slate-100 dark:bg-slate-800 shrink-0 shadow-2xs flex items-center justify-center">
+                  {isCompressingImage ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
+                  ) : formImage ? (
+                    <div className="relative w-full h-full">
+                      <img
+                        src={formImage}
+                        alt="Product Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute top-1 right-1 p-0.5 rounded-full bg-emerald-600 text-white shadow-xs">
+                        <Check className="w-2.5 h-2.5 stroke-[3]" />
                       </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center p-1 text-center">
-                        <Camera className="w-6 h-6 text-slate-400 mb-0.5" />
-                        <span className="text-[10px] font-semibold text-slate-400">ছবি খালি</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <div className="flex flex-wrap gap-1.5">
-                      {/* Direct Live Camera Capture Button */}
-                      <button
-                        type="button"
-                        onClick={() => setIsCameraModalOpen(true)}
-                        className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
-                        title="সরাসরি ক্যামেরা দিয়ে ছবি তুলুন"
-                      >
-                        <Camera className="w-4 h-4" />
-                        <span>ছবি তুলুন</span>
-                      </button>
-
-                      {/* Direct Mobile Device Camera Trigger */}
-                      <button
-                        type="button"
-                        onClick={() => cameraInputRef.current?.click()}
-                        className="px-3 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
-                        title="ফোনের ক্যামেরা অ্যাপ দিয়ে সরাসরি ছবি তুলুন"
-                      >
-                        <Camera className="w-4 h-4" />
-                        <span>মোবাইল ক্যামেরা</span>
-                      </button>
-
-                      {/* File Upload / Gallery Button */}
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-white border border-slate-300 dark:border-slate-700 text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
-                        title="গ্যালারি থেকে ফটো নির্বাচন করুন"
-                      >
-                        <Upload className="w-4 h-4" />
-                        <span>গ্যালারি</span>
-                      </button>
-
-                      {formImage && (
-                        <button
-                          type="button"
-                          onClick={() => setFormImage('')}
-                          className="px-2 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-bold flex items-center gap-1 transition"
-                          title="ছবি বাদ দিন"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>মুছুন</span>
-                        </button>
-                      )}
                     </div>
-
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {isCompressingImage ? 'ছবি অপ্টিমাইজ হচ্ছে...' : formImage ? '✓ পণ্যের ছবি সফলভাবে যুক্ত হয়েছে' : 'ক্যামেরা দিয়ে সরাসরি ছবি তুলুন বা গ্যালারি থেকে সিলেক্ট করুন'}
-                    </p>
-                  </div>
-
-                  {/* Hidden inputs for gallery file upload & device camera */}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="sr-only"
-                    onChange={handleImageFileChange}
-                  />
-                  <input
-                    ref={cameraInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="sr-only"
-                    onChange={handleImageFileChange}
-                  />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center p-1 text-center">
+                      <Camera className="w-5 h-5 text-slate-400 mb-0.5" />
+                      <span className="text-[10px] font-bold text-slate-400">ছবি খালি</span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Preset quick image chips */}
-                <div className="mt-3 flex gap-1.5 overflow-x-auto no-scrollbar py-1">
-                  {presetPhotos.map((item, idx) => (
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Direct Live Camera Capture Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsCameraModalOpen(true)}
+                    className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                    title="সরাসরি ক্যামেরা দিয়ে ছবি তুলুন"
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span>ছবি তুলুন</span>
+                  </button>
+
+                  {/* File Upload / Gallery Button */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-2 rounded-xl bg-[#0E6B6B] hover:bg-[#0B5656] active:scale-95 text-white text-xs font-black flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                    title="গ্যালারি থেকে ফটো নির্বাচন করুন"
+                  >
+                    <Upload className="w-4 h-4 text-emerald-200" />
+                    <span>গ্যালারি</span>
+                  </button>
+
+                  {formImage && (
                     <button
-                      key={idx}
                       type="button"
-                      onClick={() => setFormImage(item.url)}
-                      className={`px-2.5 py-1 rounded-xl text-xs font-semibold border flex items-center gap-1 transition shrink-0 ${
-                        formImage === item.url
-                          ? 'border-emerald-600 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 shadow-sm'
-                          : 'border-slate-200 hover:bg-slate-100 text-slate-700 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
-                      }`}
+                      onClick={() => setFormImage('')}
+                      className="px-2.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-black flex items-center gap-1 transition cursor-pointer"
+                      title="ছবি বাদ দিন"
                     >
-                      <span>{item.name}</span>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>মুছুন</span>
                     </button>
-                  ))}
+                  )}
                 </div>
+
+                {/* Hidden input for gallery file upload */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={handleImageFileChange}
+                />
               </div>
 
               {/* Name & Category */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
                     {t.productName} *
@@ -955,8 +886,8 @@ export const ProductManagement: React.FC<Props> = ({
                         handleSaveProduct(undefined, undefined, !editingProduct ? true : false);
                       }
                     }}
-                    placeholder="যেমন: দেশি পেঁয়াজ বা Vaseline 50ml"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-xs sm:text-sm font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    placeholder="যেমন: দেশি পেঁয়াজ বা তেল"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
 
@@ -967,7 +898,7 @@ export const ProductManagement: React.FC<Props> = ({
                   <select
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   >
                     <option value="মুদি আইটেম">মুদি আইটেম</option>
                     <option value="গ্রোসারি বা বেকারি">গ্রোসারি বা বেকারি</option>
@@ -980,9 +911,9 @@ export const ProductManagement: React.FC<Props> = ({
               </div>
 
               {/* Cost Price, Selling Price & Stock */}
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1">
                     {t.costPrice}
                   </label>
                   <input
@@ -997,12 +928,12 @@ export const ProductManagement: React.FC<Props> = ({
                       }
                     }}
                     placeholder="৳ ৫০"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-xs sm:text-sm font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    className="w-full px-2.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-xs sm:text-sm font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1">
                     {t.sellPrice} *
                   </label>
                   <input
@@ -1021,12 +952,12 @@ export const ProductManagement: React.FC<Props> = ({
                       }
                     }}
                     placeholder="৳ ৬০"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 placeholder-slate-400 dark:placeholder-slate-500 text-xs sm:text-sm font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    className="w-full px-2.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 placeholder-slate-400 text-xs sm:text-sm font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1">
                     {t.stock}
                   </label>
                   <input
@@ -1035,15 +966,15 @@ export const ProductManagement: React.FC<Props> = ({
                     value={formStock}
                     onChange={(e) => setFormStock(e.target.value)}
                     placeholder="১০"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-xs sm:text-sm font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    className="w-full px-2.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-xs sm:text-sm font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
               </div>
 
-              {/* Unit & Loose Item Switch */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Unit & Low Stock Alert (Compact) */}
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1">
                     {t.unit}
                   </label>
                   <select
@@ -1053,7 +984,7 @@ export const ProductManagement: React.FC<Props> = ({
                       setFormUnit(u);
                       if (u === 'kg' || u === 'gm') setFormIsLoose(true);
                     }}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    className="w-full px-2.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   >
                     <option value="piece">টি / পিস</option>
                     <option value="kg">কেজি</option>
@@ -1065,7 +996,7 @@ export const ProductManagement: React.FC<Props> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1">
                     কম স্টক সতর্কতা
                   </label>
                   <input
@@ -1073,40 +1004,35 @@ export const ProductManagement: React.FC<Props> = ({
                     inputMode="numeric"
                     value={formMinAlert}
                     onChange={(e) => setFormMinAlert(parseBanglaNumber(e.target.value) || 5)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    className="w-full px-2.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm font-bold text-center focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
               </div>
 
-              {/* Loose Item Checkbox */}
-              <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold text-amber-950 dark:text-amber-200">
-                    {t.isLooseProduct}
-                  </p>
-                  <p className="text-[11px] text-amber-800 dark:text-amber-400">
-                    যেমন পেঁয়াজ, আলু, আদা, রসুন, চাল বা ডাল (ক্লিক করলেই কেজির অপশন আসবে)
-                  </p>
-                </div>
+              {/* Loose Item Checkbox (Very Compact Single Line) */}
+              <label className="px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 flex items-center justify-between cursor-pointer">
+                <span className="text-xs font-bold text-amber-950 dark:text-amber-200">
+                  খোলা পণ্য যোগ করতে টিক চিহ্ন দিন
+                </span>
                 <input
                   type="checkbox"
                   checked={formIsLoose}
                   onChange={(e) => setFormIsLoose(e.target.checked)}
-                  className="w-5 h-5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                 />
-              </div>
+              </label>
 
-              {/* Barcode & Auto Generator */}
+              {/* Barcode & Colorful Buttons (High Contrast & Catchy) */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-200">
                     {t.barcode}
                   </label>
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => setIsScannerOpen(true)}
-                      className="text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1"
+                      className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-2xs flex items-center gap-1 active:scale-95 transition cursor-pointer"
                     >
                       <Camera className="w-3.5 h-3.5" />
                       <span>স্ক্যান</span>
@@ -1118,9 +1044,10 @@ export const ProductManagement: React.FC<Props> = ({
                         setDuplicateProduct(null);
                         setErrorMessage(null);
                       }}
-                      className="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline"
+                      className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-2xs flex items-center gap-1 active:scale-95 transition cursor-pointer"
                     >
-                      {t.generateBarcode}
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Auto Barcode</span>
                     </button>
                   </div>
                 </div>
@@ -1133,7 +1060,7 @@ export const ProductManagement: React.FC<Props> = ({
                     if (duplicateProduct) setDuplicateProduct(null);
                   }}
                   placeholder="বারকোড সংখ্যা..."
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 font-mono text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 font-mono text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
             </div>
