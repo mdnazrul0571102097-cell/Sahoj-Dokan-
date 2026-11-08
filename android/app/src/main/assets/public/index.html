@@ -65,29 +65,48 @@
           }
         }, true);
 
-        // 3. Force purge stale ServiceWorker CacheStorage on APK version upgrade (keeps localStorage 100% intact)
+        // 3. Polyfills for older Android WebViews (Android 7/8/9/10/11 Vivo/Oppo/Samsung/Xiaomi)
         try {
-          var CURRENT_APK_BUILD = 'sahoj_dokan_universal_v15_20261104';
-          var prevBuild = localStorage.getItem('__sahoj_apk_build_ver');
+          if (typeof window.globalThis === 'undefined') {
+            window.globalThis = window;
+          }
+          if (!Array.prototype.at) {
+            Array.prototype.at = function(n) {
+              n = Math.trunc(n) || 0;
+              if (n < 0) n += this.length;
+              if (n < 0 || n >= this.length) return undefined;
+              return this[n];
+            };
+          }
+          if (!String.prototype.replaceAll) {
+            String.prototype.replaceAll = function(str, newStr) {
+              if (Object.prototype.toString.call(str).toLowerCase() === '[object regexp]') {
+                return this.replace(str, newStr);
+              }
+              return this.split(str).join(newStr);
+            };
+          }
+          if (!Object.hasOwn) {
+            Object.hasOwn = function(obj, prop) {
+              return Object.prototype.hasOwnProperty.call(obj, prop);
+            };
+          }
+          if (!Promise.allSettled) {
+            Promise.allSettled = function(promises) {
+              return Promise.all(Array.from(promises).map(function(p) {
+                return Promise.resolve(p).then(
+                  function(v) { return { status: 'fulfilled', value: v }; },
+                  function(r) { return { status: 'rejected', reason: r }; }
+                );
+              }));
+            };
+          }
           if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(function(regs) {
               for (var i = 0; i < regs.length; i++) {
                 regs[i].unregister();
               }
             }).catch(function() {});
-          }
-          if (prevBuild !== CURRENT_APK_BUILD) {
-            localStorage.setItem('__sahoj_apk_build_ver', CURRENT_APK_BUILD);
-            if (window.caches && window.caches.keys) {
-              window.caches.keys().then(function(keys) {
-                return Promise.all(keys.map(function(k) { return window.caches.delete(k); }));
-              }).then(function() {
-                if (prevBuild && !sessionStorage.getItem('__sahoj_reloaded_v15')) {
-                  sessionStorage.setItem('__sahoj_reloaded_v15', '1');
-                  window.location.reload();
-                }
-              }).catch(function() {});
-            }
           }
         } catch (_) {}
       })();
@@ -99,23 +118,28 @@
     <meta property="og:title" content="Sahoj Dokan - সহজ দোকান" />
     <meta property="og:description" content="Sahoj Dokan - সহজ দোকান: সম্পূর্ণ বাংলাদেশী অফলাইন গ্রোসারি ও রিটেল পিওএস, পণ্য স্ক্যানার, বাকি খাতা ও দৈনিক হিসাব অ্যাপ।" />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="/assets/icon.png" />
+    <meta property="og:image" content="./assets/icon.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="theme-color" content="#F8FAFC" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Sahoj Dokan - সহজ দোকান" />
-    <link rel="icon" type="image/png" href="/assets/icon.png" />
-    <link rel="apple-touch-icon" href="/assets/icon.png" />
+    <link rel="icon" type="image/png" href="./assets/icon.png" />
+    <link rel="apple-touch-icon" href="./assets/icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="/assets/index-C5jJ5sAh.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-DE9H_Bm-.css">
+    <script defer src="./assets/index.js"></script>
+    <link rel="stylesheet" href="./assets/index.css">
   </head>
   <body class="bg-[#F8FAFC] text-[#1E293B] select-none antialiased">
-    <div id="root"></div>
+    <div id="root">
+      <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#F8FAFC;font-family:system-ui,-apple-system,sans-serif;color:#102A43;padding:24px;text-align:center;">
+        <div style="width:64px;height:64px;border-radius:18px;background:#0E6B6B;color:#ffffff;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;margin-bottom:14px;box-shadow:0 8px 20px rgba(14,107,107,0.25);">🛒</div>
+        <div style="font-size:20px;font-weight:900;color:#102A43;margin-bottom:4px;">Sahoj Dokan - সহজ দোকান</div>
+        <div style="font-size:13px;font-weight:600;color:#0E6B6B;">অ্যাপ লোড হচ্ছে, অনুগ্রহ করে অপেক্ষা করুন...</div>
+      </div>
+    </div>
   </body>
 </html>
-
