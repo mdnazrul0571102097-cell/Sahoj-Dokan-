@@ -307,32 +307,16 @@ export const OwnerCapitalManager: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* উপরের দুইটি বাটন: মালিক ব্যক্তিগত খরচ নেওয়া এবং নেওয়া টাকা ফেরত দেওয়া + নিচে মালিক থেকে মোট পাওনা টাকা বাটন */}
+      {/* উপাদানগুলোর সঠিক ক্রম:
+          ১ম (উপরে): "মালিক থেকে মোট পাওনা টাকা (নেওয়া − ফেরত)" বক্স
+          ২য় (মাঝে): "মালিকের ব্যক্তিগত খরচ/নেওয়া (−)" (লাল বাটন)
+          ৩য় (নিচে): "নেওয়া টাকা ক্যাশে ফেরত (+)" (সবুজ বাটন)
+      */}
       <div className="space-y-2">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => handleOpenAddModal('withdrawal')}
-            className="py-3 px-4 rounded-2xl bg-[#D32F2F] hover:bg-rose-800 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
-          >
-            <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
-            <span>মালিকের ব্যক্তিগত খরচ/নেওয়া (−)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleOpenAddModal('withdrawal_return')}
-            className="py-3 px-4 rounded-2xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
-          >
-            <ArrowDownLeft className="w-4 h-4 stroke-[2.5]" />
-            <span>নেওয়া টাকা ক্যাশে ফেরত (+)</span>
-          </button>
-        </div>
-
-        {/* নিচে একটি বাটন: মালিক থেকে মোট পাওনা টাকা (কালার ম্যাচিং ও স্পষ্ট ভিউ) */}
+        {/* ১ম (উপরে): মালিক থেকে মোট পাওনা টাকা (নেওয়া − ফেরত) বক্স */}
         <div
           onClick={() => handleOpenAddModal('withdrawal_return')}
-          className="w-full py-3.5 px-4 rounded-2xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-extrabold text-xs sm:text-sm flex items-center justify-between gap-2 shadow-sm border border-[#80CBC4] transition active:scale-[0.99] cursor-pointer"
+          className="w-full py-3 px-4 rounded-2xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-extrabold text-xs sm:text-sm flex items-center justify-between gap-2 shadow-sm border border-[#80CBC4] transition active:scale-[0.99] cursor-pointer"
         >
           <div className="flex items-center gap-2">
             <Landmark className="w-4 h-4 text-emerald-200 shrink-0" />
@@ -342,6 +326,26 @@ export const OwnerCapitalManager: React.FC<Props> = ({
             ৳ {summary.netWithdrawal.toLocaleString()}
           </span>
         </div>
+
+        {/* ২য় (মাঝে): মালিকের ব্যক্তিগত খরচ/নেওয়া (-) (লাল বাটন) */}
+        <button
+          type="button"
+          onClick={() => handleOpenAddModal('withdrawal')}
+          className="w-full py-3 px-4 rounded-2xl bg-[#D32F2F] hover:bg-rose-800 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
+        >
+          <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
+          <span>মালিকের ব্যক্তিগত খরচ/নেওয়া (−)</span>
+        </button>
+
+        {/* ৩য় (নিচে): নেওয়া টাকা ক্যাশে ফেরত (+) (সবুজ বাটন) */}
+        <button
+          type="button"
+          onClick={() => handleOpenAddModal('withdrawal_return')}
+          className="w-full py-3 px-4 rounded-2xl bg-[#2E7D32] hover:bg-[#256628] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
+        >
+          <ArrowDownLeft className="w-4 h-4 stroke-[2.5]" />
+          <span>নেওয়া টাকা ক্যাশে ফেরত (+)</span>
+        </button>
       </div>
 
       {/* Transactions History Card */}
