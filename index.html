@@ -65,29 +65,14 @@
           }
         }, true);
 
-        // 3. Force purge stale ServiceWorker CacheStorage on APK version upgrade (keeps localStorage 100% intact)
+        // 3. Purge legacy ServiceWorker CacheStorage silently without disruptive page reloads
         try {
-          var CURRENT_APK_BUILD = 'sahoj_dokan_universal_v15_20261104';
-          var prevBuild = localStorage.getItem('__sahoj_apk_build_ver');
           if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(function(regs) {
               for (var i = 0; i < regs.length; i++) {
                 regs[i].unregister();
               }
             }).catch(function() {});
-          }
-          if (prevBuild !== CURRENT_APK_BUILD) {
-            localStorage.setItem('__sahoj_apk_build_ver', CURRENT_APK_BUILD);
-            if (window.caches && window.caches.keys) {
-              window.caches.keys().then(function(keys) {
-                return Promise.all(keys.map(function(k) { return window.caches.delete(k); }));
-              }).then(function() {
-                if (prevBuild && !sessionStorage.getItem('__sahoj_reloaded_v15')) {
-                  sessionStorage.setItem('__sahoj_reloaded_v15', '1');
-                  window.location.reload();
-                }
-              }).catch(function() {});
-            }
           }
         } catch (_) {}
       })();
