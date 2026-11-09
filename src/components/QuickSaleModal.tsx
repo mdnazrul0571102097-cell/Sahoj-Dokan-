@@ -531,8 +531,9 @@ export const QuickSaleModal: React.FC<Props> = ({
             </button>
           </div>
 
-          <div className="px-2 py-1 rounded-lg bg-white/85 border border-[#B2DFDB] text-[10.5px] font-extrabold text-[#102A43] leading-snug">
-            মূল মালের পুঁজি: <span className="text-[#0E6B6B]">৳{capitalBreakdown.remainingGoodsCapital.toLocaleString('bn-BD')}</span> | ক্যাশ বাক্সে নগদ: <span className="text-[#0E6B6B]">৳{capitalBreakdown.drawerCash.toLocaleString('bn-BD')}</span> | লাভ: <span className="text-[#2E7D32]">৳{capitalBreakdown.displayProfit.toLocaleString('bn-BD')}</span> | মোট পুঁজি: <span className="text-[#0E6B6B]">৳{capitalBreakdown.currentRunningCapital.toLocaleString('bn-BD')}</span>
+          <div className="px-2 py-1 rounded-lg bg-white/85 border border-[#B2DFDB] text-[10.5px] font-black text-[#102A43] flex items-center justify-between">
+            <span>দোকানের মোট পুঁজি ট্র্যাকার</span>
+            <span className="text-[#0E6B6B]">মোট পুঁজি: ৳{capitalBreakdown.currentRunningCapital.toLocaleString('bn-BD')}</span>
           </div>
 
           {isEditingCapital && onSaveInitialStoreCapital && (

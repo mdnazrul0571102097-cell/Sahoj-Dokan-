@@ -324,17 +324,17 @@ export const RunningCapitalCard: React.FC<Props> = ({
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-200 leading-none">
-                ভার্চুয়াল পুঁজি ও নগদ ক্যাশ ট্র্যাকার (শুরুর পুঁজি: ৳{formatBnNumber(stats.initialCapital)})
-              </span>
+              <h4 className="text-xs sm:text-sm font-black text-white tracking-tight leading-tight">
+                দোকানের মোট পুঁজি ট্র্যাকার
+              </h4>
               {savedToast && (
                 <span className="px-1.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 text-[9px] font-black leading-none">
                   ✓ আপডেট হয়েছে
                 </span>
               )}
             </div>
-            <p className="text-[11px] sm:text-xs font-extrabold text-amber-200 leading-snug mt-0.5">
-              মূল মালের পুঁজি: ৳{formatBnNumber(stats.remainingGoodsCapital)} | ক্যাশ বাক্সে নগদ: ৳{formatBnNumber(stats.drawerCash)}{stats.customerDue > 0 ? ` | কাস্টমার বাকি: ৳${formatBnNumber(stats.customerDue)}` : ''} | লাভ: ৳{formatBnNumber(stats.displayProfit)} | মোট পুঁজি: ৳{formatBnNumber(stats.currentRunningCapital)}
+            <p className="text-[11px] font-semibold text-emerald-200/90 leading-tight mt-0.5">
+              শুরুর পুঁজি: ৳{formatBnNumber(stats.initialCapital)}
             </p>
           </div>
         </div>
