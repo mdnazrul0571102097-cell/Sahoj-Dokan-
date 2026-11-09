@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Customer, BakiTransaction, ShopProfile, Language, Supplier, SupplierTransaction, AppMode } from '../types';
 import { translations } from '../i18n/translations';
 import { playSuccessChime } from '../utils/audio';
@@ -101,6 +101,37 @@ export const BakiKhataView: React.FC<Props> = ({
   const [customerForAddDue, setCustomerForAddDue] = useState<Customer | null>(null);
   const [newDueAmount, setNewDueAmount] = useState<number | ''>('');
   const [newDueNote, setNewDueNote] = useState('');
+
+  // Register sub-view back handler for Android hardware back button
+  useEffect(() => {
+    (window as any).__sdSubViewBack = () => {
+      if (showAddCustomerModal) {
+        setShowAddCustomerModal(false);
+        return true;
+      }
+      if (showPaymentModal) {
+        setShowPaymentModal(false);
+        return true;
+      }
+      if (showAddDueModal) {
+        setShowAddDueModal(false);
+        return true;
+      }
+      if (selectedCustomer) {
+        setConfirmDeleteCustomerId(null);
+        setSelectedCustomer(null);
+        return true;
+      }
+      if (activeSubTab !== 'customers') {
+        setActiveSubTab('customers');
+        return true;
+      }
+      return false;
+    };
+    return () => {
+      (window as any).__sdSubViewBack = null;
+    };
+  }, [showAddCustomerModal, showPaymentModal, showAddDueModal, selectedCustomer, activeSubTab]);
 
   // Forms
   const [name, setName] = useState('');

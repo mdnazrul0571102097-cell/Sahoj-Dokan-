@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Sale,
   PurchaseRecord,
@@ -172,6 +172,36 @@ export const ReportsView: React.FC<Props> = ({
   const [editPaidAmount, setEditPaidAmount] = useState<string>('');
   const [isQuickSaleOpen, setIsQuickSaleOpen] = useState(false);
   const [quickSaleInitialMode] = useState<'sale' | 'return'>('sale');
+
+  // Register sub-view back handler for Android hardware back button
+  useEffect(() => {
+    (window as any).__sdSubViewBack = () => {
+      if (reprintSale) {
+        setReprintSale(null);
+        return true;
+      }
+      if (saleToDelete) {
+        setSaleToDelete(null);
+        return true;
+      }
+      if (saleToEdit) {
+        setSaleToEdit(null);
+        return true;
+      }
+      if (isQuickSaleOpen) {
+        setIsQuickSaleOpen(false);
+        return true;
+      }
+      if (activeTab !== 'sales') {
+        setActiveTab('sales');
+        return true;
+      }
+      return false;
+    };
+    return () => {
+      (window as any).__sdSubViewBack = null;
+    };
+  }, [reprintSale, saleToDelete, saleToEdit, isQuickSaleOpen, activeTab]);
 
   const openEditSaleModal = (sale: Sale) => {
     setSaleToEdit(sale);
@@ -574,20 +604,7 @@ export const ReportsView: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* 3. Slim Day-Close Action Bar */}
-          <div className="bg-gradient-to-r from-[#0E6B6B] to-[#124E4E] rounded-2xl px-3 py-2.5 text-white shadow-2xs mb-2 flex items-center justify-between gap-2.5 shrink-0">
-            <p className="text-[11px] sm:text-xs text-white/95 font-medium leading-snug">
-              রাত ১২ টায় স্বয়ংক্রিয় হিসাব হয়। এর আগে দোকান বন্ধ করতে চাইলে নিচের বাটনে চাপ দিয়ে ড্রয়ার ক্যাশ মিলান।
-            </p>
-            <button
-              type="button"
-              onClick={() => setActiveTab('cashReconciliation')}
-              className="px-3 py-1.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black text-xs flex items-center gap-1 shadow-xs transition active:scale-95 shrink-0 cursor-pointer whitespace-nowrap"
-            >
-              <Store className="w-3.5 h-3.5" />
-              <span>ডে ক্লোজ</span>
-            </button>
-          </div>
+
 
           {/* 1. Clean & Compact Sales & Invoice List Section (without duplicate Quick Sale / Return buttons) */}
           <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-2xs border border-[#E2E8F0]">

@@ -1,5 +1,6 @@
 package com.sahojdokan.pos;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -10,6 +11,7 @@ import android.print.PrintDocumentAdapter;
 import android.print.PrintManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+import androidx.activity.OnBackPressedCallback;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -26,6 +28,32 @@ public class MainActivity extends BridgeActivity {
             }
         } catch (Exception ignored) {
         }
+
+        // Intercept hardware/system Back button and delegate to React navigation stack
+        this.getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                try {
+                    if (MainActivity.this.bridge != null && MainActivity.this.bridge.getWebView() != null) {
+                        WebView webView = MainActivity.this.bridge.getWebView();
+                        webView.post(() -> {
+                            webView.evaluateJavascript(
+                                "(function() { try { return window.__handleAndroidBack ? window.__handleAndroidBack() : 'NOT_READY'; } catch(e) { return 'ERR'; } })()",
+                                value -> {
+                                    if (value != null && value.contains("EXIT_APP")) {
+                                        MainActivity.this.finish();
+                                    }
+                                }
+                            );
+                        });
+                    } else {
+                        MainActivity.this.finish();
+                    }
+                } catch (Exception e) {
+                    MainActivity.this.finish();
+                }
+            }
+        });
     }
 
     public static class AndroidAppBridge {
@@ -36,6 +64,14 @@ public class MainActivity extends BridgeActivity {
         public AndroidAppBridge(Context context, WebView webView) {
             this.context = context;
             this.webView = webView;
+        }
+
+        @JavascriptInterface
+        public void exitApp() {
+            if (context instanceof Activity) {
+                final Activity activity = (Activity) context;
+                activity.runOnUiThread(activity::finish);
+            }
         }
 
         @JavascriptInterface

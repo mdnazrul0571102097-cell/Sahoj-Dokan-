@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Product,
   CartItem,
@@ -99,6 +99,155 @@ export default function App() {
     } catch (_) {}
     return 'light';
   });
+
+  // Back navigation & double-tap-to-exit state
+  const [exitToastVisible, setExitToastVisible] = useState<boolean>(false);
+  const lastBackPressRef = useRef<number>(0);
+  const lastBackEventHandledRef = useRef<number>(0);
+  const exitToastTimeoutRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Cleanup any legacy auto-withdrawal entries on mount
+    const cleanedOwnerTxs = DB.getOwnerTransactions();
+    setOwnerTransactions(cleanedOwnerTxs);
+  }, []);
+
+  // Global Android Back Button & Browser PopState Navigation Handler
+  useEffect(() => {
+    const closeTopmostDomModal = (): boolean => {
+      try {
+        // Find all full-screen modal overlays currently mounted in the DOM
+        const overlays = Array.from(
+          document.querySelectorAll<HTMLElement>('div.fixed.inset-0')
+        ).filter((el) => {
+          // Do not close Auth PIN Lock screen or Remote Admin Block screen
+          if (el.dataset.nonDismissible === 'true') return false;
+          if (el.textContent?.includes('পিন দিয়ে আনলক করুন') || el.textContent?.includes('অ্যাকাউন্ট সাময়িকভাবে ব্লক')) {
+            return false;
+          }
+          return el.offsetParent !== null || getComputedStyle(el).display !== 'none';
+        });
+
+        if (overlays.length === 0) return false;
+        const topModal = overlays[overlays.length - 1];
+
+        // Look for an explicit close button inside the topmost modal
+        const buttons = Array.from(topModal.querySelectorAll<HTMLButtonElement>('button'));
+        // 1. Button with X icon (lucide-x) or explicit close attribute
+        const xBtn = buttons.find(
+          (btn) =>
+            btn.dataset.modalClose === 'true' ||
+            btn.querySelector('svg.lucide-x') !== null ||
+            btn.textContent?.trim() === '✕'
+        );
+        if (xBtn) {
+          xBtn.click();
+          return true;
+        }
+
+        // 2. Cancel / Close text button
+        const cancelBtn = buttons.find((btn) => {
+          const txt = (btn.textContent || '').trim();
+          return (
+            txt === 'বাতিল' ||
+            txt === 'বন্ধ করুন' ||
+            txt === 'পরে করব' ||
+            txt === 'না, থাকুক' ||
+            txt === 'ফিরে যান' ||
+            txt === 'Close' ||
+            txt === 'Cancel'
+          );
+        });
+        if (cancelBtn) {
+          cancelBtn.click();
+          return true;
+        }
+      } catch (_) {}
+      return false;
+    };
+
+    const handleBackAction = (): string => {
+      const now = Date.now();
+      // Prevent duplicate execution if both popstate and Android native callback fire simultaneously
+      if (now - lastBackEventHandledRef.current < 180) {
+        return 'DEBOUNCED';
+      }
+      lastBackEventHandledRef.current = now;
+
+      // 1. Check top-level App modals first
+      if (isAdminPanelOpen) {
+        setIsAdminPanelOpen(false);
+        return 'MODAL_CLOSED';
+      }
+      if (isSubscriptionModalOpen) {
+        setIsSubscriptionModalOpen(false);
+        return 'MODAL_CLOSED';
+      }
+      if (showLanguageModal) {
+        setShowLanguageModal(false);
+        return 'MODAL_CLOSED';
+      }
+
+      // 2. Check any open child modal in the DOM (e.g. Add Product, Quick Sale, Day Close, Receipt, Camera, etc.)
+      if (!isLocked && closeTopmostDomModal()) {
+        return 'MODAL_CLOSED';
+      }
+
+      // 3. Check registered sub-view back handler (e.g. inside ReportsView sub-tabs or BakiKhataView customer details)
+      if (!isLocked && typeof (window as any).__sdSubViewBack === 'function') {
+        const handledBySubView = (window as any).__sdSubViewBack();
+        if (handledBySubView) {
+          return 'SUBVIEW_BACK';
+        }
+      }
+
+      // 4. If user is on any tab other than Home ('pos'), navigate back to Home ('pos')
+      if (!isLocked && activeTab !== 'pos') {
+        setActiveTab('pos');
+        return 'TAB_BACK';
+      }
+
+      // 5. On Home screen ('pos') with no modals open: require double-tap within 2 seconds to exit
+      if (now - lastBackPressRef.current < 2200) {
+        setExitToastVisible(false);
+        if ((window as any).AndroidApp?.exitApp) {
+          (window as any).AndroidApp.exitApp();
+        }
+        return 'EXIT_APP';
+      }
+
+      lastBackPressRef.current = now;
+      setExitToastVisible(true);
+      if (exitToastTimeoutRef.current) clearTimeout(exitToastTimeoutRef.current);
+      exitToastTimeoutRef.current = setTimeout(() => {
+        setExitToastVisible(false);
+      }, 2200);
+      return 'SHOW_EXIT_TOAST';
+    };
+
+    (window as any).__handleAndroidBack = handleBackAction;
+
+    // Also keep browser history guard for WebView / mobile browser back gestures
+    try {
+      if (!window.history.state || !window.history.state.sahojBackGuard) {
+        window.history.pushState({ sahojBackGuard: true }, '');
+      }
+    } catch (_) {}
+
+    const onPopState = () => {
+      const res = handleBackAction();
+      if (res !== 'EXIT_APP') {
+        try {
+          window.history.pushState({ sahojBackGuard: true }, '');
+        } catch (_) {}
+      }
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+    };
+  }, [activeTab, isLocked, isAdminPanelOpen, isSubscriptionModalOpen, showLanguageModal]);
 
   useEffect(() => {
     try {
@@ -1202,6 +1351,13 @@ export default function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Double-Tap Back to Exit Toast Notification */}
+      {exitToastVisible && (
+        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-[100] pointer-events-none px-4 py-2 rounded-full bg-[#102A43]/95 text-white text-xs font-extrabold shadow-lg border border-white/15 whitespace-nowrap">
+          অ্যাপ থেকে বের হতে পুনরায় ব্যাক বাটন চাপুন
         </div>
       )}
     </div>

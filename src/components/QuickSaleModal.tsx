@@ -157,7 +157,7 @@ export const QuickSaleModal: React.FC<Props> = ({
         expenses,
         ownerTransactions,
       }),
-    [initialStoreCapital, sales, bulkPurchases, purchases, expenses, ownerTransactions]
+    [initialStoreCapital, sales, bulkPurchases, purchases, expenses, ownerTransactions, customers]
   );
 
   if (!isOpen) return null;

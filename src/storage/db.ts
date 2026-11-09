@@ -870,7 +870,26 @@ export const DB = {
       const data = localStorage.getItem(STORAGE_KEYS.OWNER_TXS);
       if (data) {
         const parsed = JSON.parse(data);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter((tx) => {
+            if (!tx || !tx.id) return false;
+            const id = String(tx.id);
+            const note = String(tx.note || '');
+            if (
+              id.startsWith('tx_close_') ||
+              id.startsWith('tx_autoclose_') ||
+              note.includes('রাতের ক্যাশ টাকা বাসায় নেওয়া') ||
+              note.includes('রাত ১২টা অটো ক্লোজ')
+            ) {
+              return false;
+            }
+            return true;
+          });
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem(STORAGE_KEYS.OWNER_TXS, JSON.stringify(cleaned));
+          }
+          return cleaned;
+        }
       }
     } catch (e) {
       console.error(e);
@@ -879,10 +898,20 @@ export const DB = {
   },
 
   saveOwnerTransactions(txs: OwnerTransaction[]) {
-    // Deduplicate by id
+    // Deduplicate by id and strip any legacy auto-withdrawal entries
     const seen = new Set<string>();
     const deduped = txs.filter((tx) => {
       if (!tx || !tx.id || seen.has(tx.id)) return false;
+      const id = String(tx.id);
+      const note = String(tx.note || '');
+      if (
+        id.startsWith('tx_close_') ||
+        id.startsWith('tx_autoclose_') ||
+        note.includes('রাতের ক্যাশ টাকা বাসায় নেওয়া') ||
+        note.includes('রাত ১২টা অটো ক্লোজ')
+      ) {
+        return false;
+      }
       seen.add(tx.id);
       return true;
     });

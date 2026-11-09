@@ -8,6 +8,7 @@ import {
   PurchaseRecord,
   Expense,
 } from '../types';
+import { DB } from '../storage/db';
 import { playSuccessChime } from '../utils/audio';
 import { RunningCapitalCard } from './RunningCapitalCard';
 import {
@@ -17,6 +18,7 @@ import {
   Landmark,
   Plus,
   Trash2,
+  Edit2,
   X,
   Link2,
   Calendar,
@@ -78,6 +80,7 @@ export const OwnerCapitalManager: React.FC<Props> = ({
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingTx, setEditingTx] = useState<OwnerTransaction | null>(null);
   const [txType, setTxType] = useState<OwnerTransactionType>('withdrawal');
   const [amountInput, setAmountInput] = useState<string>('');
   const [noteInput, setNoteInput] = useState<string>('');
@@ -154,11 +157,22 @@ export const OwnerCapitalManager: React.FC<Props> = ({
   }, [periodTransactions]);
 
   const handleOpenAddModal = (initialType: OwnerTransactionType) => {
+    setEditingTx(null);
     setTxType(initialType);
     setAmountInput('');
     setNoteInput('');
     setTxDate(todayStr);
     setLinkedWithdrawalId('');
+    setShowAddModal(true);
+  };
+
+  const handleOpenEditModal = (tx: OwnerTransaction) => {
+    setEditingTx(tx);
+    setTxType(tx.type);
+    setAmountInput(String(tx.amount || ''));
+    setNoteInput(tx.note || '');
+    setTxDate(getLocalDateStr(tx.date) || todayStr);
+    setLinkedWithdrawalId(tx.linkedWithdrawalId || '');
     setShowAddModal(true);
   };
 
@@ -185,6 +199,27 @@ export const OwnerCapitalManager: React.FC<Props> = ({
       capital_deposit: 'মালিকের নতুন পুঁজি জমা',
     };
 
+    if (editingTx) {
+      const updatedTx: OwnerTransaction = {
+        ...editingTx,
+        date: isoDate,
+        type: txType,
+        amount: numericAmount,
+        note: noteInput.trim() || defaultNotes[txType],
+        linkedWithdrawalId:
+          txType === 'withdrawal_return' && linkedWithdrawalId ? linkedWithdrawalId : undefined,
+      };
+      // Replace existing in DB
+      const currentList = DB.getOwnerTransactions();
+      const nextList = currentList.map((t: OwnerTransaction) => (t.id === editingTx.id ? updatedTx : t));
+      DB.saveOwnerTransactions(nextList);
+      onAddOwnerTransaction(updatedTx);
+      playSuccessChime();
+      setShowAddModal(false);
+      setEditingTx(null);
+      return;
+    }
+
     const newTx: OwnerTransaction = {
       id: `otx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       date: isoDate,
@@ -199,6 +234,7 @@ export const OwnerCapitalManager: React.FC<Props> = ({
     onAddOwnerTransaction(newTx);
     playSuccessChime();
     setShowAddModal(false);
+    setEditingTx(null);
   };
 
   const getTypeBadge = (type: OwnerTransactionType) => {
@@ -451,14 +487,25 @@ export const OwnerCapitalManager: React.FC<Props> = ({
                       </span>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setTxToDelete(tx)}
-                      className="p-2 rounded-xl bg-[#FFEBEE] text-[#D32F2F] hover:bg-rose-200 border border-rose-200 transition cursor-pointer"
-                      title="মুছে ফেলুন"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditModal(tx)}
+                        className="p-2 rounded-xl bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] border border-[#80CBC4] transition cursor-pointer"
+                        title="এডিট করুন"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setTxToDelete(tx)}
+                        className="p-2 rounded-xl bg-[#FFEBEE] text-[#D32F2F] hover:bg-rose-200 border border-rose-200 transition cursor-pointer"
+                        title="মুছে ফেলুন"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -473,7 +520,9 @@ export const OwnerCapitalManager: React.FC<Props> = ({
           <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-[#E2E8F0] overflow-hidden">
             <div className="px-5 py-4 bg-[#0E6B6B] text-white flex items-center justify-between">
               <h3 className="font-extrabold text-base">
-                {txType === 'withdrawal'
+                {editingTx
+                  ? 'লেনদেন এডিট করুন'
+                  : txType === 'withdrawal'
                   ? 'মালিকের ব্যক্তিগত খরচ/নেওয়া'
                   : txType === 'withdrawal_return'
                   ? 'নেওয়া টাকা ক্যাশে ফেরত'
@@ -481,7 +530,10 @@ export const OwnerCapitalManager: React.FC<Props> = ({
               </h3>
               <button
                 type="button"
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditingTx(null);
+                }}
                 className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -590,7 +642,10 @@ export const OwnerCapitalManager: React.FC<Props> = ({
               <div className="flex items-center gap-2.5 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setEditingTx(null);
+                  }}
                   className="flex-1 py-3 rounded-2xl bg-[#EDF2F7] text-[#102A43] font-bold text-xs sm:text-sm cursor-pointer"
                 >
                   বাতিল
@@ -599,7 +654,7 @@ export const OwnerCapitalManager: React.FC<Props> = ({
                   type="submit"
                   className="flex-1 py-3 rounded-2xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-extrabold text-xs sm:text-sm shadow-sm cursor-pointer"
                 >
-                  সংরক্ষণ করুন
+                  {editingTx ? 'আপডেট করুন' : 'সংরক্ষণ করুন'}
                 </button>
               </div>
             </form>

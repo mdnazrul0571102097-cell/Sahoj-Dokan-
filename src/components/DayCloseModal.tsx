@@ -201,24 +201,8 @@ export const DayCloseModal: React.FC<Props> = ({
     }
   };
 
-  // 3. Save Day Close Reconciliation & Automatically Log Cash Home Takeout
+  // 3. Save Day Close Reconciliation (Standard Carry-Forward to Next Day's Opening Cash)
   const handleSaveAndConfirm = () => {
-    const takeHomeAmount = hasDrawerCount && drawerCash !== null && drawerCash > 0
-      ? drawerCash
-      : dayData.displayClosingCash;
-
-    if (takeHomeAmount > 0 && onAddOwnerTransaction) {
-      const withdrawalTx = {
-        id: `tx_close_${dayData.dateStr}_${Date.now()}`,
-        type: 'withdrawal' as const,
-        amount: takeHomeAmount,
-        note: 'দোকান ক্লোজ: রাতের ক্যাশ টাকা বাসায় নেওয়া',
-        date: dayData.dateStr,
-        createdAt: new Date().toISOString(),
-      };
-      onAddOwnerTransaction(withdrawalTx);
-    }
-
     if (onSaveDailyReconciliation) {
       const recon: DailyCashReconciliation = {
         id: `recon_${dayData.dateStr}`,
@@ -231,12 +215,12 @@ export const DayCloseModal: React.FC<Props> = ({
         cashPurchases: dayData.cashPurchases,
         supplierDuePaid: dayData.supplierDuePaid,
         shopExpenses: dayData.shopExpenses,
-        ownerWithdrawal: dayData.ownerWithdrawal + (takeHomeAmount > 0 ? takeHomeAmount : 0),
+        ownerWithdrawal: dayData.ownerWithdrawal,
         otherCashOut: dayData.otherCashOut,
         expectedClosingCash: dayData.displayClosingCash,
         actualClosingCash: hasDrawerCount ? drawerCash : dayData.displayClosingCash,
         difference: hasDrawerCount ? difference : 0,
-        note: closingNote.trim() || 'দোকান ক্লোজ: রাতের টাকা বাসায় নেওয়া (ক্যাশ শূন্য)',
+        note: closingNote.trim() || 'দৈনিক হিসাব ক্লোজ সম্পন্ন',
         isClosed: true,
         closedAt: new Date().toISOString(),
       };
@@ -524,14 +508,14 @@ export const DayCloseModal: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Auto Reset Notice */}
+          {/* Carry-Forward Notice */}
           <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-[#0E6B6B] space-y-1">
             <span className="font-black flex items-center gap-1.5 text-sm text-[#102A43]">
               <CheckCircle2 className="w-4 h-4 text-[#2E7D32]" />
-              দোকান ক্লোজ ও রাতের ক্যাশ নিয়ম:
+              দোকান ক্লোজ ও সকালের ক্যাশ নিয়ম:
             </span>
             <p className="text-[#486581] font-medium leading-relaxed">
-              ক্লোজিং সম্পন্ন করলে ক্যাশ বাক্সে থাকা অবশিষ্ট সমস্ত টাকা (<strong>৳ {dayData.displayClosingCash.toLocaleString()}</strong>) স্বয়ংক্রিয়ভাবে &quot;মালিকের টাকা বাসায় নেওয়া&quot; হিসেবে হিসাবভুক্ত হয়ে ক্যাশ ড্রয়ার <strong>৳০</strong> হয়ে যাবে। পরের দিন সকালে ক্যাশ ড্রয়ার একদম ফ্রেশ (৳০) থেকে শুরু হবে।
+              ক্লোজিং সম্পন্ন করলে আজকের সমাপনী ক্যাশ (<strong>৳ {dayData.displayClosingCash.toLocaleString()}</strong>) স্বয়ংক্রিয়ভাবে পরের দিনের &quot;সকালের ক্যাশ&quot; (Opening Cash) হিসেবে যুক্ত হবে এবং প্রতিদিনের বিক্রি ও খরচ নতুন করে (৳০ থেকে) শুরু হবে।
             </p>
           </div>
 
@@ -580,7 +564,7 @@ export const DayCloseModal: React.FC<Props> = ({
               className="w-full py-3.5 rounded-2xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition active:scale-95 cursor-pointer"
             >
               <CheckCircle2 className="w-5 h-5 text-emerald-300" />
-              <span>টাকা বাসায় নিয়ে দোকান ক্লোজিং সম্পন্ন করুন (৳০ রিসেট)</span>
+              <span>আজকের হিসাব মিলিয়ে ডে ক্লোজ সম্পন্ন করুন</span>
             </button>
           </div>
         </div>

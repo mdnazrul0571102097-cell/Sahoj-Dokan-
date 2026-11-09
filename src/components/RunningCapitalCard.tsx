@@ -75,6 +75,7 @@ export function calculateRunningCapital({
   let todaySalesProfit = 0;
   let totalCostOfGoodsSold = 0;
   let totalCashSalesCollected = 0;
+  let totalSalesDue = 0;
 
   for (const s of sales) {
     const grand = Number(s.grandTotal) || 0;
@@ -118,6 +119,11 @@ export function calculateRunningCapital({
       s.id.startsWith('return_') && grand === 0 ? 0 : Math.round(grand - sProfit);
     totalCostOfGoodsSold += sCost;
 
+    // Due amount from this sale
+    const sDue =
+      s.id.startsWith('return_') || grand < 0 ? 0 : Math.max(0, Number(s.dueAmount) || 0);
+    totalSalesDue += sDue;
+
     // Physical cash collected in drawer from this sale
     const sCash =
       s.id.startsWith('return_') || grand < 0 || (s.paidAmount || 0) < 0
@@ -128,7 +134,7 @@ export function calculateRunningCapital({
               ? grand
               : s.profit || 0
           )
-        : Math.max(0, grand - (Number(s.dueAmount) || 0));
+        : Math.max(0, grand - sDue);
     totalCashSalesCollected += sCash;
   }
 
@@ -138,6 +144,21 @@ export function calculateRunningCapital({
   todaySalesProfit = Math.round(todaySalesProfit);
   totalCostOfGoodsSold = Math.round(totalCostOfGoodsSold);
   totalCashSalesCollected = Math.round(totalCashSalesCollected);
+  totalSalesDue = Math.round(totalSalesDue);
+
+  // কাস্টমারের বকেয়া আদায় ও মোট বাকি পাওনা (Customer Due & Due Collected)
+  const bakiTxs = DB.getBakiTransactions();
+  const customersList = DB.getCustomers();
+  const customerDueCollected = Math.round(
+    bakiTxs
+      .filter((tx) => tx.type === 'payment_received')
+      .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
+  );
+  const customerDueFromCustomers = Math.round(
+    customersList.reduce((sum, c) => sum + Math.max(0, Number(c.totalDue) || 0), 0)
+  );
+  const salesDueRemaining = Math.max(0, Math.round(totalSalesDue - customerDueCollected));
+  const customerDue = Math.max(customerDueFromCustomers, salesDueRemaining);
 
   // ৩. মাল ক্রয় / রিস্টক (Bulk Purchases + Direct Product Restocks)
   const bulkPurchaseCost = Math.round(
@@ -176,31 +197,47 @@ export function calculateRunningCapital({
       .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
   );
 
-  // ৫. মালিকের উত্তোলন ও অতিরিক্ত পুঁজি জমা
+  // ৫. মালিকের উত্তোলন ও অতিরিক্ত পুঁজি জমা (শুধুমাত্র ম্যানুয়াল এন্ট্রি, কোনো অটো-উত্তোলন নয়)
+  const manualOwnerTxs = (ownerTransactions || []).filter((tx) => {
+    if (!tx) return false;
+    const id = String(tx.id || '');
+    const note = String(tx.note || '');
+    if (
+      id.startsWith('tx_close_') ||
+      id.startsWith('tx_autoclose_') ||
+      note.includes('রাতের ক্যাশ টাকা বাসায় নেওয়া') ||
+      note.includes('রাত ১২টা অটো ক্লোজ')
+    ) {
+      return false;
+    }
+    return true;
+  });
+
   const totalWithdrawals = Math.round(
-    ownerTransactions
+    manualOwnerTxs
       .filter((tx) => tx.type === 'withdrawal')
       .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
   );
   const totalOwnerAdded = Math.round(
-    ownerTransactions
+    manualOwnerTxs
       .filter((tx) => tx.type === 'withdrawal_return' || tx.type === 'capital_deposit')
       .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
   );
   const netOwnerWithdrawal = Math.max(0, totalWithdrawals - totalOwnerAdded);
 
-  // ৬. ভার্চুয়াল পুঁজি ট্র্যাকার (Quick Sales & Virtual Capital Breakdown):
-  // - অবশিষ্ট/মূল মালের পুঁজি (Remaining Goods Capital) = শুরুর মালের পুঁজি - বিক্রিত মালের কেনা দাম + নতুন মাল ক্রয়
+  // ৬. পুঁজি ও নগদ ক্যাশ ট্র্যাকার (Stock Value + Cash in Hand + Customer Due):
+  // - বর্তমান স্টক মালের ক্রয়মূল্য (Remaining Goods Capital / Stock Value) = শুরুর মালের পুঁজি - বিক্রিত মালের কেনা দাম + নতুন মাল ক্রয়
   const remainingGoodsCapital = Math.max(
     0,
     Math.round(initialCapital - totalCostOfGoodsSold + totalPurchases)
   );
 
-  // - ক্যাশ বাক্সে নগদ (Cash in Drawer) = নগদ বিক্রি আদায় + মালিকের জমা - দোকান খরচ - নগদ মাল কেনা - মালিকের উত্তোলন (শুরুর ড্রয়ার ক্যাশ ৳০)
+  // - ক্যাশ বাক্সে নগদ টাকা (Cash in Hand) = নগদ বিক্রি আদায় + কাস্টমার বকেয়া আদায় + মালিকের জমা - দোকান খরচ - নগদ মাল কেনা - মালিকের ম্যানুয়াল উত্তোলন
   const drawerCash = Math.max(
     0,
     Math.round(
       totalCashSalesCollected +
+        customerDueCollected +
         totalOwnerAdded -
         totalExpenses -
         cashPurchasesPaid -
@@ -214,13 +251,14 @@ export function calculateRunningCapital({
   const displayProfit =
     todaySalesProfit !== 0 || todayExpenses !== 0 ? todayNetProfit : totalNetProfit;
 
-  // - মোট চলমান পুঁজি (Total Capital) = অবশিষ্ট মালের পুঁজি + ক্যাশ বাক্সে নগদ
-  const currentRunningCapital = remainingGoodsCapital + drawerCash;
+  // - বর্তমান মোট পুঁজি = বর্তমান স্টক মালের ক্রয়মূল্য (Stock Value) + ক্যাশ বাক্সে নগদ টাকা (Cash in Hand) + কাস্টমারের মোট বাকি পাওনা
+  const currentRunningCapital = remainingGoodsCapital + drawerCash + customerDue;
 
   return {
     initialCapital,
     remainingGoodsCapital,
     drawerCash,
+    customerDue,
     todaySalesProfit,
     todayNetProfit,
     totalSalesProfit,
@@ -296,7 +334,7 @@ export const RunningCapitalCard: React.FC<Props> = ({
               )}
             </div>
             <p className="text-[11px] sm:text-xs font-extrabold text-amber-200 leading-snug mt-0.5">
-              মূল মালের পুঁজি: ৳{formatBnNumber(stats.remainingGoodsCapital)} | ক্যাশ বাক্সে নগদ: ৳{formatBnNumber(stats.drawerCash)} | লাভ: ৳{formatBnNumber(stats.displayProfit)} | মোট পুঁজি: ৳{formatBnNumber(stats.currentRunningCapital)}
+              মূল মালের পুঁজি: ৳{formatBnNumber(stats.remainingGoodsCapital)} | ক্যাশ বাক্সে নগদ: ৳{formatBnNumber(stats.drawerCash)}{stats.customerDue > 0 ? ` | কাস্টমার বাকি: ৳${formatBnNumber(stats.customerDue)}` : ''} | লাভ: ৳{formatBnNumber(stats.displayProfit)} | মোট পুঁজি: ৳{formatBnNumber(stats.currentRunningCapital)}
             </p>
           </div>
         </div>
@@ -354,7 +392,7 @@ export const RunningCapitalCard: React.FC<Props> = ({
 
         <div className="rounded-xl bg-amber-400/20 border border-amber-300/40 px-2.5 py-1.5">
           <span className="block text-[10px] font-extrabold text-amber-200 leading-tight">
-            মোট পুঁজি (মাল + নগদ)
+            {stats.customerDue > 0 ? 'মোট পুঁজি (মাল+নগদ+বাকি)' : 'মোট পুঁজি (মাল + নগদ)'}
           </span>
           <span className="text-sm sm:text-base font-black text-white tabular-nums">
             ৳{formatBnNumber(stats.currentRunningCapital)}

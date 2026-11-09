@@ -342,56 +342,23 @@ export const CashReconciliationManager: React.FC<Props> = ({
     todayStr,
   ]);
 
-  // Compute "সকালের ক্যাশ (Opening Balance)" for any targetDate:
-  // Every morning starts strictly at ৳0. Previous day's cash is taken home at night (৳0 close).
-  // If the owner brought morning change or set opening capital for a specific day, it is recorded.
+  // Standard Carry-Forward Opening Cash:
+  // Previous day's closing cash (Closing Cash / ক্যাশ বাক্সে যা ছিল) automatically carries forward
+  // as the next day's morning cash (সকালের ক্যাশ / Opening Cash).
   const computeAutoOpeningCashForDate = (targetDate: string): number => {
-    const savedRecon = dailyReconciliations.find((r) => r.date === targetDate);
-    if (savedRecon && typeof savedRecon.openingCash === 'number') {
-      return Math.round(savedRecon.openingCash);
+    let runningBalance = Math.max(0, Math.round(initialOpeningCash || 0));
+    for (const d of allRecordedDates) {
+      if (d >= targetDate) break;
+      const flow = computeDayFlows(d);
+      const rawClosing = runningBalance + flow.totalCashIn - flow.totalCashOut;
+      runningBalance = Math.max(0, rawClosing);
     }
-    return 0;
+    const savedRecon = dailyReconciliations.find((r) => r.date === targetDate);
+    if (savedRecon && typeof savedRecon.openingCash === 'number' && savedRecon.openingCash > 0 && runningBalance === 0) {
+      return Math.max(0, Math.round(savedRecon.openingCash));
+    }
+    return runningBalance;
   };
-
-  // Automatic midnight rollover & past day auto-close:
-  // When midnight strikes (d < todayStr) or when app opens, any previous day with unclosed cash
-  // automatically transfers remaining drawer cash as "মালিকের টাকা বাসায় নেওয়া / উত্তোলন"
-  // so the cash drawer resets to ৳0 for a clean morning.
-  useEffect(() => {
-    const autoClosePastDays = () => {
-      const currentToday = getLocalDateStr(new Date());
-      allRecordedDates.forEach((d) => {
-        if (d < currentToday) {
-          const hasClosingWithdrawal = ownerTransactions.some(
-            (tx) =>
-              tx.date === d &&
-              tx.type === 'withdrawal' &&
-              (tx.note?.includes('দোকান ক্লোজ') || tx.note?.includes('অটো ক্লোজ'))
-          );
-          if (!hasClosingWithdrawal) {
-            const flow = computeDayFlows(d);
-            const opening = computeAutoOpeningCashForDate(d);
-            const remaining = opening + flow.totalCashIn - flow.totalCashOut;
-            if (remaining > 0 && onAddOwnerTransaction) {
-              const autoCloseTx: OwnerTransaction = {
-                id: `tx_autoclose_${d}_${Date.now()}`,
-                type: 'withdrawal',
-                amount: remaining,
-                note: 'রাত ১২টা অটো ক্লোজ: রাতের ক্যাশ টাকা বাসায় নেওয়া',
-                date: d,
-                createdAt: new Date().toISOString(),
-              };
-              onAddOwnerTransaction(autoCloseTx);
-            }
-          }
-        }
-      });
-    };
-
-    autoClosePastDays();
-    const interval = setInterval(autoClosePastDays, 30000);
-    return () => clearInterval(interval);
-  }, [allRecordedDates, ownerTransactions, todayStr]);
 
   // Live automated data for selectedDate
   const activeDayData = useMemo(() => {
@@ -851,81 +818,26 @@ export const CashReconciliationManager: React.FC<Props> = ({
 
             {/* Step 1: সকালের ক্যাশ (Opening Balance) */}
             <div className="p-3.5 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center justify-between gap-2">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs sm:text-sm font-extrabold text-[#102A43] block">
                       সকালের ক্যাশ (দিনের শুরুতে ক্যাশ বাক্সে থাকা টাকা)
                     </span>
                     <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-[#2E7D32]">
-                      ডিফল্ট ৳০
+                      স্বয়ংক্রিয় ক্যারি-ফরওয়ার্ড
                     </span>
                   </div>
                   <span className="text-[11px] text-[#64748B]">
-                    প্রতিদিন সকালের ক্যাশ শূন্য (৳০) থেকে শুরু হয়। সকালে বাসা থেকে ক্যাশে কোনো টাকা আনলে ডানপাশের বাটনে যোগ করুন।
+                    আগের দিনের সমাপনী ক্যাশ স্বয়ংক্রিয়ভাবে আজকের সকালের ক্যাশ হিসেবে যুক্ত হয়েছে।
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-lg sm:text-xl font-black text-[#102A43]">
+                <div className="text-right shrink-0">
+                  <span className="text-xl sm:text-2xl font-black text-[#102A43]">
                     ৳ {activeDayData.openingCash.toLocaleString()}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setIsAddingMorningCash(!isAddingMorningCash)}
-                    className="px-3 py-1.5 rounded-xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white text-xs font-black transition active:scale-95 cursor-pointer shrink-0"
-                  >
-                    + সকালে ক্যাশে টাকা জমা
-                  </button>
                 </div>
               </div>
-
-              {/* Inline Quick Morning Cash Deposit Form */}
-              {isAddingMorningCash && (
-                <div className="pt-2 border-t border-dashed border-[#E2E8F0] flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-bold text-[#102A43]">সকালে আনা টাকার পরিমাণ:</span>
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-[#64748B]">৳</span>
-                    <input
-                      type="number"
-                      value={morningCashInput}
-                      onChange={(e) => setMorningCashInput(e.target.value)}
-                      placeholder="যেমন: ১০০০"
-                      className="pl-6 pr-3 py-1.5 rounded-xl border border-[#0E6B6B] text-xs font-black w-36 focus:outline-none"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const amt = Number(morningCashInput);
-                      if (amt > 0 && onAddOwnerTransaction) {
-                        onAddOwnerTransaction({
-                          id: `tx_morning_${selectedDate}_${Date.now()}`,
-                          type: 'capital_deposit',
-                          amount: amt,
-                          note: 'সকালের ক্যাশ / ভাঙ্গতি টাকা জমা',
-                          date: selectedDate,
-                          createdAt: new Date().toISOString(),
-                        });
-                        setMorningCashInput('');
-                        setIsAddingMorningCash(false);
-                      }
-                    }}
-                    className="px-3 py-1.5 rounded-xl bg-[#2E7D32] hover:bg-[#256628] text-white text-xs font-black cursor-pointer"
-                  >
-                    যোগ করুন
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMorningCashInput('');
-                      setIsAddingMorningCash(false);
-                    }}
-                    className="px-2.5 py-1.5 rounded-xl bg-[#EDF2F7] text-[#64748B] text-xs font-bold cursor-pointer"
-                  >
-                    বাতিল
-                  </button>
-                </div>
-              )}
             </div>
 
             {/* Step 2: আজকের মোট জমা টাকা (+) and আজকের মোট খরচ ও পরিশোধ (−) */}
@@ -1031,16 +943,16 @@ export const CashReconciliationManager: React.FC<Props> = ({
 
             {/* Step 3: দিন ক্লোজ ও স্বয়ংক্রিয় হিসাব খতিয়ান (Day Close & Completed Rollover History Cards) */}
             <div className="pt-2 space-y-3 border-t border-[#E2E8F0]">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={() => setIsDayCloseOpen(true)}
-                  className="px-4 py-2 rounded-2xl border-2 border-[#80CBC4] bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-[#0E6B6B] via-[#0D7A7A] to-[#124E4E] hover:from-[#0B5656] hover:to-[#0E3D3D] text-white font-black text-sm flex items-center justify-center gap-2 shadow-md border-2 border-emerald-300/40 transition active:scale-95 cursor-pointer ring-2 ring-[#0E6B6B]/20"
                 >
-                  <Store className="w-4 h-4 text-[#0E6B6B]" />
-                  <span>ডে অফ / হিসাব ক্লোজ করুন</span>
+                  <Store className="w-5 h-5 text-emerald-300 shrink-0" />
+                  <span className="tracking-tight">ডে অফ / হিসাব ক্লোজ করুন</span>
                 </button>
-                <span className="text-[11px] font-semibold text-[#64748B]">
+                <span className="text-[11px] font-semibold text-[#64748B] text-center sm:text-right">
                   * রাত ১২:০০ টায় স্বয়ংক্রিয়ভাবে অথবা বাটনে ক্লিক করলে দিনটি ক্লোজ হয়ে নিচে রেকর্ড যুক্ত হয়
                 </span>
               </div>
