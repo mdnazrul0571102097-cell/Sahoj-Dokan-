@@ -24,6 +24,8 @@ public class MainActivity extends BridgeActivity {
                 WebView webView = this.bridge.getWebView();
                 webView.getSettings().setJavaScriptEnabled(true);
                 webView.getSettings().setDomStorageEnabled(true);
+                webView.getSettings().setCacheMode(android.webkit.WebSettings.LOAD_DEFAULT);
+                webView.clearCache(true);
                 webView.addJavascriptInterface(new AndroidAppBridge(this, webView), "AndroidApp");
             }
         } catch (Exception ignored) {
