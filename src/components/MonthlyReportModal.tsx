@@ -96,7 +96,7 @@ export const MonthlyReportModal: React.FC<Props> = ({
     setToastMessage(null);
 
     try {
-      const filename = `SahojDokan-MonthlyReport-${mm}-${yyyy}`;
+      const filename = `Sahoj_Dokan_MonthlyReport_${reportData.selectedMonth}`;
       const success = await exportElementToPdf(reportRef.current, filename, 'portrait');
       if (success) {
         setToastMessage({

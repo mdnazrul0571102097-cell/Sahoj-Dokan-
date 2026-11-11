@@ -21,6 +21,8 @@ import {
   Lock,
   MessageCircle,
   Trash2,
+  Edit2,
+  Info,
 } from 'lucide-react';
 
 interface Props {
@@ -33,6 +35,7 @@ interface Props {
   appMode?: AppMode;
   onOpenSubscriptionModal?: () => void;
   onAddCustomer: (customer: Customer) => void;
+  onUpdateCustomer?: (customer: Customer) => void;
   onReceivePayment: (
     customerId: string,
     amount: number,
@@ -73,6 +76,7 @@ export const BakiKhataView: React.FC<Props> = ({
   appMode = 'trial',
   onOpenSubscriptionModal,
   onAddCustomer,
+  onUpdateCustomer = () => {},
   onReceivePayment,
   onAddDue,
   onDeleteCustomer = () => {},
@@ -93,6 +97,10 @@ export const BakiKhataView: React.FC<Props> = ({
 
   // Modals
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [customerToEdit, setCustomerToEdit] = useState<Customer | null>(null);
+  const [editCustomerName, setEditCustomerName] = useState('');
+  const [editCustomerPhone, setEditCustomerPhone] = useState('');
+  const [editCustomerAddress, setEditCustomerAddress] = useState('');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [customerForPayment, setCustomerForPayment] = useState<Customer | null>(null);
 
@@ -105,6 +113,10 @@ export const BakiKhataView: React.FC<Props> = ({
   // Register sub-view back handler for Android hardware back button
   useEffect(() => {
     (window as any).__sdSubViewBack = () => {
+      if (customerToEdit) {
+        setCustomerToEdit(null);
+        return true;
+      }
       if (showAddCustomerModal) {
         setShowAddCustomerModal(false);
         return true;
@@ -131,7 +143,7 @@ export const BakiKhataView: React.FC<Props> = ({
     return () => {
       (window as any).__sdSubViewBack = null;
     };
-  }, [showAddCustomerModal, showPaymentModal, showAddDueModal, selectedCustomer, activeSubTab]);
+  }, [customerToEdit, showAddCustomerModal, showPaymentModal, showAddDueModal, selectedCustomer, activeSubTab]);
 
   // Forms
   const [name, setName] = useState('');
@@ -184,6 +196,36 @@ export const BakiKhataView: React.FC<Props> = ({
     setAddress('');
     setInitialDue('');
     setShowAddCustomerModal(false);
+  };
+
+  // Open Edit Customer Modal
+  const handleOpenEditCustomer = (cust: Customer) => {
+    setCustomerToEdit(cust);
+    setEditCustomerName(cust.name);
+    setEditCustomerPhone(cust.phone === '---' ? '' : cust.phone);
+    setEditCustomerAddress(cust.address || '');
+  };
+
+  // Submit Edit Customer
+  const handleEditCustomerSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customerToEdit || !editCustomerName.trim()) return;
+
+    const updatedCust: Customer = {
+      ...customerToEdit,
+      name: editCustomerName.trim(),
+      phone: editCustomerPhone.trim() || '---',
+      address: editCustomerAddress.trim(),
+      // Balance is strictly locked & immutable in Edit modal
+      totalDue: customerToEdit.totalDue,
+    };
+
+    onUpdateCustomer(updatedCust);
+    if (selectedCustomer?.id === customerToEdit.id) {
+      setSelectedCustomer(updatedCust);
+    }
+    setCustomerToEdit(null);
+    playSuccessChime();
   };
 
   // Payment received submit
@@ -557,6 +599,19 @@ export const BakiKhataView: React.FC<Props> = ({
                             </span>
                           </div>
 
+                          {/* Edit Customer button */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEditCustomer(cust);
+                            }}
+                            className="p-2 rounded-xl border border-[#B2DFDB] bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] transition active:scale-95 cursor-pointer"
+                            title="কাস্টমার তথ্য এডিট করুন"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+
                           {/* WhatsApp button next to customer (locked after 60 days in Normal Mode) */}
                           <button
                             type="button"
@@ -615,6 +670,17 @@ export const BakiKhataView: React.FC<Props> = ({
                         ৳{selectedCustomer.totalDue}
                       </p>
                     </div>
+                    {/* Edit Customer Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditCustomer(selectedCustomer)}
+                      className="h-8 px-2.5 rounded-xl bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] border border-[#B2DFDB] flex items-center justify-center gap-1 font-bold text-xs transition active:scale-95 cursor-pointer"
+                      title="কাস্টমার তথ্য এডিট করুন"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>এডিট</span>
+                    </button>
+
                     {/* Delete Customer Button: Click twice to confirm delete */}
                     <button
                       type="button"
@@ -914,14 +980,23 @@ export const BakiKhataView: React.FC<Props> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-800 dark:text-slate-100 mb-1">
-                  {t.dueNote}
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-100">
+                    {t.dueNote}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setNewDueNote('ভুল হিসাব সংশোধন')}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-[#D32F2F] hover:bg-rose-100 cursor-pointer"
+                  >
+                    + ভুল হিসাব সংশোধন
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={newDueNote}
                   onChange={(e) => setNewDueNote(e.target.value)}
-                  placeholder="যেমন: ৩ কেজি তেল ও চাল বাকি"
+                  placeholder="যেমন: ৩ কেজি তেল ও চাল বাকি বা ভুল হিসাব সংশোধন"
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-rose-500 focus:outline-none shadow-sm"
                 />
               </div>
@@ -988,14 +1063,23 @@ export const BakiKhataView: React.FC<Props> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-800 dark:text-slate-100 mb-1">
-                  {t.paymentNote}
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-100">
+                    {t.paymentNote}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentNote('ভুল হিসাব সংশোধন')}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] cursor-pointer"
+                  >
+                    + ভুল হিসাব সংশোধন
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={paymentNote}
                   onChange={(e) => setPaymentNote(e.target.value)}
-                  placeholder="যেমন: নগদ পরিশোধ / বিকাশ"
+                  placeholder="যেমন: নগদ পরিশোধ / বিকাশ বা ভুল হিসাব সংশোধন"
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-sm"
                 />
               </div>
@@ -1013,6 +1097,108 @@ export const BakiKhataView: React.FC<Props> = ({
                   className="flex-1 py-2.5 rounded-xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white text-xs font-bold shadow-md shadow-[#0E6B6B]/20"
                 >
                   জমা সম্পন্ন করুন
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Customer Modal */}
+      {customerToEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
+          <div className="w-full max-w-sm rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
+            <div className="p-4 bg-[#0E6B6B] text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-emerald-200" />
+                <h3 className="font-bold text-base">কাস্টমার তথ্য এডিট</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCustomerToEdit(null)}
+                className="p-1 rounded-full hover:bg-white/20 text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditCustomerSubmit} className="p-4 space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-[#102A43] mb-1">
+                  কাস্টমারের নাম *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editCustomerName}
+                  onChange={(e) => setEditCustomerName(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-[#102A43] text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#102A43] mb-1">
+                  মোবাইল নম্বর
+                </label>
+                <input
+                  type="tel"
+                  value={editCustomerPhone}
+                  onChange={(e) => setEditCustomerPhone(e.target.value)}
+                  placeholder="০১৭১xxxxxxx"
+                  className="w-full p-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-[#102A43] text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#102A43] mb-1">
+                  ঠিকানা বা নোট
+                </label>
+                <input
+                  type="text"
+                  value={editCustomerAddress}
+                  onChange={(e) => setEditCustomerAddress(e.target.value)}
+                  placeholder="যেমন: বাজার রোড"
+                  className="w-full p-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-[#102A43] text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]"
+                />
+              </div>
+
+              {/* Read-Only Locked Due Balance */}
+              <div>
+                <label className="block text-xs font-bold text-[#102A43] mb-1 flex items-center justify-between">
+                  <span>বকেয়া টাকা / চলমান ব্যালেন্স (৳)</span>
+                  <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-md flex items-center gap-1 font-bold">
+                    <Lock className="w-3 h-3 text-amber-700" />
+                    লক করা (রিড-অনলি)
+                  </span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    disabled
+                    readOnly
+                    value={customerToEdit.totalDue}
+                    className="w-full p-2.5 rounded-xl border border-[#CBD5E1] bg-[#F1F5F9] text-[#64748B] text-sm font-black font-mono cursor-not-allowed select-none"
+                  />
+                </div>
+                <p className="text-[11px] text-[#64748B] mt-1 flex items-center gap-1">
+                  <Info className="w-3.5 h-3.5 text-[#0E6B6B] shrink-0" />
+                  <span>হিসেবে কোনো ভুল থাকলে খাতা থেকে "ভুল হিসাব সংশোধন" লেনদেন যোগ করে ব্যালেন্স ঠিক করুন।</span>
+                </p>
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCustomerToEdit(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-[#E2E8F0] bg-[#EDF2F7] text-[#102A43] text-xs font-bold cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  আপডেট করুন
                 </button>
               </div>
             </form>

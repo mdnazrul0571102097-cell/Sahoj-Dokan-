@@ -15,8 +15,12 @@ export async function exportElementToPdf(
   filename: string,
   orientation: 'portrait' | 'landscape' = 'portrait'
 ): Promise<boolean> {
-  // If running inside Android WebView where blob downloads might be blocked, also attempt Android native print
-  const cleanFilename = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
+  // Ensure standard naming format starting with "Sahoj_Dokan_"
+  let safeName = filename.trim();
+  if (!safeName.startsWith('Sahoj_Dokan_')) {
+    safeName = `Sahoj_Dokan_${safeName.replace(/^SahojDokan[-_]?/i, '')}`;
+  }
+  const cleanFilename = safeName.endsWith('.pdf') ? safeName : `${safeName}.pdf`;
 
   try {
     const opt: any = {
@@ -38,6 +42,20 @@ export async function exportElementToPdf(
 
     if (typeof html2pdf !== 'undefined') {
       const worker = html2pdf().set(opt).from(element);
+
+      // Check if Android native bridge exists for saving directly to public Environment.DIRECTORY_DOWNLOADS
+      if (typeof window !== 'undefined' && (window as any).AndroidApp?.savePdfToPublicDownloads) {
+        try {
+          const pdfOutputBase64 = await worker.outputPdf('datauristring');
+          const saveResult = (window as any).AndroidApp.savePdfToPublicDownloads(pdfOutputBase64, cleanFilename);
+          if (saveResult && !saveResult.startsWith('ERROR')) {
+            return true;
+          }
+        } catch (bridgeErr) {
+          console.warn('Android bridge savePdfToPublicDownloads failed, falling back to browser save:', bridgeErr);
+        }
+      }
+
       await worker.save();
       return true;
     }

@@ -95,8 +95,6 @@ export const CashReconciliationManager: React.FC<Props> = ({
 }) => {
   const [isDayCloseOpen, setIsDayCloseOpen] = useState(false);
   const [isMonthlyReportOpen, setIsMonthlyReportOpen] = useState(false);
-  const [isAddingMorningCash, setIsAddingMorningCash] = useState(false);
-  const [morningCashInput, setMorningCashInput] = useState('');
   const getLocalDateStr = (d?: string | Date): string => {
     if (!d) return '';
     try {
@@ -947,10 +945,14 @@ export const CashReconciliationManager: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => setIsDayCloseOpen(true)}
-                  className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-[#0E6B6B] via-[#0D7A7A] to-[#124E4E] hover:from-[#0B5656] hover:to-[#0E3D3D] text-white font-black text-sm flex items-center justify-center gap-2 shadow-md border-2 border-emerald-300/40 transition active:scale-95 cursor-pointer ring-2 ring-[#0E6B6B]/20"
+                  className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-500 to-amber-500 hover:from-emerald-700 hover:via-teal-600 hover:to-amber-600 text-white font-black text-sm sm:text-base flex items-center justify-center gap-3 shadow-lg shadow-teal-900/30 border-2 border-amber-300 ring-4 ring-amber-400/30 transition-all transform active:scale-95 cursor-pointer"
                 >
-                  <Store className="w-5 h-5 text-emerald-300 shrink-0" />
-                  <span className="tracking-tight">ডে অফ / হিসাব ক্লোজ করুন</span>
+                  <div className="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-xs shrink-0">
+                    <Store className="w-5 h-5 stroke-[2.5]" />
+                  </div>
+                  <span className="tracking-tight text-white font-black text-sm sm:text-base drop-shadow-sm">
+                    ডে অফ / হিসাব ক্লোজ করুন
+                  </span>
                 </button>
                 <span className="text-[11px] font-semibold text-[#64748B] text-center sm:text-right">
                   * রাত ১২:০০ টায় স্বয়ংক্রিয়ভাবে অথবা বাটনে ক্লিক করলে দিনটি ক্লোজ হয়ে নিচে রেকর্ড যুক্ত হয়

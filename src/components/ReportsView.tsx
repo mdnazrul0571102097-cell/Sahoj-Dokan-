@@ -53,6 +53,7 @@ interface Props {
   onOpenSubscriptionModal?: () => void;
   expenses?: Expense[];
   onAddExpense?: (expense: Expense) => void;
+  onUpdateExpense?: (expense: Expense) => void;
   onDeleteExpense?: (id: string) => void;
   bulkPurchases?: BulkPurchase[];
   suppliers?: Supplier[];
@@ -61,6 +62,10 @@ interface Props {
     purchase: BulkPurchase,
     updatedProducts: Product[],
     supplierDueAddition?: { supplierId: string; dueAmount: number }
+  ) => void;
+  onUpdateBulkPurchase?: (
+    purchase: BulkPurchase,
+    updatedProducts?: Product[]
   ) => void;
   onDeleteBulkPurchase?: (id: string) => void;
   onOpenSupplierKhata?: () => void;
@@ -97,11 +102,13 @@ export const ReportsView: React.FC<Props> = ({
   onOpenSubscriptionModal,
   expenses = [],
   onAddExpense = () => {},
+  onUpdateExpense = () => {},
   onDeleteExpense = () => {},
   bulkPurchases = [],
   suppliers = [],
   products = [],
   onAddBulkPurchase = () => {},
+  onUpdateBulkPurchase = () => {},
   onDeleteBulkPurchase = () => {},
   onOpenSupplierKhata,
   customers = [],
@@ -403,7 +410,7 @@ export const ReportsView: React.FC<Props> = ({
             }`}
           >
             <Wallet className="w-3.5 h-3.5" />
-            <span>খরচের খাতা ({expenses.length})</span>
+            <span>দোকান খরচ ({expenses.length})</span>
           </button>
           <button
             type="button"
@@ -845,18 +852,19 @@ export const ReportsView: React.FC<Props> = ({
         </>
       )}
 
-      {/* Expenses Tab */}
+      {/* Expenses Tab (দোকান খরচ) */}
       {activeTab === 'expenses' && (
         <ExpenseManager
           expenses={expenses}
           profile={profile}
           language={language}
           onAddExpense={onAddExpense}
+          onUpdateExpense={onUpdateExpense}
           onDeleteExpense={onDeleteExpense}
         />
       )}
 
-      {/* Bulk Purchases Tab */}
+      {/* Bulk Purchases Tab (নগদ ক্রয় রসিদ) */}
       {activeTab === 'bulkPurchases' && (
         <BulkPurchaseManager
           bulkPurchases={bulkPurchases}
@@ -865,6 +873,7 @@ export const ReportsView: React.FC<Props> = ({
           profile={profile}
           language={language}
           onAddBulkPurchase={onAddBulkPurchase}
+          onUpdateBulkPurchase={onUpdateBulkPurchase}
           onDeleteBulkPurchase={onDeleteBulkPurchase}
           onOpenSupplierKhata={onOpenSupplierKhata}
         />

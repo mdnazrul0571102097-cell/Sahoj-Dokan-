@@ -20,6 +20,7 @@ import {
   TrendingDown,
   TrendingUp,
   Lock,
+  Info,
 } from 'lucide-react';
 
 interface Props {
@@ -185,8 +186,9 @@ export const SupplierKhataView: React.FC<Props> = ({
       contactPerson: contactPerson.trim(),
       phone: phone.trim() || '---',
       address: address.trim(),
-      totalDue: typeof initialDue === 'number' ? initialDue : target.totalDue,
-      totalPayableDue: typeof initialDue === 'number' ? initialDue : target.totalDue,
+      // Balance is strictly locked & read-only in Edit modal
+      totalDue: target.totalDue ?? 0,
+      totalPayableDue: target.totalPayableDue ?? target.totalDue ?? 0,
     };
 
     onUpdateSupplier(updatedSupp);
@@ -1073,16 +1075,26 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#102A43] mb-1">
-                  বর্তমান বাকি ব্যালেন্স (৳)
+                <label className="block text-xs font-bold text-[#102A43] mb-1 flex items-center justify-between">
+                  <span>বর্তমান বাকি ব্যালেন্স (৳)</span>
+                  <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-md flex items-center gap-1 font-bold">
+                    <Lock className="w-3 h-3 text-amber-700" />
+                    লক করা (রিড-অনলি)
+                  </span>
                 </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={initialDue}
-                  onChange={(e) => setInitialDue(e.target.value === '' ? '' : Number(e.target.value))}
-                  className="w-full p-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-[#102A43] text-sm font-bold font-mono focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]"
-                />
+                <div className="relative">
+                  <input
+                    type="number"
+                    disabled
+                    readOnly
+                    value={initialDue}
+                    className="w-full p-2.5 rounded-xl border border-[#CBD5E1] bg-[#F1F5F9] text-[#64748B] text-sm font-black font-mono cursor-not-allowed select-none"
+                  />
+                </div>
+                <p className="text-[11px] text-[#64748B] mt-1 flex items-center gap-1">
+                  <Info className="w-3.5 h-3.5 text-[#0E6B6B] shrink-0" />
+                  <span>হিসেবে কোনো ভুল থাকলে খাতা থেকে "ভুল হিসাব সংশোধন" লেনদেন যোগ করে ব্যালেন্স ঠিক করুন।</span>
+                </p>
               </div>
 
               <div className="pt-2 flex gap-2">
@@ -1189,14 +1201,23 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#102A43] mb-1">
-                  নোট / বিবরণ (ঐচ্ছিক)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-[#102A43]">
+                    নোট / বিবরণ (ঐচ্ছিক)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentNote('ভুল হিসাব সংশোধন')}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] cursor-pointer"
+                  >
+                    + ভুল হিসাব সংশোধন
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={paymentNote}
                   onChange={(e) => setPaymentNote(e.target.value)}
-                  placeholder="যেমন: রসিদ নং / ব্যাংক চেক নং"
+                  placeholder="যেমন: রসিদ নং / ব্যাংক চেক নং বা ভুল হিসাব সংশোধন"
                   className="w-full p-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-[#102A43] placeholder-[#9AA5B1] text-xs focus:outline-none focus:ring-2 focus:ring-[#2E7D32]"
                 />
               </div>
@@ -1292,14 +1313,23 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#102A43] mb-1">
-                  চালানের বিবরণ / পণ্যের নাম *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-[#102A43]">
+                    চালানের বিবরণ / পণ্যের নাম *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setDueNote('ভুল হিসাব সংশোধন')}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#FFEBEE] text-[#D32F2F] hover:bg-rose-100 cursor-pointer"
+                  >
+                    + ভুল হিসাব সংশোধন
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={dueNote}
                   onChange={(e) => setDueNote(e.target.value)}
-                  placeholder="যেমন: মিনিকেট চাল ৫ বস্তা চালান নং #551"
+                  placeholder="যেমন: মিনিকেট চাল ৫ বস্তা চালান নং #551 বা ভুল হিসাব সংশোধন"
                   className="w-full p-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#D32F2F]"
                 />
               </div>

@@ -20,6 +20,7 @@ import {
   printDirectWebBluetooth,
   printDirectAndroidBridge,
 } from '../utils/escpos';
+import { exportElementToPdf } from '../utils/pdfGenerator';
 
 interface Props {
   sale: Sale;
@@ -414,35 +415,41 @@ ${sale.dueAmount > 0 ? `*বাকি টাকা: ৳${sale.dueAmount}*` : `�
             💡 ছোট থার্মাল প্রিন্টারের জন্য মোবাইলের Bluetooth অন করে প্রিন্টারটি পেয়ার (Pair) করে রাখুন
           </p>
 
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
               onClick={handlePrint}
-              className="py-3 px-3 rounded-2xl bg-emerald-800 hover:bg-emerald-900 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition active:scale-95 cursor-pointer border border-emerald-700"
+              className="py-2.5 px-2 rounded-2xl bg-emerald-800 hover:bg-emerald-900 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-md transition active:scale-95 cursor-pointer border border-emerald-700"
               title="ক্যাশ মেমো প্রিন্ট করুন"
             >
-              <Printer className="w-4 h-4" />
-              <span>{language === 'bn' ? 'প্রিন্ট করুন' : 'Print Receipt'}</span>
-              {appMode === 'normal' && (
-                <span className="text-[10px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-md font-black">
-                  🔒
-                </span>
-              )}
+              <Printer className="w-3.5 h-3.5" />
+              <span>{language === 'bn' ? 'প্রিন্ট' : 'Print'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                const el = document.getElementById('printable-receipt');
+                if (el) {
+                  const invNum = sale.invoiceNo || String(Date.now()).slice(-6);
+                  await exportElementToPdf(el, `Sahoj_Dokan_Invoice_${invNum}`, 'portrait');
+                }
+              }}
+              className="py-2.5 px-2 rounded-2xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-md transition active:scale-95 cursor-pointer border border-[#80CBC4]"
+              title="PDF ডাউনলোড করুন"
+            >
+              <Download className="w-3.5 h-3.5 text-amber-300" />
+              <span>PDF মেমো</span>
             </button>
 
             <button
               type="button"
               onClick={handleShareWhatsApp}
-              className="py-3 px-3 rounded-2xl bg-[#25D366] hover:bg-[#1fbe58] text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition active:scale-95 cursor-pointer border border-emerald-400"
+              className="py-2.5 px-2 rounded-2xl bg-[#25D366] hover:bg-[#1fbe58] text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-md transition active:scale-95 cursor-pointer border border-emerald-400"
               title="হোয়াটসঅ্যাপে রসিদ পাঠান"
             >
-              <MessageCircle className="w-4 h-4 fill-slate-950" />
+              <MessageCircle className="w-3.5 h-3.5 fill-slate-950" />
               <span>{language === 'bn' ? 'হোয়াটসঅ্যাপ' : 'WhatsApp'}</span>
-              {appMode === 'normal' && (
-                <span className="text-[10px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-md font-black">
-                  🔒
-                </span>
-              )}
             </button>
           </div>
 

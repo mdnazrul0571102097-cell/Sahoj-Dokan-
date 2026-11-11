@@ -2,11 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { Expense, ExpenseCategory, ShopProfile, Language } from '../types';
 import { translations } from '../i18n/translations';
 import { playSuccessChime } from '../utils/audio';
+import { DB } from '../storage/db';
 import {
   Wallet,
   Plus,
   X,
   Trash2,
+  Edit2,
   DollarSign,
   Zap,
   Truck,
@@ -15,6 +17,8 @@ import {
   Wrench,
   HelpCircle,
   Building,
+  Calendar,
+  Search,
 } from 'lucide-react';
 
 interface Props {
@@ -22,6 +26,7 @@ interface Props {
   profile: ShopProfile;
   language: Language;
   onAddExpense: (expense: Expense) => void;
+  onUpdateExpense?: (expense: Expense) => void;
   onDeleteExpense: (id: string) => void;
 }
 
@@ -45,6 +50,7 @@ export const ExpenseManager: React.FC<Props> = ({
   profile,
   language,
   onAddExpense,
+  onUpdateExpense,
   onDeleteExpense,
 }) => {
   const t = translations[language];
@@ -64,10 +70,24 @@ export const ExpenseManager: React.FC<Props> = ({
     }
   };
 
-  // Date filters
+  const formatDateDDMMYYYY = (d?: string | Date): string => {
+    const ymd = getLocalDateStr(d);
+    if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd || '';
+    const [yyyy, mm, dd] = ymd.split('-');
+    return `${dd}-${mm}-${yyyy}`;
+  };
+
   const todayStr = getLocalDateStr(new Date());
-  const [filterMode, setFilterMode] = useState<'today' | 'yesterday' | 'month' | 'all'>('today');
+  const yesterdayStr = getLocalDateStr(new Date(Date.now() - 24 * 3600 * 1000));
+
+  // Date filters: 'today', 'yesterday', 'all', 'custom'
+  const [filterMode, setFilterMode] = useState<'today' | 'yesterday' | 'all' | 'custom'>('today');
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Modals
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
 
   // Form states
@@ -77,33 +97,48 @@ export const ExpenseManager: React.FC<Props> = ({
   const [expenseDate, setExpenseDate] = useState(todayStr);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'bkash' | 'nagad' | 'bank'>('cash');
 
+  // Compute effective filter date string strictly matching filterMode
+  const effectiveFilterDate = useMemo(() => {
+    if (filterMode === 'today') return todayStr;
+    if (filterMode === 'yesterday') return yesterdayStr;
+    if (filterMode === 'custom') return selectedDate;
+    return '';
+  }, [filterMode, todayStr, yesterdayStr, selectedDate]);
+
   // Filtered expenses
   const filteredExpenses = useMemo(() => {
-    const now = new Date();
-    const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const yesterday = new Date(Date.now() - 24 * 3600 * 1000);
-    const yesterdayStr = getLocalDateStr(yesterday);
+    let list = expenses;
 
-    const matched = expenses
-      .filter((exp) => {
+    // Date filtering
+    if (filterMode !== 'all') {
+      list = list.filter((exp) => {
         const expLocal = getLocalDateStr(exp.date);
         const expRaw = (exp.date || '').slice(0, 10);
         const createdLocal = getLocalDateStr(exp.createdAt);
-        if (filterMode === 'today')
-          return expLocal === todayStr || expRaw === todayStr || createdLocal === todayStr;
-        if (filterMode === 'yesterday')
-          return expLocal === yesterdayStr || expRaw === yesterdayStr || createdLocal === yesterdayStr;
-        if (filterMode === 'month')
-          return (
-            (exp.date || '').startsWith(currentYearMonth) ||
-            expLocal.startsWith(currentYearMonth)
-          );
-        return true;
-      })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return (
+          expLocal === effectiveFilterDate ||
+          expRaw === effectiveFilterDate ||
+          createdLocal === effectiveFilterDate
+        );
+      });
+    }
 
-    return matched;
-  }, [expenses, filterMode, todayStr]);
+    // Search query matching category, note, amount, and date string
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter((exp) => {
+        const catMatch = exp.categoryName.toLowerCase().includes(q);
+        const noteMatch = exp.note && exp.note.toLowerCase().includes(q);
+        const amtMatch = String(exp.amount).includes(q);
+        const dateRaw = getLocalDateStr(exp.date);
+        const dateDDMM = formatDateDDMMYYYY(exp.date);
+        const dateMatch = dateRaw.includes(q) || dateDDMM.includes(q);
+        return catMatch || noteMatch || amtMatch || dateMatch;
+      });
+    }
+
+    return list.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [expenses, filterMode, effectiveFilterDate, searchQuery]);
 
   // Statistics
   const todayTotal = useMemo(() => {
@@ -113,9 +148,7 @@ export const ExpenseManager: React.FC<Props> = ({
       const createdLocal = getLocalDateStr(e.createdAt);
       return expLocal === todayStr || expRaw === todayStr || createdLocal === todayStr;
     });
-    const listToSum =
-      todayMatched.length === 0 && expenses.length > 0 ? expenses : todayMatched;
-    return Math.round(listToSum.reduce((sum, e) => sum + (Number(e.amount) || 0), 0));
+    return Math.round(todayMatched.reduce((sum, e) => sum + (Number(e.amount) || 0), 0));
   }, [expenses, todayStr]);
 
   const monthTotal = useMemo(() => {
@@ -127,16 +160,38 @@ export const ExpenseManager: React.FC<Props> = ({
             (e.date || '').startsWith(currentYearMonth) ||
             getLocalDateStr(e.date).startsWith(currentYearMonth)
         )
-        .reduce((sum, e) => sum + e.amount, 0)
+        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
     );
   }, [expenses]);
 
   const filteredTotal = useMemo(() => {
-    return Math.round(filteredExpenses.reduce((sum, e) => sum + e.amount, 0));
+    return Math.round(filteredExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0));
   }, [filteredExpenses]);
 
-  // Handle Add Expense Submit
-  const handleAddSubmit = (e: React.FormEvent) => {
+  // Open modal for new expense
+  const handleOpenAddModal = () => {
+    setEditingExpense(null);
+    setSelectedCategory('transport');
+    setAmount('');
+    setNote('');
+    setExpenseDate(todayStr);
+    setPaymentMethod('cash');
+    setShowAddModal(true);
+  };
+
+  // Open modal for editing expense
+  const handleOpenEditModal = (exp: Expense) => {
+    setEditingExpense(exp);
+    setSelectedCategory(exp.category);
+    setAmount(exp.amount);
+    setNote(exp.note || '');
+    setExpenseDate(getLocalDateStr(exp.date) || todayStr);
+    setPaymentMethod(exp.paymentMethod || 'cash');
+    setShowAddModal(true);
+  };
+
+  // Handle Add/Edit Expense Submit
+  const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const numAmount = Number(amount);
     if (!numAmount || numAmount <= 0) return;
@@ -153,6 +208,32 @@ export const ExpenseManager: React.FC<Props> = ({
       } catch (_) {
         formattedExpenseDate = new Date(expenseDate).toISOString();
       }
+    }
+
+    if (editingExpense) {
+      const updatedExpense: Expense = {
+        ...editingExpense,
+        date: formattedExpenseDate,
+        category: selectedCategory,
+        categoryName: catObj ? catObj.name : 'বিবিধ খরচ',
+        amount: numAmount,
+        note: note.trim() || undefined,
+        paymentMethod,
+      };
+
+      if (onUpdateExpense) {
+        onUpdateExpense(updatedExpense);
+      } else {
+        const list = DB.getExpenses();
+        const next = list.map((e: Expense) => (e.id === editingExpense.id ? updatedExpense : e));
+        DB.saveExpenses(next);
+        onAddExpense(updatedExpense);
+      }
+
+      setEditingExpense(null);
+      setShowAddModal(false);
+      playSuccessChime();
+      return;
     }
 
     const newExpense: Expense = {
@@ -175,7 +256,7 @@ export const ExpenseManager: React.FC<Props> = ({
 
   return (
     <div className="flex-1 flex flex-col">
-      {/* Main Summary Card matching Customer Baki Khata */}
+      {/* Main Summary Card for দোকান খরচ */}
       <div className="bg-white rounded-[24px] p-4 shadow-sm border border-[#E2E8F0] mb-3 shrink-0">
         <div className="grid grid-cols-2 divide-x divide-[#E2E8F0] mb-3.5">
           {/* Left: আজকের মোট দোকান খরচ */}
@@ -188,10 +269,10 @@ export const ExpenseManager: React.FC<Props> = ({
             </p>
           </div>
 
-          {/* Right: চলতি মাসের মোট খরচ */}
+          {/* Right: চলতি মাসের মোট দোকান খরচ */}
           <div className="text-center pl-2">
             <p className="text-xs font-semibold text-[#64748B] mb-1">
-              চলতি মাসের মোট খরচ
+              চলতি মাসের মোট দোকান খরচ
             </p>
             <p className="text-xl sm:text-2xl font-extrabold text-[#102A43] tracking-tight">
               ৳ {monthTotal.toLocaleString()}
@@ -201,46 +282,91 @@ export const ExpenseManager: React.FC<Props> = ({
 
         <button
           type="button"
-          onClick={() => setShowAddModal(true)}
+          onClick={handleOpenAddModal}
           className="w-full py-2.5 px-4 rounded-2xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>নতুন খরচ লিখুন</span>
+          <span>নতুন দোকান খরচ লিখুন</span>
         </button>
       </div>
 
-      {/* Filters and Subtotal Bar */}
+      {/* Filters and List Section */}
       <div className="bg-white rounded-[24px] p-4 shadow-xs border border-[#E2E8F0] flex-1 flex flex-col min-h-[300px]">
+        {/* Date Filter Bar: আজ, গতকাল, সব খরচ এবং মেনুয়ালি তারিখ পিক করার ড্রপডাউন/ক্যালেন্ডার */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 mb-3 border-b border-[#E2E8F0]">
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-            {[
-              { id: 'today', label: 'আজকের খরচ' },
-              { id: 'yesterday', label: 'গতকালের খরচ' },
-              { id: 'month', label: 'চলতি মাস' },
-              { id: 'all', label: 'সব খরচ' },
-            ].map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setFilterMode(f.id as any)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer border ${
-                  filterMode === f.id
-                    ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-2xs'
-                    : 'bg-[#EDF2F7] text-[#64748B] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                setFilterMode('today');
+                setSelectedDate(todayStr);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer border ${
+                filterMode === 'today'
+                  ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-2xs'
+                  : 'bg-[#EDF2F7] text-[#64748B] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
+              }`}
+            >
+              আজ
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFilterMode('yesterday');
+                setSelectedDate(yesterdayStr);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer border ${
+                filterMode === 'yesterday'
+                  ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-2xs'
+                  : 'bg-[#EDF2F7] text-[#64748B] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
+              }`}
+            >
+              গতকাল
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer border ${
+                filterMode === 'all'
+                  ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-2xs'
+                  : 'bg-[#EDF2F7] text-[#64748B] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
+              }`}
+            >
+              সব খরচ
+            </button>
+            <div className="flex items-center gap-1 bg-[#EDF2F7] px-2 py-0.5 rounded-xl border border-[#E2E8F0]">
+              <Calendar className="w-3.5 h-3.5 text-[#0E6B6B]" />
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => {
+                  setFilterMode('custom');
+                  setSelectedDate(e.target.value);
+                }}
+                className="bg-transparent text-[#102A43] text-xs font-bold focus:outline-none cursor-pointer"
+              />
+            </div>
           </div>
 
           <div className="text-right text-xs font-bold text-[#64748B]">
-            ফিল্টারকৃত মোট খরচ:{' '}
+            মোট খরচ:{' '}
             <span className="font-mono text-[#D32F2F] text-sm font-black">
               ৳{filteredTotal.toLocaleString()}
             </span>{' '}
             ({filteredExpenses.length}টি এন্ট্রি)
           </div>
+        </div>
+
+        {/* Optional Search Input */}
+        <div className="relative mb-3 shrink-0">
+          <Search className="w-4 h-4 absolute left-3.5 top-3 text-[#9AA5B1]" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="খরচের খাত, বিবরণ বা তারিখ দিয়ে খুঁজুন..."
+            className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-1 focus:ring-[#0E6B6B]"
+          />
         </div>
 
         {/* Expenses List */}
@@ -249,14 +375,14 @@ export const ExpenseManager: React.FC<Props> = ({
             <div className="py-12 flex flex-col items-center justify-center text-center p-6 text-[#64748B]">
               <Wallet className="w-12 h-12 text-[#9AA5B1] mb-2 stroke-1" />
               <p className="text-xs sm:text-sm font-bold text-[#102A43]">
-                এই সময়ে কোনো খরচের হিসাব রেকর্ড নেই
+                এই তারিখে কোনো দোকান খরচের রেকর্ড নেই
               </p>
               <button
                 type="button"
-                onClick={() => setShowAddModal(true)}
+                onClick={handleOpenAddModal}
                 className="mt-3 px-4 py-2 rounded-xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white text-xs font-bold shadow-xs cursor-pointer"
               >
-                + এখনই খরচ যুক্ত করুন
+                + দোকান খরচ যুক্ত করুন
               </button>
             </div>
           ) : (
@@ -281,7 +407,7 @@ export const ExpenseManager: React.FC<Props> = ({
                           {exp.categoryName}
                         </h4>
                         <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#E3F2FD] text-[#1976D2] font-bold uppercase">
-                          {exp.paymentMethod}
+                          {exp.paymentMethod || 'cash'}
                         </span>
                       </div>
                       {exp.note && (
@@ -290,27 +416,34 @@ export const ExpenseManager: React.FC<Props> = ({
                         </p>
                       )}
                       <span className="text-[11px] text-[#64748B] mt-0.5 block font-mono">
-                        {new Date(exp.date).toLocaleDateString('bn-BD', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
+                        {formatDateDDMMYYYY(exp.date)}
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2.5 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     <div className="text-right">
                       <div className="text-sm sm:text-base font-black font-mono text-[#D32F2F]">
                         -৳{exp.amount.toLocaleString()}
                       </div>
-                      <span className="text-[10px] font-semibold text-[#64748B]">খরচ হিসাব</span>
+                      <span className="text-[10px] font-semibold text-[#64748B]">দোকান খরচ</span>
                     </div>
 
+                    {/* Edit button */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditModal(exp)}
+                      className="p-2 rounded-xl bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] border border-[#B2DFDB] transition cursor-pointer"
+                      title="দোকান খরচ এডিট করুন"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+
+                    {/* Delete button */}
                     <button
                       type="button"
                       onClick={() => setExpenseToDelete(exp)}
-                      className="p-2 rounded-xl bg-[#FFEBEE] text-[#D32F2F] hover:bg-rose-200 transition cursor-pointer"
+                      className="p-2 rounded-xl bg-[#FFEBEE] text-[#D32F2F] hover:bg-rose-200 border border-rose-200 transition cursor-pointer"
                       title="খরচ মুছে ফেলুন"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -361,25 +494,30 @@ export const ExpenseManager: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Modal: Add New Expense */}
+      {/* Modal: Add / Edit Expense */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
             <div className="p-4 bg-[#0E6B6B] text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Wallet className="w-5 h-5 text-emerald-200" />
-                <h3 className="font-bold text-base">দোকানের দৈনন্দিন খরচ লিখুন</h3>
+                <h3 className="font-bold text-base">
+                  {editingExpense ? 'দোকান খরচ এডিট করুন' : 'দোকানের দৈনন্দিন খরচ লিখুন'}
+                </h3>
               </div>
               <button
                 type="button"
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditingExpense(null);
+                }}
                 className="p-1 rounded-full hover:bg-white/20 text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddSubmit} className="p-4 space-y-3.5">
+            <form onSubmit={handleFormSubmit} className="p-4 space-y-3.5">
               {/* Category selector */}
               <div>
                 <label className="block text-xs font-bold text-[#102A43] mb-1.5">
@@ -479,7 +617,10 @@ export const ExpenseManager: React.FC<Props> = ({
               <div className="pt-2 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setEditingExpense(null);
+                  }}
                   className="px-4 py-2.5 rounded-xl border border-[#E2E8F0] bg-[#EDF2F7] text-xs font-bold text-[#102A43] cursor-pointer"
                 >
                   বাতিল
@@ -488,7 +629,7 @@ export const ExpenseManager: React.FC<Props> = ({
                   type="submit"
                   className="px-5 py-2.5 rounded-xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
                 >
-                  খরচ সংরক্ষণ করুন
+                  {editingExpense ? 'আপডেট সংরক্ষণ করুন' : 'খরচ সংরক্ষণ করুন'}
                 </button>
               </div>
             </form>

@@ -9,14 +9,17 @@ import {
 } from '../types';
 import { translations } from '../i18n/translations';
 import { playSuccessChime } from '../utils/audio';
+import { DB } from '../storage/db';
 import {
   PackagePlus,
   Plus,
   Trash2,
+  Edit2,
   X,
   ChevronDown,
   ChevronUp,
   Search,
+  Calendar,
 } from 'lucide-react';
 
 interface Props {
@@ -30,6 +33,10 @@ interface Props {
     updatedProducts: Product[],
     supplierDueAddition?: { supplierId: string; dueAmount: number }
   ) => void;
+  onUpdateBulkPurchase?: (
+    purchase: BulkPurchase,
+    updatedProducts?: Product[]
+  ) => void;
   onDeleteBulkPurchase?: (id: string) => void;
   onOpenSupplierKhata?: () => void;
 }
@@ -41,15 +48,10 @@ export const BulkPurchaseManager: React.FC<Props> = ({
   profile,
   language,
   onAddBulkPurchase,
+  onUpdateBulkPurchase,
   onDeleteBulkPurchase = () => {},
 }) => {
   const t = translations[language];
-
-  const [showNewPurchaseModal, setShowNewPurchaseModal] = useState(false);
-  const [expandedPurchaseId, setExpandedPurchaseId] = useState<string | null>(null);
-  const [purchaseToDelete, setPurchaseToDelete] = useState<BulkPurchase | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [summaryTimeMode, setSummaryTimeMode] = useState<'all' | 'today'>('all');
 
   // Helper for reliable local calendar date matching
   const getLocalDateStr = (d?: string | Date): string => {
@@ -66,14 +68,30 @@ export const BulkPurchaseManager: React.FC<Props> = ({
     }
   };
 
-  const todayStr = getLocalDateStr(new Date());
+  const formatDateDDMMYYYY = (d?: string | Date): string => {
+    const ymd = getLocalDateStr(d);
+    if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd || '';
+    const [yyyy, mm, dd] = ymd.split('-');
+    return `${dd}-${mm}-${yyyy}`;
+  };
 
-  // New Purchase Form States
+  const todayStr = getLocalDateStr(new Date());
+  const yesterdayStr = getLocalDateStr(new Date(Date.now() - 24 * 3600 * 1000));
+
+  // Date filters: 'today', 'yesterday', 'all', 'custom'
+  const [dateFilterMode, setDateFilterMode] = useState<'today' | 'yesterday' | 'all' | 'custom'>('today');
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+
+  const [showNewPurchaseModal, setShowNewPurchaseModal] = useState(false);
+  const [editingPurchase, setEditingPurchase] = useState<BulkPurchase | null>(null);
+  const [expandedPurchaseId, setExpandedPurchaseId] = useState<string | null>(null);
+  const [purchaseToDelete, setPurchaseToDelete] = useState<BulkPurchase | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Form States
   const [supplierNameInput, setSupplierNameInput] = useState<string>('');
   const [purchaseNote, setPurchaseNote] = useState('');
   const [purchaseDate, setPurchaseDate] = useState(todayStr);
-  const [paymentType, setPaymentType] = useState<'cash' | 'due' | 'partial' | 'bkash' | 'nagad' | 'bank'>('cash');
-  const [paidAmountInput, setPaidAmountInput] = useState<number | ''>('');
 
   // Cart of items in this bulk purchase
   const [items, setItems] = useState<BulkPurchaseItem[]>([
@@ -135,28 +153,18 @@ export const BulkPurchaseManager: React.FC<Props> = ({
     setItems(items.filter((_, idx) => idx !== index));
   };
 
-  // Grand Total of new purchase
+  // Grand Total of purchase
   const purchaseGrandTotal = useMemo(() => {
     return items.reduce((sum, it) => sum + (it.totalCost || 0), 0);
   }, [items]);
 
-  const effectivePaidAmount = useMemo(() => {
-    if (paymentType === 'cash') return purchaseGrandTotal;
-    if (paymentType === 'due') return 0;
-    return Number(paidAmountInput) || 0;
-  }, [paymentType, paidAmountInput, purchaseGrandTotal]);
-
-  const calculatedDueAmount = useMemo(() => {
-    return Math.max(0, purchaseGrandTotal - effectivePaidAmount);
-  }, [purchaseGrandTotal, effectivePaidAmount]);
-
-  // Helper to check if a purchase belongs to today
-  const isPurchaseToday = (p: BulkPurchase): boolean => {
-    const pLocal = getLocalDateStr(p.date);
-    const pRaw = (p.date || '').slice(0, 10);
-    const createdLocal = getLocalDateStr(p.createdAt);
-    return pLocal === todayStr || pRaw === todayStr || createdLocal === todayStr;
-  };
+  // Effective filter date string
+  const effectiveFilterDate = useMemo(() => {
+    if (dateFilterMode === 'today') return todayStr;
+    if (dateFilterMode === 'yesterday') return yesterdayStr;
+    if (dateFilterMode === 'custom') return selectedDate;
+    return '';
+  }, [dateFilterMode, todayStr, yesterdayStr, selectedDate]);
 
   // Overall statistics
   const totalAllPurchases = useMemo(() => {
@@ -166,33 +174,113 @@ export const BulkPurchaseManager: React.FC<Props> = ({
   const todayPurchasesTotal = useMemo(() => {
     return Math.round(
       bulkPurchases
-        .filter((p) => isPurchaseToday(p))
+        .filter((p) => {
+          const pLocal = getLocalDateStr(p.date);
+          const pRaw = (p.date || '').slice(0, 10);
+          const createdLocal = getLocalDateStr(p.createdAt);
+          return pLocal === todayStr || pRaw === todayStr || createdLocal === todayStr;
+        })
         .reduce((sum, p) => sum + p.totalAmount, 0)
     );
   }, [bulkPurchases, todayStr]);
 
-  const totalDuePayable = useMemo(() => {
-    return Math.round(bulkPurchases.reduce((sum, p) => sum + p.dueAmount, 0));
-  }, [bulkPurchases]);
-
-  // Filter purchases
+  // Filter purchases by date and search query
   const filteredPurchases = useMemo(() => {
-    const baseList =
-      summaryTimeMode === 'today'
-        ? bulkPurchases.filter((p) => isPurchaseToday(p))
-        : bulkPurchases;
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return baseList;
-    return baseList.filter(
-      (p) =>
-        p.purchaseNo.toLowerCase().includes(q) ||
-        (p.supplierName && p.supplierName.toLowerCase().includes(q)) ||
-        (p.note && p.note.toLowerCase().includes(q)) ||
-        p.items.some((it) => it.productName.toLowerCase().includes(q))
-    );
-  }, [bulkPurchases, searchQuery, summaryTimeMode, todayStr]);
+    let list = bulkPurchases;
 
-  // Submit New Bulk Purchase
+    // Date filter
+    if (dateFilterMode !== 'all') {
+      list = list.filter((p) => {
+        const pLocal = getLocalDateStr(p.date);
+        const pRaw = (p.date || '').slice(0, 10);
+        const createdLocal = getLocalDateStr(p.createdAt);
+        return (
+          pLocal === effectiveFilterDate ||
+          pRaw === effectiveFilterDate ||
+          createdLocal === effectiveFilterDate
+        );
+      });
+    }
+
+    // Search query: supplier name, product names, and date string (e.g. 10 Nov, 10/11, 10-11-2026)
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return list;
+
+    const bnMonths = ['জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'];
+    const enMonths = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+    return list.filter((p) => {
+      const pNo = p.purchaseNo.toLowerCase();
+      const supMatch = p.supplierName && p.supplierName.toLowerCase().includes(q);
+      const noteMatch = p.note && p.note.toLowerCase().includes(q);
+      const prodMatch = p.items.some((it) => it.productName.toLowerCase().includes(q));
+
+      // Date match checks
+      const ymd = getLocalDateStr(p.date);
+      const ddmm = formatDateDDMMYYYY(p.date); // e.g. 10-11-2026
+      const slash = ddmm.replace(/-/g, '/'); // 10/11/2026
+      const slashShort = ddmm.slice(0, 5).replace(/-/g, '/'); // 10/11
+
+      let monthNameEn = '';
+      let monthNameBn = '';
+      try {
+        const dObj = new Date(p.date);
+        const mIdx = dObj.getMonth();
+        monthNameEn = `${dObj.getDate()} ${enMonths[mIdx]}`.toLowerCase();
+        monthNameBn = `${dObj.getDate()} ${bnMonths[mIdx]}`.toLowerCase();
+      } catch (_) {}
+
+      const dateMatch =
+        ymd.includes(q) ||
+        ddmm.includes(q) ||
+        slash.includes(q) ||
+        slashShort.includes(q) ||
+        monthNameEn.includes(q) ||
+        monthNameBn.includes(q);
+
+      return pNo.includes(q) || supMatch || noteMatch || prodMatch || dateMatch;
+    });
+  }, [bulkPurchases, dateFilterMode, effectiveFilterDate, searchQuery]);
+
+  const filteredPurchasesTotal = useMemo(() => {
+    return Math.round(filteredPurchases.reduce((sum, p) => sum + p.totalAmount, 0));
+  }, [filteredPurchases]);
+
+  // Open Add modal
+  const handleOpenAddModal = () => {
+    setEditingPurchase(null);
+    setSupplierNameInput('');
+    setPurchaseNote('');
+    setPurchaseDate(todayStr);
+    setItems([
+      {
+        productId: '',
+        productName: '',
+        category: 'মুদি আইটেম',
+        quantity: 1,
+        unit: 'kg',
+        unitCostPrice: 0,
+        totalCost: 0,
+      },
+    ]);
+    setShowNewPurchaseModal(true);
+  };
+
+  // Open Edit modal
+  const handleOpenEditModal = (purchase: BulkPurchase) => {
+    setEditingPurchase(purchase);
+    setSupplierNameInput(purchase.supplierName || '');
+    setPurchaseNote(purchase.note || '');
+    setPurchaseDate(getLocalDateStr(purchase.date) || todayStr);
+    setItems(
+      purchase.items.map((it) => ({
+        ...it,
+      }))
+    );
+    setShowNewPurchaseModal(true);
+  };
+
+  // Submit New or Updated Bulk Purchase
   const handleSubmitPurchase = (e: React.FormEvent) => {
     e.preventDefault();
     if (items.length === 0 || purchaseGrandTotal <= 0) {
@@ -216,6 +304,76 @@ export const BulkPurchaseManager: React.FC<Props> = ({
       }
     }
 
+    // Prepare updated inventory products
+    const updatedProducts = [...products];
+
+    if (editingPurchase) {
+      // Revert old purchase items quantities from products
+      editingPurchase.items.forEach((oldItem) => {
+        const mIdx = updatedProducts.findIndex(
+          (p) =>
+            (oldItem.productId && p.id === oldItem.productId) ||
+            p.name.trim().toLowerCase() === oldItem.productName.trim().toLowerCase()
+        );
+        if (mIdx >= 0) {
+          updatedProducts[mIdx] = {
+            ...updatedProducts[mIdx],
+            stock: Math.max(0, updatedProducts[mIdx].stock - oldItem.quantity),
+          };
+        }
+      });
+
+      // Apply new purchase items quantities to products
+      items.forEach((newItem) => {
+        if (!newItem.productName.trim() || newItem.totalCost <= 0) return;
+        const mIdx = updatedProducts.findIndex(
+          (p) =>
+            (newItem.productId && p.id === newItem.productId) ||
+            p.name.trim().toLowerCase() === newItem.productName.trim().toLowerCase()
+        );
+        if (mIdx >= 0) {
+          const prod = updatedProducts[mIdx];
+          updatedProducts[mIdx] = {
+            ...prod,
+            stock: prod.stock + newItem.quantity,
+            costPrice: newItem.unitCostPrice > 0 ? newItem.unitCostPrice : prod.costPrice,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+      });
+
+      const updatedPurchase: BulkPurchase = {
+        ...editingPurchase,
+        date: formattedPurchaseDate,
+        supplierId: matchedSupplier ? matchedSupplier.id : editingPurchase.supplierId,
+        supplierName: trimmedSupplierName || 'নগদ ক্রয় রসিদ',
+        supplierPhone: matchedSupplier ? matchedSupplier.phone : editingPurchase.supplierPhone,
+        items: items.filter((it) => it.productName.trim() && it.totalCost > 0),
+        totalAmount: purchaseGrandTotal,
+        paidAmount: purchaseGrandTotal,
+        dueAmount: 0,
+        paymentType: 'cash',
+        note: purchaseNote.trim() || undefined,
+      };
+
+      if (onUpdateBulkPurchase) {
+        onUpdateBulkPurchase(updatedPurchase, updatedProducts);
+      } else {
+        const allList = DB.getBulkPurchases();
+        const nextList = allList.map((p: BulkPurchase) =>
+          p.id === editingPurchase.id ? updatedPurchase : p
+        );
+        DB.saveBulkPurchases(nextList);
+        DB.saveProducts(updatedProducts);
+        onAddBulkPurchase(updatedPurchase, updatedProducts, undefined);
+      }
+
+      setShowNewPurchaseModal(false);
+      setEditingPurchase(null);
+      playSuccessChime();
+      return;
+    }
+
     const newPurchase: BulkPurchase = {
       id: `bp_${Date.now()}`,
       purchaseNo: `PO-${1000 + bulkPurchases.length + 1}`,
@@ -233,7 +391,6 @@ export const BulkPurchaseManager: React.FC<Props> = ({
     };
 
     // Auto-update products stock & cost price in inventory
-    const updatedProducts = [...products];
     newPurchase.items.forEach((item) => {
       const matchIndex = updatedProducts.findIndex(
         (p) =>
@@ -257,7 +414,6 @@ export const BulkPurchaseManager: React.FC<Props> = ({
     setShowNewPurchaseModal(false);
     setPurchaseNote('');
     setSupplierNameInput('');
-    setPaidAmountInput('');
     setItems([
       {
         productId: '',
@@ -274,66 +430,68 @@ export const BulkPurchaseManager: React.FC<Props> = ({
 
   return (
     <div className="flex-1 flex flex-col">
-      {/* Main Summary Card (আজকে কত টাকা মাল আনছি এবং সর্বমোট নগদ ক্রয় দেখার স্পষ্ট বাটন ও কার্ড) */}
+      {/* Main Summary Card */}
       <div className="bg-white rounded-[24px] p-4 shadow-sm border border-[#E2E8F0] mb-3 shrink-0">
-        {/* Side-by-side Interactive Buttons */}
         <div className="grid grid-cols-2 gap-2.5 mb-3">
           {/* Today's purchases button */}
           <button
             type="button"
-            onClick={() => setSummaryTimeMode('today')}
+            onClick={() => {
+              setDateFilterMode('today');
+              setSelectedDate(todayStr);
+            }}
             className={`p-3 rounded-2xl border text-left transition-all cursor-pointer relative ${
-              summaryTimeMode === 'today'
+              dateFilterMode === 'today'
                 ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-md ring-2 ring-[#0E6B6B]/30'
                 : 'bg-[#F0FDF4] hover:bg-[#DCFCE7] text-[#166534] border-[#BBF7D0]'
             }`}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className={`text-[11px] font-bold ${summaryTimeMode === 'today' ? 'text-teal-100' : 'text-[#15803D]'}`}>
+              <span className={`text-[11px] font-bold ${dateFilterMode === 'today' ? 'text-teal-100' : 'text-[#15803D]'}`}>
                 📦 আজকে মাল আনছি
               </span>
               <span
                 className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                  summaryTimeMode === 'today' ? 'bg-white/20 text-white' : 'bg-[#DCFCE7] text-[#166534]'
+                  dateFilterMode === 'today' ? 'bg-white/20 text-white' : 'bg-[#DCFCE7] text-[#166534]'
                 }`}
               >
                 আজ
               </span>
             </div>
-            <p className={`text-lg sm:text-2xl font-black tracking-tight ${summaryTimeMode === 'today' ? 'text-white' : 'text-[#166534]'}`}>
+            <p className={`text-lg sm:text-2xl font-black tracking-tight ${dateFilterMode === 'today' ? 'text-white' : 'text-[#166534]'}`}>
               ৳ {todayPurchasesTotal.toLocaleString()}
             </p>
-            <p className={`text-[10px] font-medium mt-0.5 ${summaryTimeMode === 'today' ? 'text-teal-100' : 'text-[#64748B]'}`}>
-              {bulkPurchases.filter(p => isPurchaseToday(p)).length} টি রসিদ
+            <p className={`text-[10px] font-medium mt-0.5 ${dateFilterMode === 'today' ? 'text-teal-100' : 'text-[#64748B]'}`}>
+              {bulkPurchases.filter(p => getLocalDateStr(p.date) === todayStr).length} টি রসিদ
             </p>
           </button>
 
           {/* All purchases button */}
           <button
             type="button"
-            onClick={() => setSummaryTimeMode('all')}
+            onClick={() => setDateFilterMode('all')}
             className={`p-3 rounded-2xl border text-left transition-all cursor-pointer relative ${
-              summaryTimeMode === 'all'
+              dateFilterMode === 'all'
                 ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-md ring-2 ring-[#0E6B6B]/30'
                 : 'bg-[#F8FAFC] hover:bg-[#F1F5F9] text-[#1E293B] border-[#E2E8F0]'
             }`}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className={`text-[11px] font-bold ${summaryTimeMode === 'all' ? 'text-teal-100' : 'text-[#475569]'}`}>
+              <span className={`text-[11px] font-bold ${dateFilterMode === 'all' ? 'text-teal-100' : 'text-[#475569]'}`}>
                 📋 সর্বমোট নগদ ক্রয়
               </span>
               <span
                 className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                  summaryTimeMode === 'all' ? 'bg-white/20 text-white' : 'bg-[#E2E8F0] text-[#475569]'
+                  dateFilterMode === 'all' ? 'bg-white/20 text-white' : 'bg-[#E2E8F0] text-[#475569]'
                 }`}
               >
                 মোট
               </span>
             </div>
-            <p className={`text-lg sm:text-2xl font-black tracking-tight ${summaryTimeMode === 'all' ? 'text-white' : 'text-[#1E293B]'}`}>
+            <p className={`text-lg sm:text-2xl font-black tracking-tight ${dateFilterMode === 'all' ? 'text-white' : 'text-[#1E293B]'}`}>
               ৳ {totalAllPurchases.toLocaleString()}
             </p>
-            <p className={`text-[10px] font-medium mt-0.5 ${summaryTimeMode === 'all' ? 'text-teal-100' : 'text-[#64748B]'}`}>
+            <p className={`text-[10px] font-medium mt-0.5 ${dateFilterMode === 'all' ? 'text-teal-100' : 'text-[#64748B]'}`}>
               {bulkPurchases.length} টি রসিদ
             </p>
           </button>
@@ -342,7 +500,7 @@ export const BulkPurchaseManager: React.FC<Props> = ({
         {/* Action Button: নতুন নগদ ক্রয় রসিদ লিখুন */}
         <button
           type="button"
-          onClick={() => setShowNewPurchaseModal(true)}
+          onClick={handleOpenAddModal}
           className="w-full py-2.5 px-4 rounded-2xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
         >
           <PackagePlus className="w-4 h-4 stroke-[2.5]" />
@@ -352,14 +510,79 @@ export const BulkPurchaseManager: React.FC<Props> = ({
 
       {/* Main Content Card */}
       <div className="flex-1 flex flex-col bg-white rounded-[24px] p-4 shadow-xs border border-[#E2E8F0] min-h-[300px]">
-        {/* Search Bar */}
+        {/* Date Filter Bar: আজ, গতকাল, সব এবং তারিখ পিক করার ড্রপডাউন/ক্যালেন্ডার */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 mb-3 border-b border-[#E2E8F0]">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                setDateFilterMode('today');
+                setSelectedDate(todayStr);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer border ${
+                dateFilterMode === 'today'
+                  ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-2xs'
+                  : 'bg-[#EDF2F7] text-[#64748B] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
+              }`}
+            >
+              আজ
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDateFilterMode('yesterday');
+                setSelectedDate(yesterdayStr);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer border ${
+                dateFilterMode === 'yesterday'
+                  ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-2xs'
+                  : 'bg-[#EDF2F7] text-[#64748B] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
+              }`}
+            >
+              গতকাল
+            </button>
+            <button
+              type="button"
+              onClick={() => setDateFilterMode('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer border ${
+                dateFilterMode === 'all'
+                  ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-2xs'
+                  : 'bg-[#EDF2F7] text-[#64748B] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
+              }`}
+            >
+              সব
+            </button>
+            <div className="flex items-center gap-1 bg-[#EDF2F7] px-2 py-0.5 rounded-xl border border-[#E2E8F0]">
+              <Calendar className="w-3.5 h-3.5 text-[#0E6B6B]" />
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => {
+                  setDateFilterMode('custom');
+                  setSelectedDate(e.target.value);
+                }}
+                className="bg-transparent text-[#102A43] text-xs font-bold focus:outline-none cursor-pointer"
+              />
+            </div>
+          </div>
+
+          <div className="text-right text-xs font-bold text-[#64748B]">
+            মোট ক্রয় বিল:{' '}
+            <span className="font-mono text-[#0E6B6B] text-sm font-black">
+              ৳{filteredPurchasesTotal.toLocaleString()}
+            </span>{' '}
+            ({filteredPurchases.length}টি রসিদ)
+          </div>
+        </div>
+
+        {/* Search Bar matching supplier, products, and date format (e.g. 10 Nov, 10/11) */}
         <div className="relative mb-3 shrink-0">
           <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-[#9AA5B1]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="রসিদ নং, মহাজন বা পণ্যের নাম দিয়ে খুঁজুন..."
+            placeholder="মহাজনের নাম, পণ্যের নাম বা তারিখ (যেমন: 10 Nov বা 10/11) দিয়ে খুঁজুন..."
             className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs sm:text-sm text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B] shadow-2xs"
           />
         </div>
@@ -374,7 +597,7 @@ export const BulkPurchaseManager: React.FC<Props> = ({
               </p>
               <button
                 type="button"
-                onClick={() => setShowNewPurchaseModal(true)}
+                onClick={handleOpenAddModal}
                 className="mt-3 px-4 py-2 rounded-xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white text-xs font-bold shadow-xs cursor-pointer"
               >
                 + নগদ ক্রয় রসিদ লিখুন
@@ -407,17 +630,13 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                       </div>
                       <div className="text-xs text-[#64748B] mt-1 flex items-center gap-2">
                         <span>
-                          {new Date(purchase.date).toLocaleDateString('bn-BD', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
+                          {formatDateDDMMYYYY(purchase.date)}
                         </span>
                         {purchase.note && <span>• {purchase.note}</span>}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2.5 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                       <div className="text-right">
                         <span className="text-sm sm:text-base font-black font-mono text-[#102A43] block">
                           ৳{purchase.totalAmount.toLocaleString()}
@@ -427,14 +646,27 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                         </span>
                       </div>
 
-                      {/* রসিদ ডিলিট করার বাটন */}
+                      {/* Edit Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEditModal(purchase);
+                        }}
+                        className="p-2 rounded-xl bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] border border-[#B2DFDB] transition cursor-pointer"
+                        title="রসিদ এডিট করুন"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+
+                      {/* Delete Button */}
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setPurchaseToDelete(purchase);
                         }}
-                        className="p-2 rounded-xl bg-[#FFEBEE] text-[#D32F2F] hover:bg-rose-200 transition cursor-pointer"
+                        className="p-2 rounded-xl bg-[#FFEBEE] text-[#D32F2F] hover:bg-rose-200 border border-rose-200 transition cursor-pointer"
                         title="রসিদ ডিলিট করুন"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -494,7 +726,7 @@ export const BulkPurchaseManager: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Modal: New Multi-Item Bulk Purchase (Exact Reference Design) */}
+      {/* Modal: New / Edit Multi-Item Bulk Purchase */}
       {showNewPurchaseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2.5 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
           <div className="w-full max-w-md my-auto rounded-[28px] bg-white shadow-2xl border border-[#CBD5E1] overflow-hidden flex flex-col max-h-[95vh]">
@@ -503,12 +735,15 @@ export const BulkPurchaseManager: React.FC<Props> = ({
               <div className="flex items-center gap-2.5">
                 <PackagePlus className="w-6 h-6 text-[#68B996]" />
                 <h3 className="font-extrabold text-lg sm:text-xl tracking-tight">
-                  নগদ ক্রয় রসিদ
+                  {editingPurchase ? `রসিদ এডিট করুন (#${editingPurchase.purchaseNo})` : 'নগদ ক্রয় রসিদ'}
                 </h3>
               </div>
               <button
                 type="button"
-                onClick={() => setShowNewPurchaseModal(false)}
+                onClick={() => {
+                  setShowNewPurchaseModal(false);
+                  setEditingPurchase(null);
+                }}
                 className="p-1 rounded-full hover:bg-white/15 text-white/90 hover:text-white transition cursor-pointer"
               >
                 <X className="w-6 h-6" />
@@ -523,14 +758,14 @@ export const BulkPurchaseManager: React.FC<Props> = ({
               <div className="grid grid-cols-12 gap-2.5">
                 <div className="col-span-7">
                   <label className="block text-xs sm:text-sm font-extrabold text-[#111827] mb-1.5 truncate">
-                    সাপ্লায়ার / মহাজন ব
+                    সাপ্লায়ার / মহাজন
                   </label>
                   <input
                     type="text"
                     list="supplier-manual-suggestions"
                     value={supplierNameInput}
                     onChange={(e) => setSupplierNameInput(e.target.value)}
-                    placeholder="মহাজন বা পাইকারি দোকানের না..."
+                    placeholder="মহাজন বা পাইকারি দোকানের নাম..."
                     className="w-full px-3.5 py-2.5 rounded-2xl border border-[#8A949E] bg-[#F1F5F8] text-xs sm:text-sm font-medium text-[#111827] placeholder-[#1F2937] focus:ring-2 focus:ring-[#0D5238] focus:bg-white focus:outline-none"
                   />
                   {suppliers.length > 0 && (
@@ -560,9 +795,7 @@ export const BulkPurchaseManager: React.FC<Props> = ({
               {/* Section: ক্রয়কৃত পণ্যসমূহ */}
               <div className="space-y-2.5">
                 <label className="block text-sm sm:text-base font-extrabold text-[#111827]">
-                  ক্রয়কৃত পণ্যসমূহ (
-                  {String(items.length).replace(/\d/g, (d) => '০১২৩৪৫৬৭৮৯'[Number(d)])}
-                  টি)
+                  ক্রয়কৃত পণ্যসমূহ ({items.length}টি)
                 </label>
 
                 <div className="space-y-2.5">
@@ -587,7 +820,7 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                         )}
                       </div>
 
-                      {/* Product Name Input (Full Width) */}
+                      {/* Product Name Input */}
                       <div>
                         <input
                           type="text"
@@ -607,9 +840,8 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                         </datalist>
                       </div>
 
-                      {/* Quantity, Unit, and Unit Cost Price in 3 Columns */}
+                      {/* Quantity, Unit, and Unit Cost Price */}
                       <div className="grid grid-cols-12 gap-2">
-                        {/* Quantity */}
                         <div className="col-span-4">
                           <input
                             type="number"
@@ -620,12 +852,11 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                             onChange={(e) =>
                               handleItemChange(idx, 'quantity', e.target.value)
                             }
-                            placeholder="1"
+                            placeholder="পরিমাণ"
                             className="w-full px-2.5 py-2.5 rounded-2xl border border-[#8A949E] bg-white text-xs sm:text-sm font-medium text-center text-[#111827] focus:ring-2 focus:ring-[#0D5238] focus:outline-none"
                           />
                         </div>
 
-                        {/* Unit */}
                         <div className="col-span-4">
                           <select
                             value={item.unit}
@@ -643,7 +874,6 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                           </select>
                         </div>
 
-                        {/* Unit Cost Price */}
                         <div className="col-span-4">
                           <input
                             type="number"
@@ -654,7 +884,7 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                             onChange={(e) =>
                               handleItemChange(idx, 'unitCostPrice', e.target.value)
                             }
-                            placeholder="৳ দর (প্রতি একক)"
+                            placeholder="৳ দর"
                             className="w-full px-2.5 py-2.5 rounded-2xl border border-[#8A949E] bg-white text-xs sm:text-sm font-medium text-center text-[#111827] placeholder-[#1F2937] focus:ring-2 focus:ring-[#0D5238] focus:outline-none"
                           />
                         </div>
@@ -662,16 +892,12 @@ export const BulkPurchaseManager: React.FC<Props> = ({
 
                       <div className="text-right text-xs sm:text-sm font-extrabold text-[#0D5238] pt-0.5">
                         মোট টাকা: ৳
-                        {String((item.totalCost || 0).toLocaleString('en-IN')).replace(
-                          /\d/g,
-                          (d) => '০১২৩৪৫৬৭৮৯'[Number(d)]
-                        )}
+                        {(item.totalCost || 0).toLocaleString()}
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Full-width Outlined Button: + আরও পণ্য যোগ করুন */}
                 <button
                   type="button"
                   onClick={handleAddItemRow}
@@ -699,11 +925,7 @@ export const BulkPurchaseManager: React.FC<Props> = ({
               {/* Mint Green Total Cash Bill Box */}
               <div className="px-4 py-3 rounded-[20px] bg-[#DCFCE7]">
                 <div className="text-sm sm:text-base font-extrabold text-[#111827]">
-                  সর্বমোট নগদ বিল: ৳{' '}
-                  {String(purchaseGrandTotal.toLocaleString('en-IN')).replace(
-                    /\d/g,
-                    (d) => '০১২৩৪৫৬৭৮৯'[Number(d)]
-                  )}
+                  সর্বমোট নগদ বিল: ৳ {purchaseGrandTotal.toLocaleString()}
                 </div>
                 <div className="text-xs sm:text-sm font-medium text-[#1F2937] mt-0.5">
                   (ক্যাশ ড্রয়ার থেকে বিয়োগ হবে)
@@ -714,7 +936,10 @@ export const BulkPurchaseManager: React.FC<Props> = ({
               <div className="pt-1 flex items-center gap-3 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setShowNewPurchaseModal(false)}
+                  onClick={() => {
+                    setShowNewPurchaseModal(false);
+                    setEditingPurchase(null);
+                  }}
                   className="px-6 py-3 rounded-2xl bg-[#D1D5DB] hover:bg-[#9CA3AF] text-xs sm:text-sm font-extrabold text-[#1F2937] transition cursor-pointer"
                 >
                   বাতিল
@@ -723,7 +948,7 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                   type="submit"
                   className="flex-1 py-3 px-4 rounded-2xl bg-[#0D5238] hover:bg-[#093B28] text-white text-xs sm:text-sm font-extrabold text-center shadow-xs transition active:scale-95 cursor-pointer"
                 >
-                  সংরক্ষণ ও স্টক আপডেট
+                  {editingPurchase ? 'আপডেট সংরক্ষণ করুন' : 'সংরক্ষণ ও স্টক আপডেট'}
                 </button>
               </div>
             </form>

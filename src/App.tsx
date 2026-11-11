@@ -654,6 +654,14 @@ export default function App() {
     DB.saveBakiTransactions(nextTxs);
   };
 
+  const handleUpdateCustomer = (updatedCustomer: Customer) => {
+    setCustomers((prev) => {
+      const nextCustomers = prev.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c));
+      DB.saveCustomers(nextCustomers);
+      return nextCustomers;
+    });
+  };
+
   // Handle Save Product (Create or Update)
   const handleSaveProduct = (product: Product) => {
     try {
@@ -884,6 +892,14 @@ export default function App() {
     DB.saveExpenses(next);
   };
 
+  const handleUpdateExpense = (updatedExpense: Expense) => {
+    setExpenses((prev) => {
+      const next = prev.map((e) => (e.id === updatedExpense.id ? updatedExpense : e));
+      DB.saveExpenses(next);
+      return next;
+    });
+  };
+
   // Handle Wholesale Bulk Purchases / Cash Purchase Receipts
   const handleAddBulkPurchase = (
     purchase: BulkPurchase,
@@ -907,6 +923,21 @@ export default function App() {
         supplierDueAddition.dueAmount,
         `ক্রয় রসিদ #${purchase.purchaseNo} থেকে বাকি`
       );
+    }
+  };
+
+  const handleUpdateBulkPurchase = (
+    updatedPurchase: BulkPurchase,
+    updatedProducts?: Product[]
+  ) => {
+    setBulkPurchases((prev) => {
+      const nextBulk = prev.map((p) => (p.id === updatedPurchase.id ? updatedPurchase : p));
+      DB.saveBulkPurchases(nextBulk);
+      return nextBulk;
+    });
+    if (updatedProducts) {
+      setProducts(updatedProducts);
+      DB.saveProducts(updatedProducts);
     }
   };
 
@@ -1155,6 +1186,7 @@ export default function App() {
             appMode={appMode}
             onOpenSubscriptionModal={() => handleOpenSubscriptionModal()}
             onAddCustomer={handleAddNewCustomer}
+            onUpdateCustomer={handleUpdateCustomer}
             onReceivePayment={handleReceivePayment}
             onAddDue={handleAddNewDue}
             onDeleteCustomer={handleDeleteCustomer}
@@ -1176,11 +1208,13 @@ export default function App() {
             onOpenSubscriptionModal={() => handleOpenSubscriptionModal()}
             expenses={expenses}
             onAddExpense={handleAddExpense}
+            onUpdateExpense={handleUpdateExpense}
             onDeleteExpense={handleDeleteExpense}
             bulkPurchases={bulkPurchases}
             suppliers={suppliers}
             products={products}
             onAddBulkPurchase={handleAddBulkPurchase}
+            onUpdateBulkPurchase={handleUpdateBulkPurchase}
             onDeleteBulkPurchase={handleDeleteBulkPurchase}
             onOpenSupplierKhata={() => setActiveTab('baki')}
             customers={customers}

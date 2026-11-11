@@ -11,8 +11,15 @@ import android.print.PrintDocumentAdapter;
 import android.print.PrintManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+import android.media.MediaScannerConnection;
+import android.os.Build;
+import android.os.Environment;
+import android.util.Base64;
+import android.widget.Toast;
 import androidx.activity.OnBackPressedCallback;
 import com.getcapacitor.BridgeActivity;
+import java.io.File;
+import java.io.FileOutputStream;
 
 public class MainActivity extends BridgeActivity {
 
@@ -129,6 +136,66 @@ public class MainActivity extends BridgeActivity {
                 return prefs.getString("latest_backup", "");
             } catch (Exception e) {
                 return "";
+            }
+        @JavascriptInterface
+        public String savePdfToPublicDownloads(String base64Data, String filename) {
+            try {
+                if (base64Data == null || base64Data.isEmpty()) {
+                    return "ERROR: EMPTY_DATA";
+                }
+
+                // Strip data URI header if present
+                String rawBase64 = base64Data;
+                if (rawBase64.contains(",")) {
+                    rawBase64 = rawBase64.substring(rawBase64.indexOf(",") + 1);
+                }
+
+                byte[] pdfBytes = Base64.decode(rawBase64, Base64.DEFAULT);
+
+                // Ensure filename starts with Sahoj_Dokan_ and ends with .pdf
+                String safeName = filename;
+                if (safeName == null || safeName.trim().isEmpty()) {
+                    safeName = "Sahoj_Dokan_Report_" + System.currentTimeMillis() + ".pdf";
+                }
+                if (!safeName.startsWith("Sahoj_Dokan_")) {
+                    safeName = "Sahoj_Dokan_" + safeName;
+                }
+                if (!safeName.toLowerCase().endsWith(".pdf")) {
+                    safeName = safeName + ".pdf";
+                }
+
+                File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                if (!downloadsDir.exists()) {
+                    downloadsDir.mkdirs();
+                }
+
+                File targetFile = new File(downloadsDir, safeName);
+                FileOutputStream fos = new FileOutputStream(targetFile);
+                fos.write(pdfBytes);
+                fos.flush();
+                fos.close();
+
+                // Immediate indexing via MediaScannerConnection so the file shows instantly in File Manager / Recent
+                MediaScannerConnection.scanFile(
+                    context,
+                    new String[] { targetFile.getAbsolutePath() },
+                    new String[] { "application/pdf" },
+                    (path, uri) -> {
+                        // Scan complete
+                    }
+                );
+
+                if (context instanceof Activity) {
+                    final String savedPathMsg = "ডাউনলোড সম্পন্ন: " + safeName + " (Downloads ফোল্ডারে)";
+                    ((Activity) context).runOnUiThread(() ->
+                        Toast.makeText(context, savedPathMsg, Toast.LENGTH_LONG).show()
+                    );
+                }
+
+                return targetFile.getAbsolutePath();
+            } catch (Exception e) {
+                e.printStackTrace();
+                return "ERROR: " + e.getMessage();
             }
         }
     }

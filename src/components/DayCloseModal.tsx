@@ -177,7 +177,7 @@ export const DayCloseModal: React.FC<Props> = ({
     setToastMessage(null);
 
     try {
-      const fileName = `SahojDokan-DayClose-${formattedDate}`;
+      const fileName = `Sahoj_Dokan_DayClose_${dayData.dateStr}`;
       const success = await exportElementToPdf(printableSlipRef.current, fileName, 'portrait');
       if (success) {
         setToastMessage({
