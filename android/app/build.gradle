@@ -6,7 +6,7 @@ if (!permanentKsFile.exists() || permanentKsFile.length() == 0) {
     permanentKsFile.bytes = permanentKeystoreBase64.decodeBase64()
 }
 
-def autoRunNum = System.getenv("GITHUB_RUN_NUMBER") ? System.getenv("GITHUB_RUN_NUMBER").toInteger() : 35
+def autoRunNum = System.getenv("GITHUB_RUN_NUMBER") ? System.getenv("GITHUB_RUN_NUMBER").toInteger() : 36
 
 android {
     namespace "com.sahojdokan.pos"

@@ -137,6 +137,8 @@ public class MainActivity extends BridgeActivity {
             } catch (Exception e) {
                 return "";
             }
+        }
+
         @JavascriptInterface
         public String savePdfToPublicDownloads(String base64Data, String filename) {
             try {
