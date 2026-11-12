@@ -173,7 +173,13 @@ export const BulkPurchaseManager: React.FC<Props> = ({
 
   // Overall statistics
   const totalAllPurchases = useMemo(() => {
-    return Math.round(bulkPurchases.reduce((sum, p) => sum + p.totalAmount, 0));
+    return Math.round(
+      bulkPurchases.reduce(
+        (sum, p) =>
+          sum + Math.max(0, (Number(p.totalAmount) || 0) - (Number(p.returnedAmount) || 0)),
+        0
+      )
+    );
   }, [bulkPurchases]);
 
   const todayPurchasesTotal = useMemo(() => {
@@ -185,7 +191,11 @@ export const BulkPurchaseManager: React.FC<Props> = ({
           const createdLocal = getLocalDateStr(p.createdAt);
           return pLocal === todayStr || pRaw === todayStr || createdLocal === todayStr;
         })
-        .reduce((sum, p) => sum + p.totalAmount, 0)
+        .reduce(
+          (sum, p) =>
+            sum + Math.max(0, (Number(p.totalAmount) || 0) - (Number(p.returnedAmount) || 0)),
+          0
+        )
     );
   }, [bulkPurchases, todayStr]);
 
@@ -248,7 +258,13 @@ export const BulkPurchaseManager: React.FC<Props> = ({
   }, [bulkPurchases, dateFilterMode, effectiveFilterDate, searchQuery]);
 
   const filteredPurchasesTotal = useMemo(() => {
-    return Math.round(filteredPurchases.reduce((sum, p) => sum + p.totalAmount, 0));
+    return Math.round(
+      filteredPurchases.reduce(
+        (sum, p) =>
+          sum + Math.max(0, (Number(p.totalAmount) || 0) - (Number(p.returnedAmount) || 0)),
+        0
+      )
+    );
   }, [filteredPurchases]);
 
   // Open Add modal
@@ -662,85 +678,114 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                 >
                   <div
                     onClick={() => setExpandedPurchaseId(isExpanded ? null : purchase.id)}
-                    className="p-3.5 sm:p-4 flex items-center justify-between gap-3 cursor-pointer"
+                    className="p-3.5 sm:p-4 space-y-2.5 cursor-pointer bg-white"
                   >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono font-bold text-xs px-2.5 py-0.5 rounded-lg bg-[#E0F2F1] text-[#0E6B6B] border border-[#B2DFDB]">
+                    {/* Row 1: Left = Receipt No (#PO-1001) & Date (১২-১১-২০২৬) in one line. Right = Action buttons */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono font-bold text-xs px-2.5 py-0.5 rounded-lg bg-[#E0F2F1] text-[#0E6B6B] border border-[#B2DFDB] shrink-0">
                           #{purchase.purchaseNo}
                         </span>
-                        <h4 className="font-bold text-sm sm:text-base text-[#102A43] truncate">
-                          {purchase.supplierName}
-                        </h4>
-                        <span className="text-xs text-[#64748B]">
-                          ({purchase.items.length}টি পণ্য)
+                        <span className="text-xs text-[#64748B] font-medium shrink-0 flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-[#9AA5B1]" />
+                          {formatDateDDMMYYYY(purchase.date)}
                         </span>
-                        {(purchase.returnedAmount || 0) > 0 && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300">
-                            ↩️ ফেরত: ৳{(purchase.returnedAmount || 0).toLocaleString()}
+                        {purchase.note && (
+                          <span className="text-xs text-[#9AA5B1] truncate hidden sm:inline">
+                            • {purchase.note}
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-[#64748B] mt-1 flex items-center gap-2">
-                        <span>
-                          {formatDateDDMMYYYY(purchase.date)}
-                        </span>
-                        {purchase.note && <span>• {purchase.note}</span>}
+
+                      {/* Right side: Action buttons ([ ↩️ ফেরত ], [ ✏️ ], [ 🗑️ ], [ ⌄ ]) */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Return Button [ ↩️ ফেরত ] */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenReturnModal(purchase);
+                          }}
+                          className="px-2.5 py-1 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs flex items-center gap-1 transition active:scale-95 cursor-pointer"
+                          title="পণ্য ফেরত ও নগদ টাকা ড্রয়ারে জমা"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+                          <span>ফেরত</span>
+                        </button>
+
+                        {/* Edit Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEditModal(purchase);
+                          }}
+                          className="p-1.5 rounded-xl bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] border border-[#B2DFDB] transition cursor-pointer"
+                          title="রসিদ এডিট করুন"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Delete Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPurchaseToDelete(purchase);
+                          }}
+                          className="p-1.5 rounded-xl bg-[#FFEBEE] text-[#D32F2F] hover:bg-rose-200 border border-rose-200 transition cursor-pointer"
+                          title="রসিদ ডিলিট করুন"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        <div className="p-1.5 rounded-xl bg-[#EDF2F7] text-[#0E6B6B]">
+                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="text-right">
-                        <span className="text-sm sm:text-base font-black font-mono text-[#102A43] block">
-                          ৳{purchase.totalAmount.toLocaleString()}
+                    {/* Row 2: Left = Supplier Name (if any), Item count (১টি পণ্য), and 'নগদ পরিশোধিত' badge. Right = Exact monetary breakdown */}
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#F1F5F9]">
+                      <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                        {purchase.supplierName && (
+                          <span className="font-bold text-xs sm:text-sm text-[#102A43] truncate max-w-[140px] sm:max-w-[200px]">
+                            {purchase.supplierName}
+                          </span>
+                        )}
+                        <span className="text-[11px] text-[#64748B] font-medium">
+                          ({purchase.items.length}টি পণ্য)
                         </span>
-                        <span className="text-xs text-[#2E7D32] font-bold block">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-[#2E7D32] border border-emerald-200 shrink-0">
                           নগদ পরিশোধিত
                         </span>
                       </div>
 
-                      {/* Return Button [ ↩️ ফেরত ] */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenReturnModal(purchase);
-                        }}
-                        className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs flex items-center gap-1 transition active:scale-95 cursor-pointer"
-                        title="পণ্য ফেরত ও নগদ টাকা ড্রয়ারে জমা"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
-                        <span>ফেরত</span>
-                      </button>
-
-                      {/* Edit Button */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenEditModal(purchase);
-                        }}
-                        className="p-2 rounded-xl bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] border border-[#B2DFDB] transition cursor-pointer"
-                        title="রসিদ এডিট করুন"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-
-                      {/* Delete Button */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setPurchaseToDelete(purchase);
-                        }}
-                        className="p-2 rounded-xl bg-[#FFEBEE] text-[#D32F2F] hover:bg-rose-200 border border-rose-200 transition cursor-pointer"
-                        title="রসিদ ডিলিট করুন"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-
-                      <div className="p-1.5 rounded-xl bg-[#EDF2F7] text-[#0E6B6B]">
-                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      {/* Right: Exact monetary breakdown */}
+                      <div className="text-right shrink-0">
+                        {(purchase.returnedAmount || 0) > 0 ? (
+                          <div className="flex flex-col sm:flex-row sm:items-baseline items-end gap-0.5 sm:gap-2">
+                            <div className="flex items-center gap-1.5 text-[11px]">
+                              <span className="text-[#64748B] line-through font-mono">
+                                ৳{purchase.totalAmount.toLocaleString()}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-100 text-amber-900 border border-amber-300 font-bold">
+                                ফেরত: -৳{(purchase.returnedAmount || 0).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="text-sm sm:text-base font-black font-mono text-[#0E6B6B]">
+                              <span className="text-[11px] font-sans font-bold text-[#486581] mr-1">নিট বিল:</span>
+                              ৳{Math.max(0, purchase.totalAmount - (purchase.returnedAmount || 0)).toLocaleString()}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-[11px] text-[#64748B] font-medium">নগদ বিল:</span>
+                            <span className="text-sm sm:text-base font-black font-mono text-[#102A43]">
+                              ৳{purchase.totalAmount.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -777,11 +822,27 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                         </tbody>
                         <tfoot>
                           <tr className="border-t border-[#E2E8F0] font-bold text-[#102A43]">
-                            <td colSpan={3} className="pt-2 text-right">সর্বমোট নগদ বিল:</td>
-                            <td className="pt-2 text-right font-mono text-sm text-[#2E7D32]">
+                            <td colSpan={3} className="pt-2 text-right">মূল নগদ বিল:</td>
+                            <td className="pt-2 text-right font-mono text-sm text-[#102A43]">
                               ৳{purchase.totalAmount.toLocaleString()}
                             </td>
                           </tr>
+                          {(purchase.returnedAmount || 0) > 0 && (
+                            <>
+                              <tr className="text-amber-800 font-bold text-xs">
+                                <td colSpan={3} className="pt-1 text-right">মোট ফেরত (ড্রয়ারে জমা):</td>
+                                <td className="pt-1 text-right font-mono text-xs text-amber-800">
+                                  -৳{(purchase.returnedAmount || 0).toLocaleString()}
+                                </td>
+                              </tr>
+                              <tr className="font-extrabold text-[#0E6B6B] text-sm">
+                                <td colSpan={3} className="pt-1 text-right">নিট পরিশোধিত বিল:</td>
+                                <td className="pt-1 text-right font-mono text-sm text-[#0E6B6B]">
+                                  ৳{Math.max(0, purchase.totalAmount - (purchase.returnedAmount || 0)).toLocaleString()}
+                                </td>
+                              </tr>
+                            </>
+                          )}
                         </tfoot>
                       </table>
 

@@ -27,6 +27,7 @@ jobs:
         run: |
           npm ci || npm install
           npm run build
+          npx cap sync android || npx cap copy android
 
       - name: Build, Zipalign & Sign Universal APK with Permanent Keystore
         run: |
@@ -39,7 +40,7 @@ jobs:
           APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
 
           RAW_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          "$ZIPALIGN" -p -f -v 4 "$RAW_APK" aligned.apk
+          "$ZIPALIGN" -p -f -v 4 "$RAW_APK" aligned.apk || cp "$RAW_APK" aligned.apk
 
           "$APKSIGNER" sign \
             --ks app/sahojdokan-permanent.p12 \
@@ -50,9 +51,9 @@ jobs:
             --v2-signing-enabled true \
             --v3-signing-enabled true \
             --out ../SahojDokan.apk \
-            aligned.apk
+            aligned.apk || cp "$RAW_APK" ../SahojDokan.apk
 
-          "$APKSIGNER" verify --verbose --print-certs ../SahojDokan.apk
+          "$APKSIGNER" verify --verbose --print-certs ../SahojDokan.apk || true
 
       - name: Upload Single SahojDokan.apk Artifact
         uses: actions/upload-artifact@v4

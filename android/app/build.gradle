@@ -6,7 +6,7 @@ if (!permanentKsFile.exists() || permanentKsFile.length() == 0) {
     permanentKsFile.bytes = permanentKeystoreBase64.decodeBase64()
 }
 
-def autoRunNum = System.getenv("GITHUB_RUN_NUMBER") ? System.getenv("GITHUB_RUN_NUMBER").toInteger() : 38
+def autoRunNum = System.getenv("GITHUB_RUN_NUMBER") ? System.getenv("GITHUB_RUN_NUMBER").toInteger() : 39
 
 android {
     namespace "com.sahojdokan.pos"
@@ -48,6 +48,7 @@ android {
             storePassword "android"
             keyAlias "androiddebugkey"
             keyPassword "android"
+            storeType "PKCS12"
             v1SigningEnabled true
             v2SigningEnabled true
         }
@@ -56,6 +57,7 @@ android {
             storePassword "android"
             keyAlias "androiddebugkey"
             keyPassword "android"
+            storeType "PKCS12"
             v1SigningEnabled true
             v2SigningEnabled true
         }

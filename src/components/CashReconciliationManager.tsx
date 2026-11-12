@@ -230,23 +230,31 @@ export const CashReconciliationManager: React.FC<Props> = ({
 
     // Returns refunding cash to the drawer on dateStr:
     let dayReturnedCash = 0;
+    const returnLabels: string[] = [];
     bulkPurchases.forEach((bp) => {
+      let bpHasReturn = false;
       if (bp.returns && bp.returns.length > 0) {
         bp.returns.forEach((ret) => {
           if (matchesDate(ret.date, dateStr)) {
             dayReturnedCash += Number(ret.amount) || 0;
+            bpHasReturn = true;
           }
         });
       } else if (matchesDate(bp.date, dateStr) && bp.returnedAmount) {
         dayReturnedCash += Number(bp.returnedAmount) || 0;
+        bpHasReturn = true;
+      }
+      if (bpHasReturn) {
+        returnLabels.push(`#${bp.purchaseNo}`);
       }
     });
+    const dayReturnedNotes = returnLabels.join(', ');
 
     const directPurchasePaid = purchases
       .filter((p) => matchesDate(p.date, dateStr))
       .reduce((sum, p) => sum + (p.totalCost || 0), 0);
 
-    const cashPurchases = Math.max(0, Math.round(rawBulkCashPaid + directPurchasePaid - dayReturnedCash));
+    const cashPurchases = Math.round(rawBulkCashPaid + directPurchasePaid);
 
     // 6. − দোকানের যাবতীয় খরচ (Shop operating expenses)
     const shopExpenses = Math.round(
@@ -298,7 +306,7 @@ export const CashReconciliationManager: React.FC<Props> = ({
     const totalSalesCount = daySalesList.length;
 
     const totalCashIn =
-      cashSales + customerDueCollected + ownerNewCapital + ownerWithdrawalReturn + otherCashIn;
+      cashSales + customerDueCollected + dayReturnedCash + ownerNewCapital + ownerWithdrawalReturn + otherCashIn;
     const totalCashOut =
       cashPurchases + shopExpenses + supplierDuePaid + ownerWithdrawal + otherCashOut;
 
@@ -309,6 +317,8 @@ export const CashReconciliationManager: React.FC<Props> = ({
       totalProfit,
       totalSalesCount,
       customerDueCollected,
+      dayReturnedCash,
+      dayReturnedNotes,
       ownerNewCapital,
       ownerWithdrawalReturn,
       otherCashIn,
@@ -334,7 +344,12 @@ export const CashReconciliationManager: React.FC<Props> = ({
     sales.forEach((s) => addDate(s.date));
     bakiTransactions.forEach((tx) => addDate(tx.date));
     ownerTransactions.forEach((tx) => addDate(tx.date));
-    bulkPurchases.forEach((bp) => addDate(bp.date));
+    bulkPurchases.forEach((bp) => {
+      addDate(bp.date);
+      if (bp.returns) {
+        bp.returns.forEach((ret) => addDate(ret.date));
+      }
+    });
     purchases.forEach((p) => addDate(p.date));
     supplierTransactions.forEach((stx) => addDate(stx.date));
     expenses.forEach((exp) => addDate(exp.date));
@@ -903,6 +918,17 @@ export const CashReconciliationManager: React.FC<Props> = ({
                       ৳ {activeDayData.ownerWithdrawalReturn.toLocaleString()}
                     </span>
                   </div>
+                  {activeDayData.dayReturnedCash > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#486581] font-semibold">
+                        + নগদ ক্রয় ফেরত বাবদ ক্যাশ জমা
+                        {activeDayData.dayReturnedNotes ? ` (${activeDayData.dayReturnedNotes})` : ''}
+                      </span>
+                      <span className="font-extrabold text-[#2E7D32]">
+                        + ৳ {activeDayData.dayReturnedCash.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
                   {activeDayData.otherCashIn > 0 && (
                     <div className="flex items-center justify-between">
                       <span className="text-[#486581] font-semibold">+ অন্যান্য জমা</span>
