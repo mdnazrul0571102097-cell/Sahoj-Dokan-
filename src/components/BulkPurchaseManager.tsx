@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   BulkPurchase,
   BulkPurchaseItem,
+  PurchaseReturnItem,
   Supplier,
   Product,
   ShopProfile,
@@ -15,6 +16,7 @@ import {
   Plus,
   Trash2,
   Edit2,
+  RotateCcw,
   X,
   ChevronDown,
   ChevronUp,
@@ -86,6 +88,9 @@ export const BulkPurchaseManager: React.FC<Props> = ({
   const [editingPurchase, setEditingPurchase] = useState<BulkPurchase | null>(null);
   const [expandedPurchaseId, setExpandedPurchaseId] = useState<string | null>(null);
   const [purchaseToDelete, setPurchaseToDelete] = useState<BulkPurchase | null>(null);
+  const [purchaseToReturn, setPurchaseToReturn] = useState<BulkPurchase | null>(null);
+  const [returnAmountInput, setReturnAmountInput] = useState<string>('');
+  const [returnNoteInput, setReturnNoteInput] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Form States
@@ -428,6 +433,49 @@ export const BulkPurchaseManager: React.FC<Props> = ({
     playSuccessChime();
   };
 
+  const handleOpenReturnModal = (p: BulkPurchase) => {
+    setPurchaseToReturn(p);
+    setReturnAmountInput('');
+    setReturnNoteInput('');
+  };
+
+  const handleSubmitReturn = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!purchaseToReturn) return;
+    const amount = Math.round(Number(returnAmountInput) || 0);
+    const alreadyRet = Number(purchaseToReturn.returnedAmount) || 0;
+    const maxReturnable = Math.max(0, (Number(purchaseToReturn.totalAmount) || 0) - alreadyRet);
+
+    if (amount <= 0 || amount > maxReturnable) return;
+
+    const newReturn: PurchaseReturnItem = {
+      id: `pret_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      date: new Date().toISOString(),
+      amount,
+      note: returnNoteInput.trim() || 'ড্যামেজ/পণ্য ফেরত',
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedReturns = [...(purchaseToReturn.returns || []), newReturn];
+    const updatedPurchase: BulkPurchase = {
+      ...purchaseToReturn,
+      returnedAmount: alreadyRet + amount,
+      returns: updatedReturns,
+    };
+
+    const allPurchases = DB.getBulkPurchases();
+    const nextAll = allPurchases.map((p: BulkPurchase) =>
+      p.id === purchaseToReturn.id ? updatedPurchase : p
+    );
+    DB.saveBulkPurchases(nextAll);
+
+    if (onUpdateBulkPurchase) {
+      onUpdateBulkPurchase(updatedPurchase);
+    }
+    playSuccessChime();
+    setPurchaseToReturn(null);
+  };
+
   return (
     <div className="flex-1 flex flex-col">
       {/* Main Summary Card */}
@@ -627,6 +675,11 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                         <span className="text-xs text-[#64748B]">
                           ({purchase.items.length}টি পণ্য)
                         </span>
+                        {(purchase.returnedAmount || 0) > 0 && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300">
+                            ↩️ ফেরত: ৳{(purchase.returnedAmount || 0).toLocaleString()}
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-[#64748B] mt-1 flex items-center gap-2">
                         <span>
@@ -645,6 +698,20 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                           নগদ পরিশোধিত
                         </span>
                       </div>
+
+                      {/* Return Button [ ↩️ ফেরত ] */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenReturnModal(purchase);
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs flex items-center gap-1 transition active:scale-95 cursor-pointer"
+                        title="পণ্য ফেরত ও নগদ টাকা ড্রয়ারে জমা"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+                        <span>ফেরত</span>
+                      </button>
 
                       {/* Edit Button */}
                       <button
@@ -717,6 +784,35 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                           </tr>
                         </tfoot>
                       </table>
+
+                      {purchase.returns && purchase.returns.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-[#E2E8F0]">
+                          <span className="block text-xs font-bold text-amber-800 mb-1.5 flex items-center gap-1">
+                            <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
+                            ফেরত হিস্ট্রি ({purchase.returns.length}টি):
+                          </span>
+                          <div className="space-y-1.5">
+                            {purchase.returns.map((ret) => (
+                              <div
+                                key={ret.id}
+                                className="flex items-center justify-between text-xs bg-amber-50/70 px-3 py-1.5 rounded-xl border border-amber-200"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="font-bold text-slate-700 shrink-0">
+                                    {formatDateDDMMYYYY(ret.date)}
+                                  </span>
+                                  <span className="text-slate-600 truncate">
+                                    • {ret.note || 'ড্যামেজ/পণ্য ফেরত'}
+                                  </span>
+                                </div>
+                                <span className="font-black text-amber-800 tabular-nums shrink-0">
+                                  +৳{ret.amount.toLocaleString()} (ক্যাশে জমা)
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -990,6 +1086,107 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                 হ্যাঁ, ডিলিট করুন
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cash Purchase Return Modal */}
+      {purchaseToReturn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm rounded-[24px] bg-white p-5 shadow-2xl border border-[#E2E8F0] space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E2E8F0]">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                  <RotateCcw className="w-5 h-5 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-[#102A43]">
+                    নগদ ক্রয় ফেরত
+                  </h3>
+                  <p className="text-xs text-[#64748B]">
+                    রসিদ #{purchaseToReturn.purchaseNo} ({purchaseToReturn.supplierName})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPurchaseToReturn(null)}
+                className="p-1 rounded-full hover:bg-slate-100 text-slate-500 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-600 font-semibold">আসল ক্রয় বিল:</span>
+                <span className="font-bold text-slate-900">৳{purchaseToReturn.totalAmount.toLocaleString()}</span>
+              </div>
+              {(purchaseToReturn.returnedAmount || 0) > 0 && (
+                <div className="flex justify-between text-amber-800">
+                  <span className="font-semibold">পূর্বে ফেরত হয়েছে:</span>
+                  <span className="font-bold">৳{(purchaseToReturn.returnedAmount || 0).toLocaleString()}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-emerald-800 pt-1 border-t border-amber-200 font-bold">
+                <span>সর্বোচ্চ ফেরত সম্ভব:</span>
+                <span>৳{Math.max(0, purchaseToReturn.totalAmount - (purchaseToReturn.returnedAmount || 0)).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmitReturn} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-[#102A43] mb-1">
+                  ফেরতকৃত টাকার পরিমাণ (৳) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  max={Math.max(0, purchaseToReturn.totalAmount - (purchaseToReturn.returnedAmount || 0))}
+                  step="any"
+                  autoFocus
+                  value={returnAmountInput}
+                  onChange={(e) => setReturnAmountInput(e.target.value)}
+                  placeholder="যেমন: 500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F8FAFC] border-2 border-amber-400 text-base font-black text-[#102A43] focus:outline-none focus:border-amber-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#102A43] mb-1">
+                  নোট / কারণ (ঐচ্ছিক)
+                </label>
+                <input
+                  type="text"
+                  value={returnNoteInput}
+                  onChange={(e) => setReturnNoteInput(e.target.value)}
+                  placeholder="যেমন: ড্যামেজ মাল ফেরত"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs text-[#102A43] focus:outline-none focus:border-[#0E6B6B]"
+                />
+              </div>
+
+              <div className="text-[11px] text-[#64748B] leading-tight space-y-0.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                <p>• ফেরত পাওয়া টাকা সরাসরি <strong>ক্যাশ বাক্সে নগদ</strong> ব্যালেন্সে জমা হবে (+)।</p>
+                <p>• <strong>মূল মালের পুঁজি</strong> থেকে সমপরিমাণ টাকা বিয়োগ হবে (−)।</p>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setPurchaseToReturn(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-[#EDF2F7] text-[#102A43] font-bold text-xs cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-[#D97706] hover:bg-amber-700 text-white font-black text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                >
+                  নগদ ফেরত জমা করুন
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -160,22 +160,24 @@ export function calculateRunningCapital({
   const salesDueRemaining = Math.max(0, Math.round(totalSalesDue - customerDueCollected));
   const customerDue = Math.max(customerDueFromCustomers, salesDueRemaining);
 
-  // ৩. মাল ক্রয় / রিস্টক (Bulk Purchases + Direct Product Restocks)
+  // ৩. মাল ক্রয় / রিস্টক (Bulk Purchases + Direct Product Restocks, deducting Purchase Returns)
   const bulkPurchaseCost = Math.round(
-    bulkPurchases.reduce((sum, bp) => sum + (Number(bp.totalAmount) || 0), 0)
-  );
-  const bulkCashPaid = Math.round(
     bulkPurchases.reduce(
       (sum, bp) =>
         sum +
-        Math.max(
-          0,
-          bp.paidAmount !== undefined
-            ? Number(bp.paidAmount) || 0
-            : (Number(bp.totalAmount) || 0) - (Number(bp.dueAmount) || 0)
-        ),
+        Math.max(0, (Number(bp.totalAmount) || 0) - (Number(bp.returnedAmount) || 0)),
       0
     )
+  );
+  const bulkCashPaid = Math.round(
+    bulkPurchases.reduce((sum, bp) => {
+      const paid =
+        bp.paidAmount !== undefined
+          ? Number(bp.paidAmount) || 0
+          : (Number(bp.totalAmount) || 0) - (Number(bp.dueAmount) || 0);
+      const ret = Number(bp.returnedAmount) || 0;
+      return sum + Math.max(0, paid - ret);
+    }, 0)
   );
   const singlePurchaseCost = Math.round(
     purchases.reduce((sum, p) => sum + (Number(p.totalCost) || 0), 0)

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Supplier, SupplierTransaction, ShopProfile, Language, AppMode } from '../types';
 import { translations } from '../i18n/translations';
 import { playSuccessChime } from '../utils/audio';
+import { DB } from '../storage/db';
 import {
   Building2,
   Search,
@@ -21,6 +22,7 @@ import {
   TrendingUp,
   Lock,
   Info,
+  RotateCcw,
 } from 'lucide-react';
 
 interface Props {
@@ -43,6 +45,12 @@ interface Props {
     note: string,
     newBalance: number
   ) => void;
+  onSupplierReturn?: (
+    supplierId: string,
+    amount: number,
+    note: string,
+    newBalance: number
+  ) => void;
   onUpdateSupplier?: (supplier: Supplier) => void;
   onDeleteSupplier?: (supplierId: string) => void;
 }
@@ -57,6 +65,7 @@ export const SupplierKhataView: React.FC<Props> = ({
   onAddSupplier,
   onPaySupplier,
   onAddSupplierDue,
+  onSupplierReturn,
   onUpdateSupplier = () => {},
   onDeleteSupplier = () => {},
 }) => {
@@ -71,7 +80,12 @@ export const SupplierKhataView: React.FC<Props> = ({
   const [showEditSupplierModal, setShowEditSupplierModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showAddDueModal, setShowAddDueModal] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+
+  // Return state
+  const [returnAmount, setReturnAmount] = useState<number | ''>('');
+  const [returnNote, setReturnNote] = useState('');
 
   // Target supplier for payment/due/edit
   const [activeSupplier, setActiveSupplier] = useState<Supplier | null>(null);
@@ -246,6 +260,48 @@ export const SupplierKhataView: React.FC<Props> = ({
     setDueAmount('');
     setDueNote('');
     setShowAddDueModal(false);
+    playSuccessChime();
+  };
+
+  // Submit Purchase Return (মাল ফেরত / ড্যামেজ বাবদ বাকি কর্তন)
+  const handleReturnSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const target = currentActiveSupplier || selectedSupplier;
+    if (!target) return;
+    const amount = Number(returnAmount);
+    if (!amount || amount <= 0) return;
+
+    const currentDue = target.totalDue ?? target.totalPayableDue ?? 0;
+    const newBalance = Math.max(0, currentDue - amount);
+    const note = returnNote.trim() || 'মাল ফেরত বাবদ বাকি কর্তন';
+
+    if (onSupplierReturn) {
+      onSupplierReturn(target.id, amount, note, newBalance);
+    } else {
+      const tx: SupplierTransaction = {
+        id: `stx_${Date.now()}_ret`,
+        supplierId: target.id,
+        date: new Date().toISOString(),
+        type: 'purchase_return',
+        amount,
+        note,
+        balanceAfter: newBalance,
+      };
+      const allTxs = DB.getSupplierTransactions();
+      DB.saveSupplierTransactions([tx, ...allTxs]);
+      const allSupps = DB.getSuppliers();
+      const nextSupps = allSupps.map((s: Supplier) =>
+        s.id === target.id
+          ? { ...s, totalDue: newBalance, totalPayableDue: newBalance }
+          : s
+      );
+      DB.saveSuppliers(nextSupps);
+      onUpdateSupplier({ ...target, totalDue: newBalance, totalPayableDue: newBalance });
+    }
+
+    setReturnAmount('');
+    setReturnNote('');
+    setShowReturnModal(false);
     playSuccessChime();
   };
 
@@ -730,8 +786,8 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                 </div>
               </div>
 
-              {/* Action Buttons: Add Due & Pay Money */}
-              <div className="grid grid-cols-2 gap-2.5">
+              {/* Action Buttons: Add Due, Pay Money & Return Goods */}
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -743,10 +799,10 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                       setShowAddDueModal(true);
                     }
                   }}
-                  className="py-3 px-3 rounded-2xl bg-[#D32F2F] hover:bg-red-700 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
+                  className="py-2.5 px-2 rounded-2xl bg-[#D32F2F] hover:bg-red-700 text-white font-black text-xs flex items-center justify-center gap-1 shadow-xs transition active:scale-95 cursor-pointer text-center"
                 >
-                  <ArrowUpRight className="w-4 h-4" />
-                  <span>+ নতুন বাকি যোগ</span>
+                  <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
+                  <span>+ নতুন বাকি</span>
                 </button>
 
                 <button
@@ -761,10 +817,27 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                       setShowPaymentModal(true);
                     }
                   }}
-                  className="py-3 px-3 rounded-2xl bg-[#2E7D32] hover:bg-green-800 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
+                  className="py-2.5 px-2 rounded-2xl bg-[#2E7D32] hover:bg-green-800 text-white font-black text-xs flex items-center justify-center gap-1 shadow-xs transition active:scale-95 cursor-pointer text-center"
                 >
-                  <ArrowDownLeft className="w-4 h-4" />
+                  <ArrowDownLeft className="w-3.5 h-3.5 shrink-0" />
                   <span>টাকা পরিশোধ</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = selectedSupplier || currentActiveSupplier;
+                    if (target) {
+                      setActiveSupplier(target);
+                      setReturnAmount('');
+                      setReturnNote('');
+                      setShowReturnModal(true);
+                    }
+                  }}
+                  className="py-2.5 px-2 rounded-2xl bg-[#D97706] hover:bg-amber-700 text-white font-black text-xs flex items-center justify-center gap-1 shadow-xs transition active:scale-95 cursor-pointer text-center"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                  <span>↩️ মাল ফেরত</span>
                 </button>
               </div>
 
@@ -812,22 +885,31 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                     </div>
                   ) : (
                     currentSupplierTxs.map((tx) => {
+                      const isReturn = tx.type === 'purchase_return';
                       const isPayment = tx.type === 'payment_made' || tx.type === 'payment_given';
 
                       return (
                         <div
                           key={tx.id}
-                          className="p-3 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] flex items-center justify-between gap-3 text-xs"
+                          className={`p-3 rounded-xl border flex items-center justify-between gap-3 text-xs ${
+                            isReturn
+                              ? 'border-amber-200 bg-amber-50/50'
+                              : 'border-[#E2E8F0] bg-[#F8FAFC]'
+                          }`}
                         >
                           <div className="flex items-center gap-2.5">
                             <div
                               className={`p-2 rounded-xl shrink-0 ${
-                                isPayment
+                                isReturn
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : isPayment
                                   ? 'bg-[#E8F5E9] text-[#2E7D32]'
                                   : 'bg-[#FFEBEE] text-[#D32F2F]'
                               }`}
                             >
-                              {isPayment ? (
+                              {isReturn ? (
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              ) : isPayment ? (
                                 <TrendingDown className="w-3.5 h-3.5" />
                               ) : (
                                 <TrendingUp className="w-3.5 h-3.5" />
@@ -835,7 +917,11 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                             </div>
                             <div>
                               <p className="font-bold text-[#102A43]">
-                                {isPayment ? 'টাকা পরিশোধ / জমা' : 'মাল ক্রয় বাকি'}
+                                {isReturn
+                                  ? 'মাল ফেরত / ড্যামেজ বাবদ কর্তন'
+                                  : isPayment
+                                  ? 'টাকা পরিশোধ / জমা'
+                                  : 'মাল ক্রয় বাকি'}
                               </p>
                               <p className="text-[11px] text-[#64748B]">
                                 {new Date(tx.date).toLocaleDateString('bn-BD', {
@@ -851,10 +937,14 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                           <div className="text-right">
                             <p
                               className={`font-mono font-black ${
-                                isPayment ? 'text-[#2E7D32]' : 'text-[#D32F2F]'
+                                isReturn
+                                  ? 'text-amber-700'
+                                  : isPayment
+                                  ? 'text-[#2E7D32]'
+                                  : 'text-[#D32F2F]'
                               }`}
                             >
-                              {isPayment ? '-' : '+'}৳{tx.amount.toLocaleString()}
+                              {isReturn ? '-' : isPayment ? '-' : '+'}৳{tx.amount.toLocaleString()}
                             </p>
                             <p className="text-[10px] text-[#64748B] font-mono">
                               অবশিষ্ট: ৳{tx.balanceAfter.toLocaleString()}
@@ -1361,6 +1451,115 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                   className="flex-1 py-3 rounded-xl bg-[#D32F2F] hover:bg-red-700 text-white text-xs font-black shadow-xs transition active:scale-95 cursor-pointer"
                 >
                   বাকি যুক্ত করুন
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Return Goods (Purchase Return / Damage) Modal */}
+      {showReturnModal && (currentActiveSupplier || selectedSupplier) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
+          <div className="w-full max-w-md my-auto rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
+            <div className="p-4 bg-[#D97706] text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <RotateCcw className="w-5 h-5 text-amber-200" />
+                <h3 className="font-bold text-base">মাল ফেরত / ড্যামেজ কর্তন</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowReturnModal(false)}
+                className="p-1 rounded-full hover:bg-white/20 text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleReturnSubmit} className="p-5 space-y-4">
+              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-[#102A43]">
+                    {(currentActiveSupplier || selectedSupplier)?.name}
+                  </p>
+                  <p className="text-[11px] text-[#64748B]">
+                    {(currentActiveSupplier || selectedSupplier)?.company || 'সাপ্লায়ার'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-[#64748B] block">বর্তমান মোট বাকি:</span>
+                  <span className="text-base font-black font-mono text-[#D32F2F]">
+                    ৳{(
+                      (currentActiveSupplier || selectedSupplier)?.totalDue ??
+                      (currentActiveSupplier || selectedSupplier)?.totalPayableDue ??
+                      0
+                    ).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#102A43] mb-1">
+                  ফেরত দেওয়া মালের টাকার অঙ্ক (৳) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  max={Math.max(1, (currentActiveSupplier || selectedSupplier)?.totalDue ?? (currentActiveSupplier || selectedSupplier)?.totalPayableDue ?? 0)}
+                  value={returnAmount}
+                  onChange={(e) => setReturnAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="যেমন: 3500"
+                  className="w-full p-3 rounded-2xl border border-amber-300 bg-[#F8FAFC] text-base font-black font-mono text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#D97706]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#102A43] mb-1">
+                  কারণ / নোট (ঐচ্ছিক)
+                </label>
+                <input
+                  type="text"
+                  value={returnNote}
+                  onChange={(e) => setReturnNote(e.target.value)}
+                  placeholder="যেমন: নষ্ট পণ্য মহাজনকে ফেরত বা ড্যামেজ কর্তন"
+                  className="w-full p-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#D97706]"
+                />
+              </div>
+
+              {/* Automatic Calculation Preview */}
+              {Number(returnAmount) > 0 && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex justify-between items-center text-xs">
+                  <span className="font-semibold text-amber-900">
+                    কর্তনের পর অবশিষ্ট দেনা থাকবে:
+                  </span>
+                  <span className="font-mono font-black text-sm text-[#0E6B6B]">
+                    ৳{Math.max(
+                      0,
+                      ((currentActiveSupplier || selectedSupplier)?.totalDue ?? 0) - Number(returnAmount)
+                    ).toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              <div className="text-[11px] text-[#64748B] leading-tight space-y-0.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                <p>• মহাজনের মোট বাকি দেনা থেকে এই টাকা সরাসরি বাদ (মাইনাস) যাবে।</p>
+                <p>• ক্যাশ ড্রয়ার বা ক্যাশের টাকা অপরিবর্তিত থাকবে।</p>
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowReturnModal(false)}
+                  className="flex-1 py-3 rounded-xl border border-[#E2E8F0] bg-[#EDF2F7] text-[#102A43] text-xs font-bold"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 rounded-xl bg-[#D97706] hover:bg-amber-700 text-white text-xs font-black shadow-xs transition active:scale-95 cursor-pointer"
+                >
+                  বাকি থেকে কর্তন করুন
                 </button>
               </div>
             </form>

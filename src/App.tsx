@@ -808,6 +808,46 @@ export default function App() {
     });
   };
 
+  const handleSupplierReturn = (
+    supplierId: string,
+    amount: number,
+    note?: string,
+    newBalance?: number
+  ) => {
+    let computedNewDue = newBalance ?? 0;
+    setSuppliers((prev) => {
+      const target = prev.find((s) => s.id === supplierId);
+      if (!target) return prev;
+      const currentDue = target.totalDue ?? target.totalPayableDue ?? 0;
+      computedNewDue =
+        typeof newBalance === 'number'
+          ? newBalance
+          : Math.max(0, Math.round((currentDue - amount) * 100) / 100);
+      const nextSuppliers = prev.map((s) =>
+        s.id === supplierId
+          ? { ...s, totalDue: computedNewDue, totalPayableDue: computedNewDue }
+          : s
+      );
+      DB.saveSuppliers(nextSuppliers);
+      return nextSuppliers;
+    });
+
+    const newTx: SupplierTransaction = {
+      id: `stx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      supplierId,
+      date: new Date().toISOString(),
+      type: 'purchase_return',
+      amount,
+      note: note || 'মাল ফেরত বাবদ বাকি কর্তন',
+      balanceAfter: computedNewDue,
+    };
+    setSupplierTransactions((prev) => {
+      const nextTxs = [newTx, ...prev];
+      DB.saveSupplierTransactions(nextTxs);
+      return nextTxs;
+    });
+  };
+
   const handleUpdateSupplier = (updatedSupplier: Supplier) => {
     setSuppliers((prev) => {
       const nextSuppliers = prev.map((s) =>
@@ -1008,7 +1048,8 @@ export default function App() {
   // Handle Owner Capital & Drawings (মালিকের টাকা জমা ও উত্তোলন)
   const handleAddOwnerTransaction = (tx: OwnerTransaction) => {
     setOwnerTransactions((prev) => {
-      const next = [tx, ...prev];
+      const exists = prev.some((t) => t.id === tx.id);
+      const next = exists ? prev.map((t) => (t.id === tx.id ? tx : t)) : [tx, ...prev];
       DB.saveOwnerTransactions(next);
       return next;
     });
@@ -1193,6 +1234,7 @@ export default function App() {
             onAddSupplier={handleAddSupplier}
             onPaySupplier={handlePaySupplier}
             onAddSupplierDue={handleAddSupplierDue}
+            onSupplierReturn={handleSupplierReturn}
             onUpdateSupplier={handleUpdateSupplier}
             onDeleteSupplier={handleDeleteSupplier}
           />

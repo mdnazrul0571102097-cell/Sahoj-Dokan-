@@ -62,6 +62,12 @@ interface Props {
     note: string,
     newBalance: number
   ) => void;
+  onSupplierReturn?: (
+    supplierId: string,
+    amount: number,
+    note: string,
+    newBalance: number
+  ) => void;
   onUpdateSupplier?: (supplier: Supplier) => void;
   onDeleteSupplier?: (supplierId: string) => void;
 }
@@ -83,6 +89,7 @@ export const BakiKhataView: React.FC<Props> = ({
   onAddSupplier = () => {},
   onPaySupplier = () => {},
   onAddSupplierDue = () => {},
+  onSupplierReturn,
   onUpdateSupplier = () => {},
   onDeleteSupplier = () => {},
 }) => {
@@ -428,6 +435,7 @@ export const BakiKhataView: React.FC<Props> = ({
           onAddSupplier={onAddSupplier}
           onPaySupplier={onPaySupplier}
           onAddSupplierDue={onAddSupplierDue}
+          onSupplierReturn={onSupplierReturn}
           onUpdateSupplier={onUpdateSupplier}
           onDeleteSupplier={onDeleteSupplier}
         />
@@ -567,31 +575,31 @@ export const BakiKhataView: React.FC<Props> = ({
                             : 'border-[#E2E8F0]'
                         }`}
                       >
-                        <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
                           {/* Circular Avatar */}
-                          <div className="w-11 h-11 rounded-full bg-[#E0F2F1] text-[#0E6B6B] font-bold text-lg flex items-center justify-center shrink-0">
+                          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#E0F2F1] text-[#0E6B6B] font-black text-base sm:text-lg flex items-center justify-center shrink-0">
                             {cust.name.slice(0, 1)}
                           </div>
-                          <div className="min-w-0">
-                            <h4 className="font-bold text-base text-[#102A43] truncate">
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-bold text-sm sm:text-base text-[#102A43] truncate">
                               {cust.name}
                             </h4>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-xs text-[#64748B] font-mono">
-                                {cust.phone || '---'}
-                              </span>
-                              <span className="bg-[#E3F2FD] text-[#1976D2] font-semibold text-[10px] px-2 py-0.5 rounded-md">
-                                কাস্টমার
-                              </span>
+                            <div className="flex items-center gap-1.5 mt-0.5 text-xs text-[#64748B] font-mono truncate">
+                              <span>{cust.phone || '---'}</span>
+                              {cust.address && (
+                                <span className="font-sans font-normal truncate">• {cust.address}</span>
+                              )}
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2.5 shrink-0">
-                          <div className="text-right">
-                            <span className="text-xs text-[#64748B] block font-medium">মোট বাকি</span>
+                        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+                          <div className="text-right shrink-0">
+                            <span className="text-[11px] text-[#64748B] block font-medium leading-tight">
+                              মোট বাকি
+                            </span>
                             <span
-                              className={`text-base font-black ${
+                              className={`text-sm sm:text-base font-black font-mono tracking-tight leading-tight block ${
                                 hasDue ? 'text-[#D32F2F]' : 'text-[#2E7D32]'
                               }`}
                             >

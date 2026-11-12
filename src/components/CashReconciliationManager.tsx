@@ -213,8 +213,8 @@ export const CashReconciliationManager: React.FC<Props> = ({
         .reduce((sum, e) => sum + (e.amount || 0), 0)
     );
 
-    // 5. − নগদ পণ্য কেনা (Cash product purchases: bulk cash paid + direct restock purchases)
-    const bulkCashPaid = bulkPurchases
+    // 5. − নগদ পণ্য কেনা (Cash product purchases: bulk cash paid + direct restock purchases, minus purchase returns)
+    const rawBulkCashPaid = bulkPurchases
       .filter((bp) => matchesDate(bp.date, dateStr))
       .reduce(
         (sum, bp) =>
@@ -228,11 +228,25 @@ export const CashReconciliationManager: React.FC<Props> = ({
         0
       );
 
+    // Returns refunding cash to the drawer on dateStr:
+    let dayReturnedCash = 0;
+    bulkPurchases.forEach((bp) => {
+      if (bp.returns && bp.returns.length > 0) {
+        bp.returns.forEach((ret) => {
+          if (matchesDate(ret.date, dateStr)) {
+            dayReturnedCash += Number(ret.amount) || 0;
+          }
+        });
+      } else if (matchesDate(bp.date, dateStr) && bp.returnedAmount) {
+        dayReturnedCash += Number(bp.returnedAmount) || 0;
+      }
+    });
+
     const directPurchasePaid = purchases
       .filter((p) => matchesDate(p.date, dateStr))
       .reduce((sum, p) => sum + (p.totalCost || 0), 0);
 
-    const cashPurchases = Math.round(bulkCashPaid + directPurchasePaid);
+    const cashPurchases = Math.max(0, Math.round(rawBulkCashPaid + directPurchasePaid - dayReturnedCash));
 
     // 6. − দোকানের যাবতীয় খরচ (Shop operating expenses)
     const shopExpenses = Math.round(
@@ -482,7 +496,7 @@ export const CashReconciliationManager: React.FC<Props> = ({
         .reduce((sum, e) => sum + (e.amount || 0), 0)
     );
 
-    const bulkCashPaid = bulkPurchases
+    const rawBulkCashPaid = bulkPurchases
       .filter((bp) => matchesMonth(bp.date, selectedMonth))
       .reduce(
         (sum, bp) =>
@@ -496,11 +510,24 @@ export const CashReconciliationManager: React.FC<Props> = ({
         0
       );
 
+    let monthReturnedCash = 0;
+    bulkPurchases.forEach((bp) => {
+      if (bp.returns && bp.returns.length > 0) {
+        bp.returns.forEach((ret) => {
+          if (matchesMonth(ret.date, selectedMonth)) {
+            monthReturnedCash += Number(ret.amount) || 0;
+          }
+        });
+      } else if (matchesMonth(bp.date, selectedMonth) && bp.returnedAmount) {
+        monthReturnedCash += Number(bp.returnedAmount) || 0;
+      }
+    });
+
     const directPurchasePaid = purchases
       .filter((p) => matchesMonth(p.date, selectedMonth))
       .reduce((sum, p) => sum + (p.totalCost || 0), 0);
 
-    const cashPurchases = Math.round(bulkCashPaid + directPurchasePaid);
+    const cashPurchases = Math.max(0, Math.round(rawBulkCashPaid + directPurchasePaid - monthReturnedCash));
 
     const shopExpenses = Math.round(
       expenses

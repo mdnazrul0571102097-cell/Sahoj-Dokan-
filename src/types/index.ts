@@ -190,7 +190,7 @@ export interface SupplierTransaction {
   id: string;
   supplierId: string;
   date: string;
-  type: 'purchase_due' | 'payment_made' | 'payment_given'; // মাল কিনে বাকি | টাকা পরিশোধ
+  type: 'purchase_due' | 'payment_made' | 'payment_given' | 'purchase_return'; // মাল কিনে বাকি | টাকা পরিশোধ | মাল ফেরত
   amount: number;
   note?: string;         // চালানের বিবরণ / পণ্যের নাম
   purchaseId?: string;
@@ -230,6 +230,14 @@ export interface BulkPurchaseItem {
   totalCost: number;     // মোট খরচ (quantity * unitCostPrice)
 }
 
+export interface PurchaseReturnItem {
+  id: string;
+  date: string;          // ISO date
+  amount: number;        // ফেরত প্রাপ্ত নগদ টাকা
+  note?: string;         // কারণ বা নোট (যেমন: ড্যামেজ মাল ফেরত)
+  createdAt: string;
+}
+
 export interface BulkPurchase {
   id: string;
   purchaseNo: string;    // যেমন: #PO-1001
@@ -244,6 +252,8 @@ export interface BulkPurchase {
   dueAmount: number;     // বাকি টাকা (সাপ্লায়ারের পাওনা)
   paymentType: 'cash' | 'due' | 'partial' | 'bkash' | 'nagad' | 'bank';
   note?: string;         // মেমো বা ভাউচার বিবরণ
+  returnedAmount?: number; // মোট ফেরত আসা টাকার পরিমাণ
+  returns?: PurchaseReturnItem[]; // ফেরত সংক্রান্ত হিস্ট্রি
   createdAt: string;
 }
 
