@@ -5,6 +5,9 @@ import {
   BulkPurchase,
   PurchaseRecord,
   OwnerTransaction,
+  Customer,
+  BakiTransaction,
+  SupplierTransaction,
 } from '../types';
 import { DB } from '../storage/db';
 import { playSuccessChime } from '../utils/audio';
@@ -23,6 +26,9 @@ interface Props {
   purchases?: PurchaseRecord[];
   expenses: Expense[];
   ownerTransactions: OwnerTransaction[];
+  customers?: Customer[];
+  bakiTransactions?: BakiTransaction[];
+  supplierTransactions?: SupplierTransaction[];
   compact?: boolean;
   onOpenOwnerCapital?: () => void;
 }
@@ -57,6 +63,9 @@ export function calculateRunningCapital({
   purchases = [],
   expenses,
   ownerTransactions,
+  customers = [],
+  bakiTransactions = [],
+  supplierTransactions = [],
 }: {
   initialStoreCapital: number;
   sales: Sale[];
@@ -64,6 +73,9 @@ export function calculateRunningCapital({
   purchases?: PurchaseRecord[];
   expenses: Expense[];
   ownerTransactions: OwnerTransaction[];
+  customers?: Customer[];
+  bakiTransactions?: BakiTransaction[];
+  supplierTransactions?: SupplierTransaction[];
 }) {
   const defaultMargin = DB.getQuickSaleProfitMargin();
   const todayStr = getLocalDateStr(new Date());
@@ -147,8 +159,10 @@ export function calculateRunningCapital({
   totalSalesDue = Math.round(totalSalesDue);
 
   // কাস্টমারের বকেয়া আদায় ও মোট বাকি পাওনা (Customer Due & Due Collected)
-  const bakiTxs = DB.getBakiTransactions();
-  const customersList = DB.getCustomers();
+  const bakiTxs =
+    bakiTransactions && bakiTransactions.length > 0 ? bakiTransactions : DB.getBakiTransactions();
+  const customersList =
+    customers && customers.length > 0 ? customers : DB.getCustomers();
   const customerDueCollected = Math.round(
     bakiTxs
       .filter((tx) => tx.type === 'payment_received')
@@ -184,6 +198,19 @@ export function calculateRunningCapital({
   );
   const totalPurchases = bulkPurchaseCost + singlePurchaseCost;
   const cashPurchasesPaid = bulkCashPaid + singlePurchaseCost;
+
+  // ৩.১ সাপ্লায়ারকে নগদ টাকা পরিশোধ (Supplier Cash Payments)
+  // 'সাপ্লায়ার বাকি খাতা'-য় মহাজনকে দেওয়া টাকা ('payment_made' / 'payment_given')
+  // (নোট: সাপ্লায়ারকে 'মাল ফেরত' (purchase_return) দিলে ক্যাশ বাক্সে কোনো হাত পড়বে না)
+  const actualSupplierTxs =
+    supplierTransactions && supplierTransactions.length > 0
+      ? supplierTransactions
+      : DB.getSupplierTransactions();
+  const totalSupplierPaid = Math.round(
+    actualSupplierTxs
+      .filter((stx) => stx && (stx.type === 'payment_made' || stx.type === 'payment_given'))
+      .reduce((sum, stx) => sum + (Number(stx.amount) || 0), 0)
+  );
 
   // ৪. দোকান খরচ (সকল দোকান খরচ ও আজকের খরচ)
   const totalExpenses = Math.round(
@@ -234,7 +261,7 @@ export function calculateRunningCapital({
     Math.round(initialCapital - totalCostOfGoodsSold + totalPurchases)
   );
 
-  // - ক্যাশ বাক্সে নগদ টাকা (Cash in Hand) = নগদ বিক্রি আদায় + কাস্টমার বকেয়া আদায় + মালিকের জমা - দোকান খরচ - নগদ মাল কেনা - মালিকের ম্যানুয়াল উত্তোলন
+  // - ক্যাশ বাক্সে নগদ টাকা (Cash in Hand) = নগদ বিক্রি আদায় + কাস্টমার বকেয়া আদায় + মালিকের জমা - দোকান খরচ - নগদ মাল কেনা - সাপ্লায়ারকে পরিশোধকৃত টাকা - মালিকের ম্যানুয়াল উত্তোলন
   const drawerCash = Math.max(
     0,
     Math.round(
@@ -243,6 +270,7 @@ export function calculateRunningCapital({
         totalOwnerAdded -
         totalExpenses -
         cashPurchasesPaid -
+        totalSupplierPaid -
         totalWithdrawals
     )
   );
@@ -286,6 +314,9 @@ export const RunningCapitalCard: React.FC<Props> = ({
   purchases = [],
   expenses,
   ownerTransactions,
+  customers = [],
+  bakiTransactions = [],
+  supplierTransactions = [],
 }) => {
   const [isEditingCapital, setIsEditingCapital] = useState(false);
   const [capitalInput, setCapitalInput] = useState<string>(
@@ -302,8 +333,21 @@ export const RunningCapitalCard: React.FC<Props> = ({
         purchases,
         expenses,
         ownerTransactions,
+        customers,
+        bakiTransactions,
+        supplierTransactions,
       }),
-    [initialStoreCapital, sales, bulkPurchases, purchases, expenses, ownerTransactions]
+    [
+      initialStoreCapital,
+      sales,
+      bulkPurchases,
+      purchases,
+      expenses,
+      ownerTransactions,
+      customers,
+      bakiTransactions,
+      supplierTransactions,
+    ]
   );
 
   const handleSaveCapital = (e: React.FormEvent) => {

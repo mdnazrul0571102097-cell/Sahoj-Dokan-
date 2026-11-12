@@ -293,7 +293,13 @@ export const CashReconciliationManager: React.FC<Props> = ({
     const defaultMargin = DB.getQuickSaleProfitMargin();
     const daySalesList = sales.filter((s) => matchesDate(s.date, dateStr));
     const totalSales = Math.round(daySalesList.reduce((sum, s) => sum + (s.grandTotal || 0), 0));
-    const dueSales = Math.round(daySalesList.reduce((sum, s) => sum + (s.dueAmount || 0), 0));
+    const salesDueAmount = Math.round(daySalesList.reduce((sum, s) => sum + (s.dueAmount || 0), 0));
+    const directDueAmount = Math.round(
+      bakiTransactions
+        .filter((tx) => tx.type === 'due_added' && matchesDate(tx.date, dateStr))
+        .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
+    );
+    const dueSales = salesDueAmount + directDueAmount;
     const totalProfit = Math.round(
       daySalesList.reduce((sum, s) => {
         const isQuick = s.items && s.items.some((it) => it.productId === 'quick_sale_entry');
@@ -580,7 +586,13 @@ export const CashReconciliationManager: React.FC<Props> = ({
     const defaultMargin = DB.getQuickSaleProfitMargin();
     const monthSalesList = sales.filter((s) => matchesMonth(s.date, selectedMonth));
     const totalSales = Math.round(monthSalesList.reduce((sum, s) => sum + (s.grandTotal || 0), 0));
-    const dueSales = Math.round(monthSalesList.reduce((sum, s) => sum + (s.dueAmount || 0), 0));
+    const salesDueAmount = Math.round(monthSalesList.reduce((sum, s) => sum + (s.dueAmount || 0), 0));
+    const directDueAmount = Math.round(
+      bakiTransactions
+        .filter((tx) => tx.type === 'due_added' && matchesMonth(tx.date, selectedMonth))
+        .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
+    );
+    const dueSales = salesDueAmount + directDueAmount;
     const totalProfit = Math.round(
       monthSalesList.reduce((sum, s) => {
         const isQuick = s.items && s.items.some((it) => it.productId === 'quick_sale_entry');

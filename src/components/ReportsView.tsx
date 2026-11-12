@@ -374,9 +374,28 @@ export const ReportsView: React.FC<Props> = ({
     );
   }, [filteredSales, defaultQuickSaleMargin]);
 
-  const totalDueGiven = useMemo(() => {
-    return Math.round(filteredSales.reduce((acc, s) => acc + s.dueAmount, 0));
+  const salesDueGiven = useMemo(() => {
+    return Math.round(filteredSales.reduce((acc, s) => acc + (Number(s.dueAmount) || 0), 0));
   }, [filteredSales]);
+
+  const directDueGiven = useMemo(() => {
+    const txs = bakiTransactions && bakiTransactions.length > 0 ? bakiTransactions : DB.getBakiTransactions();
+    return Math.round(
+      txs
+        .filter((tx) => {
+          if (tx.type !== 'due_added') return false;
+          if (dateFilterMode === 'all') return true;
+          const localD = getLocalDateStr(tx.date);
+          const rawD = (tx.date || '').slice(0, 10);
+          return localD === effectiveFilterDate || rawD === effectiveFilterDate;
+        })
+        .reduce((acc, tx) => acc + (Number(tx.amount) || 0), 0)
+    );
+  }, [bakiTransactions, dateFilterMode, effectiveFilterDate]);
+
+  const totalDueGiven = useMemo(() => {
+    return salesDueGiven + directDueGiven;
+  }, [salesDueGiven, directDueGiven]);
 
   const totalPurchaseCost = useMemo(() => {
     return Math.round(filteredPurchases.reduce((acc, p) => acc + p.totalCost, 0));
@@ -498,6 +517,9 @@ export const ReportsView: React.FC<Props> = ({
             purchases={purchases}
             expenses={expenses}
             ownerTransactions={ownerTransactions}
+            customers={customers}
+            bakiTransactions={bakiTransactions}
+            supplierTransactions={supplierTransactions}
           />
 
           {/* 2. Unified Compact Container for 4 Core Metrics + Net Profit Strip */}
