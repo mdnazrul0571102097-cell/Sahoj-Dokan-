@@ -26,6 +26,7 @@ import {
   Sparkles,
   PlusCircle,
   ArrowLeft,
+  Minus,
 } from 'lucide-react';
 
 import { AppMode } from '../types';
@@ -38,6 +39,7 @@ interface Props {
   onRecordPurchase: (purchase: PurchaseRecord, updatedProduct: Product) => void;
   appMode?: AppMode;
   onOpenSubscriptionModal?: () => void;
+  onBackToMenu?: () => void;
 }
 
 export const ProductManagement: React.FC<Props> = ({
@@ -48,6 +50,7 @@ export const ProductManagement: React.FC<Props> = ({
   onRecordPurchase,
   appMode = 'trial',
   onOpenSubscriptionModal,
+  onBackToMenu,
 }) => {
   const t = translations[language];
 
@@ -461,13 +464,24 @@ export const ProductManagement: React.FC<Props> = ({
   return (
     <div className="h-[calc(100vh-125px)] flex flex-col p-2 sm:p-3 max-w-7xl mx-auto overflow-hidden">
       {/* Top Header Bar */}
-      <div className="bg-white rounded-2xl px-3 sm:px-4 py-2.5 mb-2.5 flex items-center justify-between border border-[#E2E8F0] shadow-xs shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-[#0E6B6B]">
-            <ArrowLeft className="w-5 h-5" />
-          </div>
-          <h2 className="text-base sm:text-lg font-bold text-[#102A43]">
-            পণ্যের তালিকা
+      <div className="bg-white rounded-2xl px-3 sm:px-4 py-2.5 mb-2.5 flex items-center justify-between gap-2 border border-[#E2E8F0] shadow-xs shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          {onBackToMenu ? (
+            <button
+              type="button"
+              onClick={onBackToMenu}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] font-extrabold text-xs sm:text-sm transition active:scale-95 cursor-pointer shrink-0"
+            >
+              <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+              <span>হিসাব / মেনু</span>
+            </button>
+          ) : (
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-[#0E6B6B]">
+              <ArrowLeft className="w-5 h-5" />
+            </div>
+          )}
+          <h2 className="text-sm sm:text-lg font-bold text-[#102A43] truncate">
+            পণ্য / স্টক
           </h2>
         </div>
 
@@ -478,9 +492,9 @@ export const ProductManagement: React.FC<Props> = ({
             if (products.length > 0) handleOpenRestock(products[0]);
             else handleOpenCreateModal();
           }}
-          className="flex items-center gap-1.5 text-xs font-bold bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] px-3 py-1.5 rounded-xl border border-[#B2DFDB] transition cursor-pointer"
+          className="flex items-center gap-1.5 text-xs font-bold bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] px-3 py-1.5 rounded-xl border border-[#B2DFDB] transition cursor-pointer shrink-0 whitespace-nowrap"
         >
-          <span>পণ্য ক্রয় করুন</span>
+          <span>রিস্টক</span>
           <Package className="w-4 h-4" />
         </button>
       </div>
@@ -632,72 +646,114 @@ export const ProductManagement: React.FC<Props> = ({
           </div>
         ) : (
           filteredProducts.map((product) => {
+            const handleQuickStockChange = (delta: number) => {
+              const nextStock = Math.max(0, Math.round((product.stock + delta) * 1000) / 1000);
+              if (nextStock === product.stock) return;
+              onSaveProduct({
+                ...product,
+                stock: nextStock,
+                updatedAt: new Date().toISOString(),
+              });
+            };
+
             return (
               <div
                 key={product.id}
-                className="bg-white rounded-[20px] p-3.5 border border-[#E2E8F0] shadow-xs flex items-center justify-between gap-2.5 hover:border-[#0E6B6B] transition-all"
+                className="bg-white rounded-[20px] p-3 border border-[#E2E8F0] shadow-xs space-y-2.5 hover:border-[#0E6B6B] transition-all"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  {/* Product Photo */}
-                  <div className="w-12 h-12 rounded-2xl bg-[#E0F2F1] border border-[#B2DFDB] overflow-hidden flex items-center justify-center shrink-0 shadow-2xs">
-                    {product.image ? (
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = '/assets/icon.png';
-                        }}
-                      />
-                    ) : (
-                      <span className="text-[#0E6B6B] font-bold text-lg">
-                        {product.name.slice(0, 1)}
-                      </span>
-                    )}
+                {/* Row 1: Photo, Name, Price & Stock Badge */}
+                <div className="flex items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-11 h-11 rounded-2xl bg-[#E0F2F1] border border-[#B2DFDB] overflow-hidden flex items-center justify-center shrink-0 shadow-2xs">
+                      {product.image ? (
+                        <img
+                          src={product.image}
+                          alt={product.name}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/assets/icon.png';
+                          }}
+                        />
+                      ) : (
+                        <span className="text-[#0E6B6B] font-bold text-lg">
+                          {product.name.slice(0, 1)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <h4 className="font-bold text-sm sm:text-base text-[#102A43] truncate">
+                        {product.name}
+                      </h4>
+                      <p className="text-xs text-[#64748B] mt-0.5 tabular-nums">
+                        ক্রয়: ৳{product.costPrice} • <span className="font-bold text-[#2E7D32]">বিক্রয়: ৳{product.sellPrice}</span>
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="min-w-0">
-                    <h4 className="font-bold text-sm sm:text-base text-[#102A43] truncate">
-                      {product.name}
-                    </h4>
-                    <p className="text-xs text-[#64748B] mt-0.5">
-                      ক্রয়: ৳{product.costPrice} • <span className="font-bold text-[#2E7D32]">বিক্রয়: ৳{product.sellPrice}</span>
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="bg-[#E0F2F1] text-[#0E6B6B] font-bold text-xs px-2.5 py-1.5 rounded-xl border border-[#B2DFDB]">
+                  <span
+                    onClick={() => handleOpenRestock(product)}
+                    className="bg-[#E0F2F1] text-[#0E6B6B] font-extrabold text-xs px-2.5 py-1.5 rounded-xl border border-[#B2DFDB] shrink-0 whitespace-nowrap tabular-nums cursor-pointer"
+                    title="বড় সংখ্যায় রিস্টক করতে ট্যাপ করুন"
+                  >
                     {product.stock} {product.unit}
                   </span>
+                </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleOpenRestock(product)}
-                    className="p-2 rounded-xl bg-[#EDF2F7] hover:bg-[#E0F2F1] text-[#0E6B6B] transition cursor-pointer"
-                    title="স্টক যোগ"
-                  >
-                    <Plus className="w-4 h-4 stroke-[2.5]" />
-                  </button>
+                {/* Row 2: Instant Quick Stock Stepper (- / +) + Restock, Edit, Delete */}
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#F1F5F9]">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickStockChange(-1)}
+                      disabled={product.stock <= 0}
+                      className="w-9 h-9 rounded-xl bg-rose-50 hover:bg-rose-100 disabled:opacity-40 border border-rose-200 text-[#D32F2F] flex items-center justify-center transition active:scale-95 cursor-pointer"
+                      title="স্টক ১ কমান"
+                    >
+                      <Minus className="w-4 h-4 stroke-[2.8]" />
+                    </button>
+                    <span className="px-2 text-xs font-extrabold text-[#102A43] tabular-nums whitespace-nowrap">
+                      দ্রুত স্টক
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickStockChange(1)}
+                      className="w-9 h-9 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[#2E7D32] flex items-center justify-center transition active:scale-95 cursor-pointer"
+                      title="স্টক ১ বাড়ান"
+                    >
+                      <Plus className="w-4 h-4 stroke-[2.8]" />
+                    </button>
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEditModal(product)}
-                    className="p-2 rounded-xl bg-[#EDF2F7] hover:bg-slate-200 text-[#64748B] transition cursor-pointer"
-                    title="সম্পাদনা"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenRestock(product)}
+                      className="px-2.5 h-9 rounded-xl bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] text-xs font-bold transition cursor-pointer whitespace-nowrap"
+                      title="নতুন চালান রিস্টক"
+                    >
+                      + রিস্টক
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setProductToDelete(product)}
-                    className="p-2 rounded-xl bg-[#FFEBEE] hover:bg-rose-200 text-[#D32F2F] transition cursor-pointer"
-                    title="পণ্য ডিলিট করুন"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditModal(product)}
+                      className="w-9 h-9 rounded-xl bg-[#EDF2F7] hover:bg-slate-200 text-[#64748B] flex items-center justify-center transition cursor-pointer"
+                      title="সম্পাদনা"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setProductToDelete(product)}
+                      className="w-9 h-9 rounded-xl bg-[#FFEBEE] hover:bg-rose-200 text-[#D32F2F] flex items-center justify-center transition cursor-pointer"
+                      title="পণ্য ডিলিট করুন"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );

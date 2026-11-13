@@ -448,7 +448,7 @@ export const PosView: React.FC<Props> = ({
             <Search className="w-10 h-10 text-[#9AA5B1] mb-2 stroke-1" />
             <p className="text-sm font-bold text-[#0F172A]">কোনো পণ্য পাওয়া যায়নি</p>
             <p className="text-xs text-[#64748B] mt-1">
-              অন্য কোনো নাম দিয়ে সার্চ করুন অথবা 'পণ্য ও স্টক' ট্যাবে নতুন পণ্য যোগ করুন।
+              'হিসাব / মেনু' থেকে 'পণ্য / স্টক'-এ নতুন পণ্য যোগ করুন
             </p>
           </div>
         ) : (

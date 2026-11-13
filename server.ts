@@ -1,8 +1,10 @@
+import 'dotenv/config';
 import express from 'express';
 import crypto from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { GoogleGenAI, Type } from '@google/genai';
 import { firestore } from './src/services/firebase.ts';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
@@ -571,6 +573,151 @@ app.get('/api/shop-status/:phone', (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ================= AI MEMO SCANNER API (GEMINI VISION) =================
+
+const VALID_PRODUCT_UNITS = ['kg', 'gm', 'liter', 'packet', 'piece', 'dozen'] as const;
+
+function normalizeMemoUnit(rawUnit: string): (typeof VALID_PRODUCT_UNITS)[number] {
+  const u = String(rawUnit || '').trim().toLowerCase();
+  if (!u) return 'piece';
+  if (u === 'kg' || u.includes('কেজি') || u.includes('kilogram') || u.includes('k.g')) return 'kg';
+  if (u === 'gm' || u.includes('গ্রাম') || u.includes('gram') || u === 'g') return 'gm';
+  if (u === 'liter' || u.includes('লিটার') || u.includes('litre') || u.includes('ltr') || u.includes('কার্টুন') || u.includes('carton') || u.includes('ctn')) return 'liter';
+  if (u === 'packet' || u.includes('প্যাকেট') || u.includes('বস্তা') || u.includes('প্যাক') || u.includes('pkt') || u.includes('pack') || u.includes('bag') || u.includes('sack')) return 'packet';
+  if (u === 'dozen' || u.includes('ডজন') || u.includes('doz')) return 'dozen';
+  return 'piece';
+}
+
+app.post('/api/ai/scan-memo', async (req, res) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({
+        success: false,
+        error: 'মেমো স্ক্যানিং সেবা বর্তমানে অনুপলব্ধ। কিছুক্ষণ পর আবার চেষ্টা করুন।',
+      });
+    }
+
+    const { base64Data, mimeType } = req.body || {};
+    if (!base64Data || typeof base64Data !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'অনুগ্রহ করে মেমোর ছবি বা PDF ফাইল প্রদান করুন।',
+      });
+    }
+
+    // Strip data URI prefix if present
+    let cleanBase64 = base64Data.trim();
+    let detectedMimeType = typeof mimeType === 'string' && mimeType.trim() ? mimeType.trim() : 'image/jpeg';
+    const dataUrlMatch = cleanBase64.match(/^data:([^;]+);base64,(.+)$/s);
+    if (dataUrlMatch) {
+      detectedMimeType = dataUrlMatch[1] || detectedMimeType;
+      cleanBase64 = dataUrlMatch[2];
+    }
+
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              data: cleanBase64,
+              mimeType: detectedMimeType,
+            },
+          },
+          {
+            text: `You are an expert Bangladeshi wholesale & grocery memo/invoice OCR extractor for a shopkeeper POS app ("সহজ দোকান").
+Carefully inspect the attached wholesale cash memo, supplier challan, dealer invoice photo, or PDF (which may be handwritten or printed in Bengali, English, or mixed).
+Convert any Bengali digits (০১২৩৪৫৬৭৮৯) into standard Western digits.
+Extract structured data accurately:
+1. supplierName: Name of the wholesaler / dealer / supplier company shown on the memo (empty string if not found).
+2. memoNumber: Invoice / memo / voucher / challan number if shown (empty string if not found).
+3. items: All purchased product line items on the memo. For each item:
+   - name: Clear item description/name in Bengali or English as written on the memo (e.g., "মিনিকেট চাল", "সয়াবিন তেল ৫ লিটার").
+   - quantity: Numeric quantity (default 1 if unclear).
+   - unit: Strictly one of "kg", "gm", "liter", "packet", "piece", "dozen". Map "কেজি" -> "kg", "গ্রাম" -> "gm", "লিটার"/"কার্টুন"/"বোতল" -> "liter", "প্যাকেট"/"বস্তা"/"ব্যাগ" -> "packet", "ডজন" -> "dozen", "পিস"/"টি"/"টা" -> "piece".
+   - purchasePrice: Numeric unit price per 1 unit in BDT. IMPORTANT: If the memo shows unit rate/দর, use that; if only line total/মোট is written for multiple units, compute lineTotal / quantity. Return 0 if unreadable.`,
+          },
+        ],
+      },
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            supplierName: { type: Type.STRING },
+            memoNumber: { type: Type.STRING },
+            items: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  quantity: { type: Type.NUMBER },
+                  unit: { type: Type.STRING },
+                  purchasePrice: { type: Type.NUMBER },
+                },
+                required: ['name', 'quantity', 'unit', 'purchasePrice'],
+              },
+            },
+          },
+          required: ['supplierName', 'memoNumber', 'items'],
+        },
+      },
+    });
+
+    const rawText = response.text || '{}';
+    let parsed: any = {};
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
+      }
+    }
+
+    const sanitizedItems = Array.isArray(parsed.items)
+      ? parsed.items
+          .filter((it: any) => it && String(it.name || '').trim())
+          .map((it: any) => {
+            const qty = Math.max(0.01, Number(it.quantity) || 1);
+            const price = Math.max(0, Number(it.purchasePrice) || 0);
+            return {
+              name: String(it.name).trim(),
+              quantity: Math.round(qty * 100) / 100,
+              unit: normalizeMemoUnit(it.unit),
+              purchasePrice: Math.round(price * 100) / 100,
+            };
+          })
+      : [];
+
+    res.json({
+      success: true,
+      data: {
+        supplierName: String(parsed.supplierName || '').trim(),
+        memoNumber: String(parsed.memoNumber || '').trim(),
+        items: sanitizedItems,
+      },
+    });
+  } catch (err: any) {
+    console.error('AI memo scan error:', err);
+    res.status(500).json({
+      success: false,
+      error: 'মেমো পড়া যায়নি। অনুগ্রহ করে পরিষ্কার ছবি বা PDF দিয়ে আবার চেষ্টা করুন।',
+    });
   }
 });
 

@@ -196,10 +196,7 @@ export function calculateRunningCapital({
   const singlePurchaseCost = Math.round(
     purchases.reduce((sum, p) => sum + (Number(p.totalCost) || 0), 0)
   );
-  const totalPurchases = bulkPurchaseCost + singlePurchaseCost;
-  const cashPurchasesPaid = bulkCashPaid + singlePurchaseCost;
-
-  // ৩.১ সাপ্লায়ারকে নগদ টাকা পরিশোধ (Supplier Cash Payments)
+  // ৩.১ সাপ্লায়ারকে নগদ টাকা পরিশোধ (Supplier Cash Payments) ও বাকি ক্রয় স্টক মূলধন
   // 'সাপ্লায়ার বাকি খাতা'-য় মহাজনকে দেওয়া টাকা ('payment_made' / 'payment_given')
   // (নোট: সাপ্লায়ারকে 'মাল ফেরত' (purchase_return) দিলে ক্যাশ বাক্সে কোনো হাত পড়বে না)
   const actualSupplierTxs =
@@ -211,6 +208,13 @@ export function calculateRunningCapital({
       .filter((stx) => stx && (stx.type === 'payment_made' || stx.type === 'payment_given'))
       .reduce((sum, stx) => sum + (Number(stx.amount) || 0), 0)
   );
+  const supplierPurchaseStockValue = Math.round(
+    actualSupplierTxs
+      .filter((stx) => stx && stx.type === 'purchase_due' && (Number(stx.stockValue) || 0) > 0)
+      .reduce((sum, stx) => sum + (Number(stx.stockValue) || 0), 0)
+  );
+  const totalPurchases = bulkPurchaseCost + singlePurchaseCost + supplierPurchaseStockValue;
+  const cashPurchasesPaid = bulkCashPaid + singlePurchaseCost;
 
   // ৪. দোকান খরচ (সকল দোকান খরচ ও আজকের খরচ)
   const totalExpenses = Math.round(

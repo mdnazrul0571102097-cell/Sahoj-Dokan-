@@ -38,6 +38,9 @@ import { LanguageSelectorModal } from './components/LanguageSelectorModal';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { TrialBanner } from './components/TrialBanner';
+import { MenuHubView, MenuTileTarget } from './components/MenuHubView';
+import { AllReportsView } from './components/AllReportsView';
+import { CalculatorModal } from './components/CalculatorModal';
 import { CloudSync } from './services/cloudSync';
 
 export default function App() {
@@ -78,6 +81,8 @@ export default function App() {
 
   // App UI states
   const [activeTab, setActiveTab] = useState<NavTab>('pos');
+  const [activeMenuPage, setActiveMenuPage] = useState<Exclude<MenuTileTarget, 'calculator'> | null>(null);
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState<boolean>(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isLocked, setIsLocked] = useState<boolean>(() => {
     // If not registered yet, open auth directly; if registered, require 4-digit PIN unlock
@@ -187,13 +192,17 @@ export default function App() {
         setShowLanguageModal(false);
         return 'MODAL_CLOSED';
       }
+      if (isCalculatorOpen) {
+        setIsCalculatorOpen(false);
+        return 'MODAL_CLOSED';
+      }
 
       // 2. Check any open child modal in the DOM (e.g. Add Product, Quick Sale, Day Close, Receipt, Camera, etc.)
       if (!isLocked && closeTopmostDomModal()) {
         return 'MODAL_CLOSED';
       }
 
-      // 3. Check registered sub-view back handler (e.g. inside ReportsView sub-tabs or BakiKhataView customer details)
+      // 3. Check registered sub-view back handler (e.g. inside BakiKhataView customer details)
       if (!isLocked && typeof (window as any).__sdSubViewBack === 'function') {
         const handledBySubView = (window as any).__sdSubViewBack();
         if (handledBySubView) {
@@ -201,13 +210,20 @@ export default function App() {
         }
       }
 
-      // 4. If user is on any tab other than Home ('pos'), navigate back to Home ('pos')
+      // 4. If user is inside any tile sub-screen of Menu Hub, go back to Menu Hub grid
+      if (!isLocked && activeTab === 'menu' && activeMenuPage !== null) {
+        setActiveMenuPage(null);
+        return 'MENU_HUB_BACK';
+      }
+
+      // 5. If user is on any tab other than Home ('pos'), navigate back to Home ('pos')
       if (!isLocked && activeTab !== 'pos') {
         setActiveTab('pos');
+        setActiveMenuPage(null);
         return 'TAB_BACK';
       }
 
-      // 5. On Home screen ('pos') with no modals open: require double-tap within 2 seconds to exit
+      // 6. On Home screen ('pos') with no modals open: require double-tap within 2 seconds to exit
       if (now - lastBackPressRef.current < 2200) {
         setExitToastVisible(false);
         if ((window as any).AndroidApp?.exitApp) {
@@ -247,7 +263,7 @@ export default function App() {
     return () => {
       window.removeEventListener('popstate', onPopState);
     };
-  }, [activeTab, isLocked, isAdminPanelOpen, isSubscriptionModalOpen, showLanguageModal]);
+  }, [activeTab, activeMenuPage, isCalculatorOpen, isLocked, isAdminPanelOpen, isSubscriptionModalOpen, showLanguageModal]);
 
   useEffect(() => {
     try {
@@ -772,7 +788,12 @@ export default function App() {
     supplierId: string,
     amount: number,
     note?: string,
-    newBalance?: number
+    newBalance?: number,
+    extra?: {
+      damageDeduction?: number;
+      stockValue?: number;
+      updatedProducts?: Product[];
+    }
   ) => {
     let computedNewDue = newBalance ?? amount;
     setSuppliers((prev) => {
@@ -792,6 +813,11 @@ export default function App() {
       return nextSuppliers;
     });
 
+    if (extra?.updatedProducts) {
+      setProducts(extra.updatedProducts);
+      DB.saveProducts(extra.updatedProducts);
+    }
+
     const newTx: SupplierTransaction = {
       id: `stx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       supplierId,
@@ -800,6 +826,8 @@ export default function App() {
       amount,
       note: note || 'নতুন বাকি যোগ',
       balanceAfter: computedNewDue,
+      ...(extra?.damageDeduction !== undefined ? { damageDeduction: extra.damageDeduction } : {}),
+      ...(extra?.stockValue !== undefined ? { stockValue: extra.stockValue } : {}),
     };
     setSupplierTransactions((prev) => {
       const nextTxs = [newTx, ...prev];
@@ -856,6 +884,24 @@ export default function App() {
       DB.saveSuppliers(nextSuppliers);
       return nextSuppliers;
     });
+  };
+
+  const handleUpdateSupplierTransaction = (
+    supplierId: string,
+    nextSupplierBalance: number,
+    nextAllTxs: SupplierTransaction[]
+  ) => {
+    setSuppliers((prev) => {
+      const nextSuppliers = prev.map((s) =>
+        s.id === supplierId
+          ? { ...s, totalDue: nextSupplierBalance, totalPayableDue: nextSupplierBalance }
+          : s
+      );
+      DB.saveSuppliers(nextSuppliers);
+      return nextSuppliers;
+    });
+    setSupplierTransactions(nextAllTxs);
+    DB.saveSupplierTransactions(nextAllTxs);
   };
 
   const handleDeleteSupplier = (supplierId: string) => {
@@ -1204,7 +1250,29 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'products' && (
+        {activeTab === 'menu' && activeMenuPage === null && (
+          <MenuHubView
+            sales={sales}
+            bakiTransactions={bakiTransactions}
+            purchases={purchases}
+            bulkPurchases={bulkPurchases}
+            supplierTransactions={supplierTransactions}
+            expenses={expenses}
+            ownerTransactions={ownerTransactions}
+            otherCashEntries={otherCashEntries}
+            dailyReconciliations={dailyReconciliations}
+            initialOpeningCash={initialOpeningCash}
+            onSelectTile={(target) => {
+              if (target === 'calculator') {
+                setIsCalculatorOpen(true);
+              } else {
+                setActiveMenuPage(target);
+              }
+            }}
+          />
+        )}
+
+        {activeTab === 'menu' && activeMenuPage === 'products' && (
           <ProductManagement
             products={products}
             language={language}
@@ -1213,15 +1281,17 @@ export default function App() {
             onRecordPurchase={handleRecordPurchase}
             appMode={appMode}
             onOpenSubscriptionModal={() => handleOpenSubscriptionModal()}
+            onBackToMenu={() => setActiveMenuPage(null)}
           />
         )}
 
-        {activeTab === 'baki' && (
+        {activeTab === 'menu' && (activeMenuPage === 'customersDue' || activeMenuPage === 'suppliersDue') && (
           <BakiKhataView
             customers={customers}
             bakiTransactions={bakiTransactions}
             suppliers={suppliers}
             supplierTransactions={supplierTransactions}
+            products={products}
             profile={profile}
             language={language}
             appMode={appMode}
@@ -1236,51 +1306,94 @@ export default function App() {
             onAddSupplierDue={handleAddSupplierDue}
             onSupplierReturn={handleSupplierReturn}
             onUpdateSupplier={handleUpdateSupplier}
+            onUpdateSupplierTransaction={handleUpdateSupplierTransaction}
             onDeleteSupplier={handleDeleteSupplier}
+            initialSubTab={activeMenuPage === 'suppliersDue' ? 'suppliers' : 'customers'}
+            singleSectionMode={true}
+            onBackToMenu={() => setActiveMenuPage(null)}
           />
         )}
 
-        {activeTab === 'reports' && (
-          <ReportsView
+        {activeTab === 'menu' &&
+          (activeMenuPage === 'salesProfit' ||
+            activeMenuPage === 'expenses' ||
+            activeMenuPage === 'bulkPurchases' ||
+            activeMenuPage === 'cashBox' ||
+            activeMenuPage === 'ownerCapital') && (
+            <ReportsView
+              sales={sales}
+              purchases={purchases}
+              profile={profile}
+              language={language}
+              appMode={appMode}
+              onOpenSubscriptionModal={() => handleOpenSubscriptionModal()}
+              expenses={expenses}
+              onAddExpense={handleAddExpense}
+              onUpdateExpense={handleUpdateExpense}
+              onDeleteExpense={handleDeleteExpense}
+              bulkPurchases={bulkPurchases}
+              suppliers={suppliers}
+              products={products}
+              onAddBulkPurchase={handleAddBulkPurchase}
+              onUpdateBulkPurchase={handleUpdateBulkPurchase}
+              onDeleteBulkPurchase={handleDeleteBulkPurchase}
+              onOpenSupplierKhata={() => setActiveMenuPage('suppliersDue')}
+              customers={customers}
+              onAddQuickSale={(sale, updatedProds) => handleCompleteSale(sale, updatedProds || products)}
+              onUpdateSale={handleUpdateSale}
+              onDeleteSale={handleDeleteSale}
+              onAddNewCustomer={handleAddNewCustomer}
+              bakiTransactions={bakiTransactions}
+              supplierTransactions={supplierTransactions}
+              ownerTransactions={ownerTransactions}
+              onAddOwnerTransaction={handleAddOwnerTransaction}
+              onDeleteOwnerTransaction={handleDeleteOwnerTransaction}
+              otherCashEntries={otherCashEntries}
+              onAddOtherCashEntry={handleAddOtherCashEntry}
+              onDeleteOtherCashEntry={handleDeleteOtherCashEntry}
+              dailyReconciliations={dailyReconciliations}
+              onSaveDailyReconciliation={handleSaveDailyReconciliation}
+              onAddPostCloseAdjustment={handleAddPostCloseAdjustment}
+              monthlyReconciliations={monthlyReconciliations}
+              onSaveMonthlyReconciliation={handleSaveMonthlyReconciliation}
+              initialOpeningCash={initialOpeningCash}
+              onSaveInitialOpeningCash={handleSaveInitialOpeningCash}
+              initialStoreCapital={initialStoreCapital}
+              onSaveInitialStoreCapital={handleSaveInitialStoreCapital}
+              initialSubTab={
+                activeMenuPage === 'expenses'
+                  ? 'expenses'
+                  : activeMenuPage === 'bulkPurchases'
+                  ? 'bulkPurchases'
+                  : activeMenuPage === 'cashBox'
+                  ? 'cashReconciliation'
+                  : activeMenuPage === 'ownerCapital'
+                  ? 'ownerCapital'
+                  : 'sales'
+              }
+              onBackToMenu={() => setActiveMenuPage(null)}
+            />
+          )}
+
+        {activeTab === 'menu' && activeMenuPage === 'allReports' && (
+          <AllReportsView
             sales={sales}
-            purchases={purchases}
-            profile={profile}
-            language={language}
-            appMode={appMode}
-            onOpenSubscriptionModal={() => handleOpenSubscriptionModal()}
-            expenses={expenses}
-            onAddExpense={handleAddExpense}
-            onUpdateExpense={handleUpdateExpense}
-            onDeleteExpense={handleDeleteExpense}
-            bulkPurchases={bulkPurchases}
-            suppliers={suppliers}
             products={products}
-            onAddBulkPurchase={handleAddBulkPurchase}
-            onUpdateBulkPurchase={handleUpdateBulkPurchase}
-            onDeleteBulkPurchase={handleDeleteBulkPurchase}
-            onOpenSupplierKhata={() => setActiveTab('baki')}
             customers={customers}
-            onAddQuickSale={(sale, updatedProds) => handleCompleteSale(sale, updatedProds || products)}
-            onUpdateSale={handleUpdateSale}
-            onDeleteSale={handleDeleteSale}
-            onAddNewCustomer={handleAddNewCustomer}
+            suppliers={suppliers}
+            expenses={expenses}
+            bulkPurchases={bulkPurchases}
+            purchases={purchases}
             bakiTransactions={bakiTransactions}
             supplierTransactions={supplierTransactions}
             ownerTransactions={ownerTransactions}
-            onAddOwnerTransaction={handleAddOwnerTransaction}
-            onDeleteOwnerTransaction={handleDeleteOwnerTransaction}
             otherCashEntries={otherCashEntries}
-            onAddOtherCashEntry={handleAddOtherCashEntry}
-            onDeleteOtherCashEntry={handleDeleteOtherCashEntry}
             dailyReconciliations={dailyReconciliations}
-            onSaveDailyReconciliation={handleSaveDailyReconciliation}
-            onAddPostCloseAdjustment={handleAddPostCloseAdjustment}
-            monthlyReconciliations={monthlyReconciliations}
-            onSaveMonthlyReconciliation={handleSaveMonthlyReconciliation}
             initialOpeningCash={initialOpeningCash}
-            onSaveInitialOpeningCash={handleSaveInitialOpeningCash}
-            initialStoreCapital={initialStoreCapital}
-            onSaveInitialStoreCapital={handleSaveInitialStoreCapital}
+            profile={profile}
+            appMode={appMode}
+            onOpenSubscriptionModal={() => handleOpenSubscriptionModal()}
+            onBackToMenu={() => setActiveMenuPage(null)}
           />
         )}
 
@@ -1300,13 +1413,21 @@ export default function App() {
         )}
       </main>
 
-      {/* Bottom Navigation */}
+      {/* Calculator Pop-up / Full-Screen Modal */}
+      <CalculatorModal
+        isOpen={isCalculatorOpen}
+        onClose={() => setIsCalculatorOpen(false)}
+      />
+
+      {/* Bottom Navigation (Strictly 3 Tabs) */}
       <Navigation
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={(tab) => {
+          setActiveTab(tab);
+          setActiveMenuPage(null);
+        }}
         language={language}
         cartItemCount={cart.length}
-        lowStockCount={lowStockCount}
       />
 
       {/* Pro Subscription & Payment Modal */}

@@ -1,8 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { Supplier, SupplierTransaction, ShopProfile, Language, AppMode } from '../types';
+import { Supplier, SupplierTransaction, ShopProfile, Language, AppMode, BulkPurchaseItem, Product } from '../types';
 import { translations } from '../i18n/translations';
 import { playSuccessChime } from '../utils/audio';
 import { DB } from '../storage/db';
+import { MemoScannerCard } from './MemoScannerCard';
+import { ScannedMemoResult } from '../utils/memoScanner';
 import {
   Building2,
   Search,
@@ -21,13 +23,13 @@ import {
   TrendingDown,
   TrendingUp,
   Lock,
-  Info,
   RotateCcw,
 } from 'lucide-react';
 
 interface Props {
   suppliers: Supplier[];
   supplierTransactions: SupplierTransaction[];
+  products?: Product[];
   profile: ShopProfile;
   language: Language;
   appMode?: AppMode;
@@ -43,7 +45,12 @@ interface Props {
     supplierId: string,
     amount: number,
     note: string,
-    newBalance: number
+    newBalance: number,
+    extra?: {
+      damageDeduction?: number;
+      stockValue?: number;
+      updatedProducts?: Product[];
+    }
   ) => void;
   onSupplierReturn?: (
     supplierId: string,
@@ -52,12 +59,18 @@ interface Props {
     newBalance: number
   ) => void;
   onUpdateSupplier?: (supplier: Supplier) => void;
+  onUpdateSupplierTransaction?: (
+    supplierId: string,
+    nextSupplierBalance: number,
+    nextAllTxs: SupplierTransaction[]
+  ) => void;
   onDeleteSupplier?: (supplierId: string) => void;
 }
 
 export const SupplierKhataView: React.FC<Props> = ({
   suppliers,
   supplierTransactions,
+  products = [],
   profile,
   language,
   appMode = 'trial',
@@ -67,6 +80,7 @@ export const SupplierKhataView: React.FC<Props> = ({
   onAddSupplierDue,
   onSupplierReturn,
   onUpdateSupplier = () => {},
+  onUpdateSupplierTransaction,
   onDeleteSupplier = () => {},
 }) => {
   const t = translations[language];
@@ -82,6 +96,9 @@ export const SupplierKhataView: React.FC<Props> = ({
   const [showAddDueModal, setShowAddDueModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [editingTx, setEditingTx] = useState<SupplierTransaction | null>(null);
+  const [editTxAmount, setEditTxAmount] = useState<number | ''>('');
+  const [editTxNote, setEditTxNote] = useState('');
 
   // Return state
   const [returnAmount, setReturnAmount] = useState<number | ''>('');
@@ -105,8 +122,11 @@ export const SupplierKhataView: React.FC<Props> = ({
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'bkash' | 'nagad' | 'bank'>('cash');
 
   // Form states: Add Credit Purchase Due
+  const [dueSupplierNameInput, setDueSupplierNameInput] = useState('');
   const [dueAmount, setDueAmount] = useState<number | ''>('');
   const [dueNote, setDueNote] = useState('');
+  const [dueDamageDeduction, setDueDamageDeduction] = useState<string>('');
+  const [dueItems, setDueItems] = useState<BulkPurchaseItem[]>([]);
 
   // Auto-sync selected supplier when suppliers array updates
   const selectedSupplier = useMemo(() => {
@@ -185,13 +205,15 @@ export const SupplierKhataView: React.FC<Props> = ({
     playSuccessChime();
   };
 
-  // Submit Edit Supplier
+  // Submit Edit Supplier (Direct & Silent balance sync)
   const handleEditSupplierSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editId || !name.trim()) return;
 
     const target = suppliers.find((s) => s.id === editId);
     if (!target) return;
+
+    const editedDue = Math.max(0, Math.round((Number(initialDue) || 0) * 100) / 100);
 
     const updatedSupp: Supplier = {
       ...target,
@@ -200,14 +222,77 @@ export const SupplierKhataView: React.FC<Props> = ({
       contactPerson: contactPerson.trim(),
       phone: phone.trim() || '---',
       address: address.trim(),
-      // Balance is strictly locked & read-only in Edit modal
-      totalDue: target.totalDue ?? 0,
-      totalPayableDue: target.totalPayableDue ?? target.totalDue ?? 0,
+      totalDue: editedDue,
+      totalPayableDue: editedDue,
     };
 
     onUpdateSupplier(updatedSupp);
+    if (activeSupplier?.id === updatedSupp.id) {
+      setActiveSupplier(updatedSupp);
+    }
     setShowEditSupplierModal(false);
-    playSuccessChime();
+  };
+
+  // Open individual ledger entry editor
+  const openEditTxModal = (tx: SupplierTransaction) => {
+    setEditingTx(tx);
+    setEditTxAmount(tx.amount);
+    setEditTxNote(tx.note || '');
+  };
+
+  // Save edited ledger entry and recalculate supplier balance silently
+  const handleEditTxSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTx) return;
+    const target = suppliers.find((s) => s.id === editingTx.supplierId) || currentActiveSupplier || selectedSupplier;
+    if (!target) return;
+
+    const newAmount = Math.max(0, Math.round((Number(editTxAmount) || 0) * 100) / 100);
+    const oldAmount = Number(editingTx.amount) || 0;
+
+    // Determine balance delta: purchase_due increases balance, payment/return reduces balance
+    const isDueIncrease = editingTx.type === 'purchase_due';
+    const delta = isDueIncrease ? newAmount - oldAmount : oldAmount - newAmount;
+
+    const currentDue = target.totalDue ?? target.totalPayableDue ?? 0;
+    const nextSupplierBalance = Math.max(0, Math.round((currentDue + delta) * 100) / 100);
+
+    const editedTime = new Date(editingTx.date).getTime();
+
+    const nextAllTxs = supplierTransactions.map((tx) => {
+      if (tx.id === editingTx.id) {
+        return {
+          ...tx,
+          amount: newAmount,
+          note: editTxNote.trim() || tx.note,
+          balanceAfter: Math.max(0, Math.round(((Number(tx.balanceAfter) || 0) + delta) * 100) / 100),
+          ...(tx.stockValue !== undefined && isDueIncrease ? { stockValue: newAmount } : {}),
+        };
+      }
+      if (tx.supplierId === target.id && new Date(tx.date).getTime() > editedTime) {
+        return {
+          ...tx,
+          balanceAfter: Math.max(0, Math.round(((Number(tx.balanceAfter) || 0) + delta) * 100) / 100),
+        };
+      }
+      return tx;
+    });
+
+    if (onUpdateSupplierTransaction) {
+      onUpdateSupplierTransaction(target.id, nextSupplierBalance, nextAllTxs);
+    } else {
+      DB.saveSupplierTransactions(nextAllTxs);
+      const updatedSupp: Supplier = {
+        ...target,
+        totalDue: nextSupplierBalance,
+        totalPayableDue: nextSupplierBalance,
+      };
+      onUpdateSupplier(updatedSupp);
+    }
+
+    setEditingTx(null);
+    setEditTxAmount('');
+    setEditTxNote('');
   };
 
   const openEditModal = (supp: Supplier) => {
@@ -243,22 +328,220 @@ export const SupplierKhataView: React.FC<Props> = ({
     playSuccessChime();
   };
 
+  const openAddDueModal = (supp?: Supplier | null) => {
+    const targetSupp = supp || null;
+    if (targetSupp) {
+      setActiveSupplier(targetSupp);
+      setSelectedSupplierId(targetSupp.id);
+      setDueSupplierNameInput(targetSupp.name);
+    } else {
+      setActiveSupplier(null);
+      setDueSupplierNameInput('');
+    }
+    setDueAmount('');
+    setDueNote('');
+    setDueDamageDeduction('');
+    setDueItems([]);
+    setShowAddDueModal(true);
+  };
+
+  // Match supplier typed/scanned by name
+  const matchedDueSupplier = useMemo(() => {
+    const trimmed = dueSupplierNameInput.trim().toLowerCase();
+    if (trimmed) {
+      const exact = suppliers.find((s) => s.name.trim().toLowerCase() === trimmed);
+      if (exact) return exact;
+    }
+    return currentActiveSupplier || selectedSupplier || null;
+  }, [dueSupplierNameInput, suppliers, currentActiveSupplier, selectedSupplier]);
+
+  const dueItemsGrossTotal = useMemo(() => {
+    return Math.round(dueItems.reduce((sum, it) => sum + (it.totalCost || 0), 0));
+  }, [dueItems]);
+
+  const dueGrossTotal = useMemo(() => {
+    if (dueItems.length > 0) return dueItemsGrossTotal;
+    return Math.max(0, Math.round(Number(dueAmount) || 0));
+  }, [dueItems.length, dueItemsGrossTotal, dueAmount]);
+
+  const dueDamageAmount = useMemo(() => {
+    return Math.max(0, Math.round(Number(dueDamageDeduction) || 0));
+  }, [dueDamageDeduction]);
+
+  const dueNetAmount = useMemo(() => {
+    return Math.max(0, dueGrossTotal - dueDamageAmount);
+  }, [dueGrossTotal, dueDamageAmount]);
+
+  const handleDueItemChange = (index: number, field: keyof BulkPurchaseItem, val: any) => {
+    const updated = [...dueItems];
+    const current = { ...updated[index], [field]: val };
+
+    if (field === 'productId') {
+      const match = products.find((p) => p.id === val);
+      if (match) {
+        current.productName = match.name;
+        current.category = match.category;
+        current.unit = match.unit;
+        current.unitCostPrice = match.costPrice;
+        current.totalCost = Math.round(match.costPrice * (current.quantity || 1));
+      }
+    }
+
+    if (field === 'quantity' || field === 'unitCostPrice') {
+      const q = field === 'quantity' ? Number(val) || 0 : current.quantity || 0;
+      const rate = field === 'unitCostPrice' ? Number(val) || 0 : current.unitCostPrice || 0;
+      current.totalCost = Math.round(q * rate);
+    }
+
+    updated[index] = current;
+    setDueItems(updated);
+  };
+
+  const handleAddDueItemRow = () => {
+    setDueItems([
+      ...dueItems,
+      {
+        productId: '',
+        productName: '',
+        category: 'মুদি আইটেম',
+        quantity: 1,
+        unit: 'kg',
+        unitCostPrice: 0,
+        totalCost: 0,
+      },
+    ]);
+  };
+
+  const handleRemoveDueItemRow = (index: number) => {
+    const next = dueItems.filter((_, idx) => idx !== index);
+    setDueItems(next);
+  };
+
+  const handleDueMemoExtracted = (result: ScannedMemoResult) => {
+    if (result.supplierName) {
+      setDueSupplierNameInput(result.supplierName);
+      const exactMatch = suppliers.find(
+        (s) => s.name.trim().toLowerCase() === result.supplierName.trim().toLowerCase()
+      );
+      if (exactMatch) {
+        setActiveSupplier(exactMatch);
+        setSelectedSupplierId(exactMatch.id);
+      }
+    }
+    if (result.memoNumber) {
+      setDueNote(`মেমো #${result.memoNumber}`);
+    }
+    if (result.items && result.items.length > 0) {
+      const mappedItems: BulkPurchaseItem[] = result.items.map((scanned) => {
+        const cleanScanned = scanned.name.trim().toLowerCase();
+        const exactMatch = products.find(
+          (p) => p.name.trim().toLowerCase() === cleanScanned
+        );
+        const qty = Math.max(0.01, Number(scanned.quantity) || 1);
+        const rate = Math.max(0, Number(scanned.purchasePrice) || 0);
+        return {
+          productId: exactMatch ? exactMatch.id : '',
+          productName: scanned.name,
+          category: exactMatch ? exactMatch.category : 'মুদি আইটেম',
+          quantity: qty,
+          unit: scanned.unit,
+          unitCostPrice: rate,
+          totalCost: Math.round(qty * rate),
+        };
+      });
+      setDueItems(mappedItems);
+      const sum = Math.round(mappedItems.reduce((acc, it) => acc + (it.totalCost || 0), 0));
+      setDueAmount(sum > 0 ? sum : '');
+    }
+  };
+
   // Submit Add Credit Purchase Due
   const handleAddDueSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const target = currentActiveSupplier || selectedSupplier;
-    if (!target) return;
-    const amount = Number(dueAmount);
-    if (!amount || amount <= 0) return;
+    if (dueGrossTotal <= 0) return;
+
+    let target = matchedDueSupplier;
+    const typedSupplierName = dueSupplierNameInput.trim();
+
+    if (!target) {
+      if (!typedSupplierName) return;
+      // Auto-create supplier record with 0 initial balance, then add due transaction below
+      const newSupp: Supplier = {
+        id: `supp_${Date.now()}`,
+        name: typedSupplierName,
+        company: '',
+        contactPerson: '',
+        phone: '---',
+        address: '',
+        totalDue: 0,
+        totalPayableDue: 0,
+        createdAt: new Date().toISOString(),
+      };
+      onAddSupplier(newSupp);
+      target = newSupp;
+      setSelectedSupplierId(newSupp.id);
+      setActiveSupplier(newSupp);
+    }
 
     const currentDue = target.totalDue ?? target.totalPayableDue ?? 0;
-    const newBalance = currentDue + amount;
-    const note = dueNote.trim() || 'নতুন মাল ক্রয় বাবদ বাকি';
+    const newBalance = currentDue + dueNetAmount;
 
-    onAddSupplierDue(target.id, amount, note, newBalance);
+    const itemSummary =
+      dueItems.length > 0
+        ? dueItems
+            .filter((it) => it.productName.trim())
+            .map((it) => `${it.productName} (${it.quantity} ${it.unit})`)
+            .slice(0, 3)
+            .join(', ')
+        : '';
 
+    const baseNote =
+      dueNote.trim() || itemSummary || 'নতুন মাল ক্রয় বাবদ বাকি';
+
+    const finalNote =
+      dueDamageAmount > 0
+        ? `${baseNote} | মোট মাল: ৳${dueGrossTotal.toLocaleString()}, ড্যামেজ বাদ: -৳${dueDamageAmount.toLocaleString()}, নিট বাকি: ৳${dueNetAmount.toLocaleString()}`
+        : baseNote;
+
+    // Update inventory products when itemized products match catalog items
+    let updatedProducts: Product[] | undefined = undefined;
+    if (dueItems.length > 0 && products.length > 0) {
+      const nextProducts = [...products];
+      let anyMatched = false;
+      dueItems.forEach((item) => {
+        if (!item.productName.trim()) return;
+        const matchIndex = nextProducts.findIndex(
+          (p) =>
+            (item.productId && p.id === item.productId) ||
+            p.name.trim().toLowerCase() === item.productName.trim().toLowerCase()
+        );
+        if (matchIndex >= 0) {
+          anyMatched = true;
+          const prod = nextProducts[matchIndex];
+          nextProducts[matchIndex] = {
+            ...prod,
+            stock: Math.round(((prod.stock || 0) + (Number(item.quantity) || 0)) * 100) / 100,
+            costPrice: item.unitCostPrice > 0 ? item.unitCostPrice : prod.costPrice,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+      });
+      if (anyMatched) {
+        updatedProducts = nextProducts;
+      }
+    }
+
+    onAddSupplierDue(target.id, dueNetAmount, finalNote, newBalance, {
+      damageDeduction: dueDamageAmount,
+      stockValue: dueNetAmount,
+      updatedProducts,
+    });
+
+    setDueSupplierNameInput('');
     setDueAmount('');
     setDueNote('');
+    setDueDamageDeduction('');
+    setDueItems([]);
     setShowAddDueModal(false);
     playSuccessChime();
   };
@@ -478,22 +761,33 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setName('');
-            setCompany('');
-            setContactPerson('');
-            setPhone('');
-            setAddress('');
-            setInitialDue('');
-            setShowAddSupplierModal(true);
-          }}
-          className="w-full py-2.5 px-4 rounded-2xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>নতুন সাপ্লায়ার যোগ করুন</span>
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setName('');
+              setCompany('');
+              setContactPerson('');
+              setPhone('');
+              setAddress('');
+              setInitialDue('');
+              setShowAddSupplierModal(true);
+            }}
+            className="w-full py-2.5 px-3 rounded-2xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5] shrink-0" />
+            <span>নতুন সাপ্লায়ার</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openAddDueModal(suppliers[0] || null)}
+            className="w-full py-2.5 px-3 rounded-2xl bg-[#D32F2F] hover:bg-red-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
+          >
+            <ArrowUpRight className="w-4 h-4 stroke-[2.5] shrink-0" />
+            <span>নতুন বাকি ক্রয়</span>
+          </button>
+        </div>
       </div>
 
       {/* Search bar matching Customer Baki Khata */}
@@ -588,11 +882,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setActiveSupplier(supp);
-                        setSelectedSupplierId(supp.id);
-                        setDueAmount('');
-                        setDueNote('');
-                        setShowAddDueModal(true);
+                        openAddDueModal(supp);
                       }}
                       className="px-2.5 py-1.5 rounded-xl bg-[#FFEBEE] hover:bg-rose-200 text-[#D32F2F] border border-rose-200 text-xs font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer"
                       title="সাপ্লায়ার থেকে নতুন বাকি মাল ক্রয় যোগ করুন"
@@ -793,10 +1083,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                   onClick={() => {
                     const target = selectedSupplier || currentActiveSupplier;
                     if (target) {
-                      setActiveSupplier(target);
-                      setDueAmount('');
-                      setDueNote('');
-                      setShowAddDueModal(true);
+                      openAddDueModal(target);
                     }
                   }}
                   className="py-2.5 px-2 rounded-2xl bg-[#D32F2F] hover:bg-red-700 text-white font-black text-xs flex items-center justify-center gap-1 shadow-xs transition active:scale-95 cursor-pointer text-center"
@@ -934,21 +1221,31 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                             </div>
                           </div>
 
-                          <div className="text-right">
-                            <p
-                              className={`font-mono font-black ${
-                                isReturn
-                                  ? 'text-amber-700'
-                                  : isPayment
-                                  ? 'text-[#2E7D32]'
-                                  : 'text-[#D32F2F]'
-                              }`}
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="text-right">
+                              <p
+                                className={`font-mono font-black ${
+                                  isReturn
+                                    ? 'text-amber-700'
+                                    : isPayment
+                                    ? 'text-[#2E7D32]'
+                                    : 'text-[#D32F2F]'
+                                }`}
+                              >
+                                {isReturn ? '-' : isPayment ? '-' : '+'}৳{tx.amount.toLocaleString()}
+                              </p>
+                              <p className="text-[10px] text-[#64748B] font-mono">
+                                অবশিষ্ট: ৳{tx.balanceAfter.toLocaleString()}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openEditTxModal(tx)}
+                              className="p-1.5 rounded-lg bg-white hover:bg-[#E0F2F1] text-[#0E6B6B] border border-[#E2E8F0] transition active:scale-95 cursor-pointer"
+                              title="লেনদেন এডিট করুন"
                             >
-                              {isReturn ? '-' : isPayment ? '-' : '+'}৳{tx.amount.toLocaleString()}
-                            </p>
-                            <p className="text-[10px] text-[#64748B] font-mono">
-                              অবশিষ্ট: ৳{tx.balanceAfter.toLocaleString()}
-                            </p>
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
                       );
@@ -1165,26 +1462,18 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#102A43] mb-1 flex items-center justify-between">
-                  <span>বর্তমান বাকি ব্যালেন্স (৳)</span>
-                  <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-md flex items-center gap-1 font-bold">
-                    <Lock className="w-3 h-3 text-amber-700" />
-                    লক করা (রিড-অনলি)
-                  </span>
+                <label className="block text-xs font-bold text-[#102A43] mb-1">
+                  মোট বাকি / দেনার পরিমাণ (৳)
                 </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    disabled
-                    readOnly
-                    value={initialDue}
-                    className="w-full p-2.5 rounded-xl border border-[#CBD5E1] bg-[#F1F5F9] text-[#64748B] text-sm font-black font-mono cursor-not-allowed select-none"
-                  />
-                </div>
-                <p className="text-[11px] text-[#64748B] mt-1 flex items-center gap-1">
-                  <Info className="w-3.5 h-3.5 text-[#0E6B6B] shrink-0" />
-                  <span>হিসেবে কোনো ভুল থাকলে খাতা থেকে "ভুল হিসাব সংশোধন" লেনদেন যোগ করে ব্যালেন্স ঠিক করুন।</span>
-                </p>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={initialDue}
+                  onChange={(e) => setInitialDue(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="0"
+                  className="w-full p-2.5 rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] text-[#102A43] text-sm font-black font-mono focus:outline-none focus:ring-2 focus:ring-[#0E6B6B] focus:bg-white"
+                />
               </div>
 
               <div className="pt-2 flex gap-2">
@@ -1348,10 +1637,10 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
       )}
 
       {/* Add Due (Credit Purchase) Modal */}
-      {showAddDueModal && (currentActiveSupplier || selectedSupplier) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-          <div className="w-full max-w-md my-auto rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
-            <div className="p-4 bg-[#D32F2F] text-white flex items-center justify-between">
+      {showAddDueModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2.5 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
+          <div className="w-full max-w-md my-auto rounded-[28px] bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden flex flex-col max-h-[95vh]">
+            <div className="p-4 bg-[#D32F2F] text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <ArrowUpRight className="w-5 h-5 text-rose-200" />
                 <h3 className="font-bold text-base">মহাজন থেকে নতুন বাকি ক্রয় যোগ</h3>
@@ -1365,47 +1654,172 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
               </button>
             </div>
 
-            <form onSubmit={handleAddDueSubmit} className="p-5 space-y-4">
-              <div className="p-3 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold text-[#102A43]">
-                    {(currentActiveSupplier || selectedSupplier)?.name}
-                  </p>
-                  <p className="text-[11px] text-[#64748B]">
-                    {(currentActiveSupplier || selectedSupplier)?.company || 'সাপ্লায়ার'}
-                  </p>
+            <form onSubmit={handleAddDueSubmit} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5">
+              {/* Zero-Setup AI Memo Scanner Card */}
+              <MemoScannerCard onMemoExtracted={handleDueMemoExtracted} />
+
+              {/* Supplier / মহাজন Field + Current Due Display */}
+              <div className="p-3 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-extrabold text-[#102A43]">
+                    সাপ্লায়ার / মহাজন *
+                  </label>
+                  {matchedDueSupplier && (
+                    <span className="text-xs font-black font-mono text-[#D32F2F]">
+                      বর্তমান পাওনা: ৳{(matchedDueSupplier.totalDue ?? matchedDueSupplier.totalPayableDue ?? 0).toLocaleString()}
+                    </span>
+                  )}
                 </div>
-                <div className="text-right">
-                  <span className="text-[10px] text-[#64748B] block">বর্তমান পাওনা:</span>
-                  <span className="text-base font-black font-mono text-[#D32F2F]">
-                    ৳{(
-                      (currentActiveSupplier || selectedSupplier)?.totalDue ??
-                      (currentActiveSupplier || selectedSupplier)?.totalPayableDue ??
-                      0
-                    ).toLocaleString()}
-                  </span>
-                </div>
+                <input
+                  type="text"
+                  required
+                  list="supplier-due-suggestions"
+                  value={dueSupplierNameInput}
+                  onChange={(e) => setDueSupplierNameInput(e.target.value)}
+                  placeholder="মহাজন বা কোম্পানির নাম লিখুন বা বাছুন..."
+                  className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] bg-white text-xs sm:text-sm font-bold text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#D32F2F]"
+                />
+                {suppliers.length > 0 && (
+                  <datalist id="supplier-due-suggestions">
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.company || s.address || 'সাপ্লায়ার'}
+                      </option>
+                    ))}
+                  </datalist>
+                )}
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-[#102A43] mb-1">
-                  নতুন বাকির পরিমাণ (৳) *
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={dueAmount}
-                  onChange={(e) => setDueAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                  placeholder="যেমন: 12000"
-                  className="w-full p-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] text-base font-black font-mono text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#D32F2F]"
-                />
-              </div>
+              {/* Extracted / Optional Itemized Products List */}
+              {dueItems.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs sm:text-sm font-extrabold text-[#102A43]">
+                      ক্রয়কৃত পণ্যসমূহ ({dueItems.length}টি)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddDueItemRow}
+                      className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>আরও পণ্য</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {dueItems.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="p-3 rounded-2xl bg-[#F1F5F8] border border-[#CBD5E1] space-y-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-[#102A43]">
+                            আইটেম #{idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDueItemRow(idx)}
+                            className="text-[#D32F2F] hover:text-red-700 p-0.5 cursor-pointer"
+                            title="মুছে ফেলুন"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <input
+                          type="text"
+                          required
+                          list={`due-prod-suggestions-${idx}`}
+                          value={item.productName}
+                          onChange={(e) => handleDueItemChange(idx, 'productName', e.target.value)}
+                          placeholder="পণ্যের নাম"
+                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] bg-white text-xs font-semibold text-[#102A43] focus:ring-2 focus:ring-[#D32F2F] focus:outline-none"
+                        />
+                        <datalist id={`due-prod-suggestions-${idx}`}>
+                          {products.map((p) => (
+                            <option key={p.id} value={p.name} />
+                          ))}
+                        </datalist>
+
+                        <div className="grid grid-cols-12 gap-1.5">
+                          <div className="col-span-4">
+                            <input
+                              type="number"
+                              required
+                              min="0.1"
+                              step="any"
+                              value={item.quantity || ''}
+                              onChange={(e) => handleDueItemChange(idx, 'quantity', e.target.value)}
+                              placeholder="পরিমাণ"
+                              className="w-full px-2 py-2 rounded-xl border border-[#CBD5E1] bg-white text-xs font-bold text-center text-[#102A43] focus:outline-none"
+                            />
+                          </div>
+                          <div className="col-span-4">
+                            <select
+                              value={item.unit}
+                              onChange={(e) => handleDueItemChange(idx, 'unit', e.target.value)}
+                              className="w-full px-1.5 py-2 rounded-xl border border-[#CBD5E1] bg-white text-xs font-semibold text-[#102A43] focus:outline-none"
+                            >
+                              <option value="kg">কেজি</option>
+                              <option value="packet">প্যাকেট/বস্তা</option>
+                              <option value="liter">লিটার/কার্টুন</option>
+                              <option value="piece">পিস</option>
+                              <option value="dozen">ডজন</option>
+                              <option value="gm">গ্রাম</option>
+                            </select>
+                          </div>
+                          <div className="col-span-4">
+                            <input
+                              type="number"
+                              required
+                              min="0"
+                              step="any"
+                              value={item.unitCostPrice || ''}
+                              onChange={(e) => handleDueItemChange(idx, 'unitCostPrice', e.target.value)}
+                              placeholder="৳ দর"
+                              className="w-full px-2 py-2 rounded-xl border border-[#CBD5E1] bg-white text-xs font-bold text-center text-[#102A43] focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="text-right text-xs font-extrabold text-[#D32F2F]">
+                          মোট টাকা: ৳{(item.totalCost || 0).toLocaleString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-[#102A43]">
+                      মোট নতুন মাল / বাকির পরিমাণ (৳) *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddDueItemRow}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] cursor-pointer"
+                    >
+                      + পণ্যের তালিকা লিখুন
+                    </button>
+                  </div>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={dueAmount}
+                    onChange={(e) => setDueAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="যেমন: 12000"
+                    className="w-full p-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] text-base font-black font-mono text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#D32F2F]"
+                  />
+                </div>
+              )}
 
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-[#102A43]">
-                    চালানের বিবরণ / পণ্যের নাম *
+                    রসিদ বা ভাউচার বিবরণ (ঐচ্ছিক)
                   </label>
                   <button
                     type="button"
@@ -1424,25 +1838,59 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                 />
               </div>
 
-              {/* Automatic Calculation Preview */}
-              {Number(dueAmount) > 0 && (
-                <div className="p-3 rounded-xl bg-[#FFEBEE] border border-rose-200 flex justify-between items-center text-xs">
-                  <span className="font-semibold text-[#D32F2F]">
-                    যোগের পর মোট দেনা হবে:
-                  </span>
-                  <span className="font-mono font-black text-sm text-[#D32F2F]">
-                    ৳{(
-                      ((currentActiveSupplier || selectedSupplier)?.totalDue ?? 0) + Number(dueAmount)
-                    ).toLocaleString()}
-                  </span>
+              {/* Direct Damage Return Deduction Field */}
+              <div>
+                <label className="block text-xs font-bold text-[#102A43] mb-1">
+                  ড্যামেজ মাল ফেরত বাদ (৳) (ঐচ্ছিক)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={dueDamageDeduction}
+                  onChange={(e) => setDueDamageDeduction(e.target.value)}
+                  placeholder="যেমন: 200"
+                  className="w-full p-2.5 rounded-xl border border-amber-400 bg-amber-50/40 text-xs sm:text-sm font-bold text-[#102A43] placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white"
+                />
+              </div>
+
+              {/* Automatic Live Calculation Preview */}
+              {dueGrossTotal > 0 && (
+                <div className="p-3 rounded-2xl bg-[#FFEBEE] border border-rose-200 space-y-1 text-xs">
+                  {dueDamageAmount > 0 && (
+                    <>
+                      <div className="flex justify-between items-center text-slate-700 font-bold">
+                        <span>মোট নতুন মাল:</span>
+                        <span className="font-mono">৳{dueGrossTotal.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-amber-800 font-bold">
+                        <span>ড্যামেজ মাল ফেরত বাদ:</span>
+                        <span className="font-mono">-৳{dueDamageAmount.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[#0E6B6B] font-extrabold pt-1 border-t border-rose-200">
+                        <span>নিট নতুন বাকি:</span>
+                        <span className="font-mono text-sm">৳{dueNetAmount.toLocaleString()}</span>
+                      </div>
+                    </>
+                  )}
+                  <div className="flex justify-between items-center pt-0.5">
+                    <span className="font-semibold text-[#D32F2F]">
+                      যোগের পর মোট দেনা হবে:
+                    </span>
+                    <span className="font-mono font-black text-sm text-[#D32F2F]">
+                      ৳{(
+                        ((matchedDueSupplier?.totalDue ?? matchedDueSupplier?.totalPayableDue ?? 0) + dueNetAmount)
+                      ).toLocaleString()}
+                    </span>
+                  </div>
                 </div>
               )}
 
-              <div className="pt-2 flex gap-2">
+              <div className="pt-1 flex gap-2">
                 <button
                   type="button"
                   onClick={() => setShowAddDueModal(false)}
-                  className="flex-1 py-3 rounded-xl border border-[#E2E8F0] bg-[#EDF2F7] text-[#102A43] text-xs font-bold"
+                  className="flex-1 py-3 rounded-xl border border-[#E2E8F0] bg-[#EDF2F7] text-[#102A43] text-xs font-bold cursor-pointer"
                 >
                   বাতিল
                 </button>
@@ -1598,6 +2046,80 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                 হ্যাঁ, মুছে ফেলুন
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Individual Supplier Transaction Modal */}
+      {editingTx && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-sm rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
+            <div className="p-4 bg-[#0E6B6B] text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-emerald-200" />
+                <h3 className="font-bold text-sm sm:text-base">
+                  {editingTx.type === 'purchase_return'
+                    ? 'মাল ফেরত এন্ট্রি এডিট'
+                    : editingTx.type === 'payment_made' || editingTx.type === 'payment_given'
+                    ? 'টাকা পরিশোধ এন্ট্রি এডিট'
+                    : 'বাকি ক্রয় এন্ট্রি এডিট'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingTx(null)}
+                className="p-1 rounded-full hover:bg-white/20 text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditTxSubmit} className="p-4 sm:p-5 space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-[#102A43] mb-1">
+                  টাকার পরিমাণ (৳) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="any"
+                  autoFocus
+                  value={editTxAmount}
+                  onChange={(e) => setEditTxAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="w-full p-3 rounded-2xl border border-[#CBD5E1] bg-[#F8FAFC] text-base font-black font-mono text-[#102A43] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B] focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#102A43] mb-1">
+                  নোট / বিবরণ (ঐচ্ছিক)
+                </label>
+                <input
+                  type="text"
+                  value={editTxNote}
+                  onChange={(e) => setEditTxNote(e.target.value)}
+                  placeholder="বিবরণ লিখুন..."
+                  className="w-full p-2.5 rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] text-xs text-[#102A43] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B] focus:bg-white"
+                />
+              </div>
+
+              <div className="pt-1 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingTx(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-[#E2E8F0] bg-[#EDF2F7] text-[#102A43] text-xs font-bold cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white text-xs font-black shadow-xs transition active:scale-95 cursor-pointer"
+                >
+                  সংরক্ষণ করুন
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

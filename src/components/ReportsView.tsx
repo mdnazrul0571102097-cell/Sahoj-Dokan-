@@ -42,6 +42,7 @@ import {
   Edit3,
   X,
   Check,
+  ArrowLeft,
 } from 'lucide-react';
 
 interface Props {
@@ -91,6 +92,8 @@ interface Props {
   onSaveInitialOpeningCash?: (amount: number) => void;
   initialStoreCapital?: number;
   onSaveInitialStoreCapital?: (amount: number) => void;
+  initialSubTab?: 'sales' | 'expenses' | 'bulkPurchases' | 'cashReconciliation' | 'ownerCapital' | 'purchases';
+  onBackToMenu?: () => void;
 }
 
 export const ReportsView: React.FC<Props> = ({
@@ -133,13 +136,19 @@ export const ReportsView: React.FC<Props> = ({
   onSaveInitialOpeningCash = () => {},
   initialStoreCapital = 0,
   onSaveInitialStoreCapital = () => {},
+  initialSubTab = 'sales',
+  onBackToMenu,
 }) => {
   const t = translations[language];
 
-  // Active sub-tab: sales vs expenses vs bulkPurchases vs cashReconciliation vs ownerCapital vs purchases
+  // Active section: sales vs expenses vs bulkPurchases vs cashReconciliation vs ownerCapital vs purchases
   const [activeTab, setActiveTab] = useState<
     'sales' | 'expenses' | 'bulkPurchases' | 'cashReconciliation' | 'ownerCapital' | 'purchases'
-  >('sales');
+  >(initialSubTab);
+
+  useEffect(() => {
+    setActiveTab(initialSubTab);
+  }, [initialSubTab]);
 
   // Helper for reliable YYYY-MM-DD local calendar date matching
   const getLocalDateStr = (d?: string | Date): string => {
@@ -199,7 +208,7 @@ export const ReportsView: React.FC<Props> = ({
         setIsQuickSaleOpen(false);
         return true;
       }
-      if (activeTab !== 'sales') {
+      if (!onBackToMenu && activeTab !== 'sales') {
         setActiveTab('sales');
         return true;
       }
@@ -208,7 +217,7 @@ export const ReportsView: React.FC<Props> = ({
     return () => {
       (window as any).__sdSubViewBack = null;
     };
-  }, [reprintSale, saleToDelete, saleToEdit, isQuickSaleOpen, activeTab]);
+  }, [reprintSale, saleToDelete, saleToEdit, isQuickSaleOpen, activeTab, onBackToMenu]);
 
   const openEditSaleModal = (sale: Sale) => {
     setSaleToEdit(sale);
@@ -401,96 +410,55 @@ export const ReportsView: React.FC<Props> = ({
     return Math.round(filteredPurchases.reduce((acc, p) => acc + p.totalCost, 0));
   }, [filteredPurchases]);
 
+  const sectionTitles: Record<typeof activeTab, string> = {
+    sales: 'বিক্রি ও লাভ',
+    expenses: 'দোকান খরচ',
+    bulkPurchases: 'নগদ ক্রয়',
+    cashReconciliation: 'ক্যাশ বক্স',
+    ownerCapital: 'মালিক খরচ/জমা',
+    purchases: 'মাল কেনার রেকর্ড',
+  };
+
   return (
     <div className="min-h-[calc(100vh-110px)] flex flex-col p-2 sm:p-3 max-w-7xl mx-auto pb-20 overflow-y-auto">
-      {/* 4. Slim Top Controls: Sub-tabs & Single-Line Date Filter */}
-      <div className="bg-white rounded-2xl p-2 shadow-2xs border border-[#E2E8F0] mb-2 shrink-0 space-y-1.5">
-        {/* Slim Sub-tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar bg-[#EDF2F7] p-1 rounded-xl border border-[#E2E8F0]">
-          <button
-            type="button"
-            onClick={() => setActiveTab('sales')}
-            className={`px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-bold whitespace-nowrap transition flex items-center gap-1 cursor-pointer shrink-0 ${
-              activeTab === 'sales'
-                ? 'bg-[#0E6B6B] text-white shadow-2xs'
-                : 'text-[#64748B] hover:text-[#102A43]'
-            }`}
-          >
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span>বিক্রি ও লাভ</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('expenses')}
-            className={`px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-bold whitespace-nowrap transition flex items-center gap-1 cursor-pointer shrink-0 ${
-              activeTab === 'expenses'
-                ? 'bg-[#0E6B6B] text-white shadow-2xs'
-                : 'text-[#64748B] hover:text-[#102A43]'
-            }`}
-          >
-            <Wallet className="w-3.5 h-3.5" />
-            <span>দোকান খরচ ({expenses.length})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('bulkPurchases')}
-            className={`px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-bold whitespace-nowrap transition flex items-center gap-1 cursor-pointer shrink-0 ${
-              activeTab === 'bulkPurchases'
-                ? 'bg-[#0E6B6B] text-white shadow-2xs'
-                : 'text-[#64748B] hover:text-[#102A43]'
-            }`}
-          >
-            <PackagePlus className="w-3.5 h-3.5" />
-            <span>নগদ ক্রয় ({bulkPurchases.length})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('cashReconciliation')}
-            className={`px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-bold whitespace-nowrap transition flex items-center gap-1 cursor-pointer shrink-0 ${
-              activeTab === 'cashReconciliation'
-                ? 'bg-[#0E6B6B] text-white shadow-2xs'
-                : 'text-[#64748B] hover:text-[#102A43]'
-            }`}
-          >
-            <Calculator className="w-3.5 h-3.5" />
-            <span>ক্যাশ মিল</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('ownerCapital')}
-            className={`px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-bold whitespace-nowrap transition flex items-center gap-1 cursor-pointer shrink-0 ${
-              activeTab === 'ownerCapital'
-                ? 'bg-[#0E6B6B] text-white shadow-2xs'
-                : 'text-[#64748B] hover:text-[#102A43]'
-            }`}
-          >
-            <UserCheck className="w-3.5 h-3.5" />
-            <span>মালিকের টাকা ({ownerTransactions.length})</span>
-          </button>
+      {/* Clean Top Bar with prominent "← হিসাব / মেনু" back button (old horizontal scrollable sub-tabs removed) */}
+      <div className="bg-white rounded-2xl px-3 py-2 mb-2.5 flex items-center justify-between gap-2 border border-[#E2E8F0] shadow-2xs shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 min-w-0">
+          {onBackToMenu && (
+            <button
+              type="button"
+              onClick={onBackToMenu}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] font-extrabold text-xs sm:text-sm transition active:scale-95 cursor-pointer shrink-0"
+            >
+              <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+              <span>হিসাব / মেনু</span>
+            </button>
+          )}
+          <h2 className="text-sm sm:text-base font-black text-[#102A43] truncate">
+            {sectionTitles[activeTab]}
+          </h2>
         </div>
 
-        {/* Slim Single-Line Date Filter: আজ, গতকাল এবং ম্যানুয়ালি তারিখ */}
+        {/* Slim Single-Line Date Filter for Sales / Purchases */}
         {(activeTab === 'sales' || activeTab === 'purchases') && (
-          <div className="flex items-center justify-between gap-1 overflow-x-auto no-scrollbar">
-            <div className="flex items-center gap-1 shrink-0">
-              {[
-                { id: 'today', label: t.today },
-                { id: 'yesterday', label: t.yesterday },
-              ].map((dm) => (
-                <button
-                  key={dm.id}
-                  type="button"
-                  onClick={() => handleDateModeChange(dm.id as any)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition cursor-pointer border ${
-                    dateFilterMode === dm.id
-                      ? 'bg-[#0E6B6B] text-white border-[#0E6B6B]'
-                      : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
-                  }`}
-                >
-                  {dm.label}
-                </button>
-              ))}
-            </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {[
+              { id: 'today', label: t.today },
+              { id: 'yesterday', label: t.yesterday },
+            ].map((dm) => (
+              <button
+                key={dm.id}
+                type="button"
+                onClick={() => handleDateModeChange(dm.id as any)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition cursor-pointer border ${
+                  dateFilterMode === dm.id
+                    ? 'bg-[#0E6B6B] text-white border-[#0E6B6B]'
+                    : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
+                }`}
+              >
+                {dm.label}
+              </button>
+            ))}
 
             <input
               type="date"
@@ -508,19 +476,6 @@ export const ReportsView: React.FC<Props> = ({
       {/* Sales & Profit View */}
       {activeTab === 'sales' && (
         <>
-          {/* Running Store Capital Tracker (চলমান মোট পুঁজি / মূলধন ট্র্যাকার) */}
-          <RunningCapitalCard
-            initialStoreCapital={initialStoreCapital}
-            onSaveInitialStoreCapital={onSaveInitialStoreCapital}
-            sales={sales}
-            bulkPurchases={bulkPurchases}
-            purchases={purchases}
-            expenses={expenses}
-            ownerTransactions={ownerTransactions}
-            customers={customers}
-            bakiTransactions={bakiTransactions}
-            supplierTransactions={supplierTransactions}
-          />
 
           {/* 2. Unified Compact Container for 4 Core Metrics + Net Profit Strip */}
           <div className="bg-white rounded-2xl p-2.5 shadow-2xs border border-[#E2E8F0] mb-2 shrink-0">
@@ -901,35 +856,49 @@ export const ReportsView: React.FC<Props> = ({
         />
       )}
 
-      {/* Daily & Monthly Cash Reconciliation Tab */}
+      {/* Daily & Monthly Cash Reconciliation Tab (ক্যাশ বক্স) with দোকানের মোট পুঁজি ট্র্যাকার on top */}
       {activeTab === 'cashReconciliation' && (
-        <CashReconciliationManager
-          sales={sales}
-          bakiTransactions={bakiTransactions}
-          purchases={purchases}
-          bulkPurchases={bulkPurchases}
-          supplierTransactions={supplierTransactions}
-          expenses={expenses}
-          ownerTransactions={ownerTransactions}
-          otherCashEntries={otherCashEntries}
-          dailyReconciliations={dailyReconciliations}
-          monthlyReconciliations={monthlyReconciliations}
-          initialOpeningCash={initialOpeningCash}
-          products={products}
-          customers={customers}
-          suppliers={suppliers}
-          profile={profile}
-          onSaveInitialOpeningCash={onSaveInitialOpeningCash}
-          onAddOtherCashEntry={onAddOtherCashEntry}
-          onDeleteOtherCashEntry={onDeleteOtherCashEntry}
-          onSaveDailyReconciliation={onSaveDailyReconciliation}
-          onAddPostCloseAdjustment={onAddPostCloseAdjustment}
-          onSaveMonthlyReconciliation={onSaveMonthlyReconciliation}
-          onAddOwnerTransaction={onAddOwnerTransaction}
-          onDeleteOwnerTransaction={onDeleteOwnerTransaction}
-          appMode={appMode}
-          onOpenSubscriptionModal={onOpenSubscriptionModal}
-        />
+        <div className="space-y-3">
+          <RunningCapitalCard
+            initialStoreCapital={initialStoreCapital}
+            onSaveInitialStoreCapital={onSaveInitialStoreCapital}
+            sales={sales}
+            bulkPurchases={bulkPurchases}
+            purchases={purchases}
+            expenses={expenses}
+            ownerTransactions={ownerTransactions}
+            customers={customers}
+            bakiTransactions={bakiTransactions}
+            supplierTransactions={supplierTransactions}
+          />
+          <CashReconciliationManager
+            sales={sales}
+            bakiTransactions={bakiTransactions}
+            purchases={purchases}
+            bulkPurchases={bulkPurchases}
+            supplierTransactions={supplierTransactions}
+            expenses={expenses}
+            ownerTransactions={ownerTransactions}
+            otherCashEntries={otherCashEntries}
+            dailyReconciliations={dailyReconciliations}
+            monthlyReconciliations={monthlyReconciliations}
+            initialOpeningCash={initialOpeningCash}
+            products={products}
+            customers={customers}
+            suppliers={suppliers}
+            profile={profile}
+            onSaveInitialOpeningCash={onSaveInitialOpeningCash}
+            onAddOtherCashEntry={onAddOtherCashEntry}
+            onDeleteOtherCashEntry={onDeleteOtherCashEntry}
+            onSaveDailyReconciliation={onSaveDailyReconciliation}
+            onAddPostCloseAdjustment={onAddPostCloseAdjustment}
+            onSaveMonthlyReconciliation={onSaveMonthlyReconciliation}
+            onAddOwnerTransaction={onAddOwnerTransaction}
+            onDeleteOwnerTransaction={onDeleteOwnerTransaction}
+            appMode={appMode}
+            onOpenSubscriptionModal={onOpenSubscriptionModal}
+          />
+        </div>
       )}
 
       {/* Owner Capital & Drawings Tab */}

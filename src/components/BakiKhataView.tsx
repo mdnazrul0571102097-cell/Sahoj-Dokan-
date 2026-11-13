@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Customer, BakiTransaction, ShopProfile, Language, Supplier, SupplierTransaction, AppMode } from '../types';
+import { Customer, BakiTransaction, ShopProfile, Language, Supplier, SupplierTransaction, Product, AppMode } from '../types';
 import { translations } from '../i18n/translations';
 import { playSuccessChime } from '../utils/audio';
 import { SupplierKhataView } from './SupplierKhataView';
@@ -23,6 +23,7 @@ import {
   Trash2,
   Edit2,
   Info,
+  ArrowLeft,
 } from 'lucide-react';
 
 interface Props {
@@ -30,6 +31,7 @@ interface Props {
   bakiTransactions: BakiTransaction[];
   suppliers?: Supplier[];
   supplierTransactions?: SupplierTransaction[];
+  products?: Product[];
   profile: ShopProfile;
   language: Language;
   appMode?: AppMode;
@@ -60,7 +62,12 @@ interface Props {
     supplierId: string,
     amount: number,
     note: string,
-    newBalance: number
+    newBalance: number,
+    extra?: {
+      damageDeduction?: number;
+      stockValue?: number;
+      updatedProducts?: Product[];
+    }
   ) => void;
   onSupplierReturn?: (
     supplierId: string,
@@ -69,7 +76,15 @@ interface Props {
     newBalance: number
   ) => void;
   onUpdateSupplier?: (supplier: Supplier) => void;
+  onUpdateSupplierTransaction?: (
+    supplierId: string,
+    nextSupplierBalance: number,
+    nextAllTxs: SupplierTransaction[]
+  ) => void;
   onDeleteSupplier?: (supplierId: string) => void;
+  initialSubTab?: 'customers' | 'suppliers';
+  singleSectionMode?: boolean;
+  onBackToMenu?: () => void;
 }
 
 export const BakiKhataView: React.FC<Props> = ({
@@ -77,6 +92,7 @@ export const BakiKhataView: React.FC<Props> = ({
   bakiTransactions,
   suppliers = [],
   supplierTransactions = [],
+  products = [],
   profile,
   language,
   appMode = 'trial',
@@ -91,12 +107,20 @@ export const BakiKhataView: React.FC<Props> = ({
   onAddSupplierDue = () => {},
   onSupplierReturn,
   onUpdateSupplier = () => {},
+  onUpdateSupplierTransaction,
   onDeleteSupplier = () => {},
+  initialSubTab = 'customers',
+  singleSectionMode = false,
+  onBackToMenu,
 }) => {
   const t = translations[language];
 
   // Active sub-tab: 'customers' (ক্রেতার বাকি) vs 'suppliers' (সাপ্লায়ারের বাকি)
-  const [activeSubTab, setActiveSubTab] = useState<'customers' | 'suppliers'>('customers');
+  const [activeSubTab, setActiveSubTab] = useState<'customers' | 'suppliers'>(initialSubTab);
+
+  useEffect(() => {
+    setActiveSubTab(initialSubTab);
+  }, [initialSubTab]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -141,7 +165,7 @@ export const BakiKhataView: React.FC<Props> = ({
         setSelectedCustomer(null);
         return true;
       }
-      if (activeSubTab !== 'customers') {
+      if (!singleSectionMode && activeSubTab !== 'customers') {
         setActiveSubTab('customers');
         return true;
       }
@@ -150,7 +174,7 @@ export const BakiKhataView: React.FC<Props> = ({
     return () => {
       (window as any).__sdSubViewBack = null;
     };
-  }, [customerToEdit, showAddCustomerModal, showPaymentModal, showAddDueModal, selectedCustomer, activeSubTab]);
+  }, [customerToEdit, showAddCustomerModal, showPaymentModal, showAddDueModal, selectedCustomer, activeSubTab, singleSectionMode]);
 
   // Forms
   const [name, setName] = useState('');
@@ -378,56 +402,76 @@ export const BakiKhataView: React.FC<Props> = ({
 
   return (
     <div className="h-[calc(100vh-125px)] flex flex-col p-2 sm:p-3 max-w-7xl mx-auto overflow-hidden">
-      {/* Top Header Bar with separate Customer & Supplier Baki buttons (Group SMS removed) */}
+      {/* Top Header Bar */}
       <div className="bg-white rounded-2xl px-3 sm:px-4 py-2.5 mb-2.5 flex items-center justify-between gap-2 border border-[#E2E8F0] shadow-xs shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <button
-            type="button"
-            onClick={() => {
-              if (selectedCustomer) setSelectedCustomer(null);
-            }}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-[#0E6B6B] hover:bg-[#E0F2F1] transition shrink-0"
-            title="পেছনে যান"
-          >
-            <ArrowDownLeft className="w-5 h-5 -rotate-45" />
-          </button>
+          {onBackToMenu ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedCustomer) {
+                  setSelectedCustomer(null);
+                  return;
+                }
+                onBackToMenu();
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] font-extrabold text-xs sm:text-sm transition active:scale-95 cursor-pointer shrink-0"
+            >
+              <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+              <span>হিসাব / মেনু</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedCustomer) setSelectedCustomer(null);
+              }}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[#0E6B6B] hover:bg-[#E0F2F1] transition shrink-0"
+              title="পেছনে যান"
+            >
+              <ArrowDownLeft className="w-5 h-5 -rotate-45" />
+            </button>
+          )}
           <h2 className="text-sm sm:text-lg font-bold text-[#102A43] truncate">
-            {activeSubTab === 'suppliers' ? 'সাপ্লায়ার বাকি' : 'বাকি খাতা'}
+            {activeSubTab === 'suppliers' ? 'সাপ্লাইয়ার বাকি' : 'কাস্টমার বাকি'}
           </h2>
         </div>
 
-        {/* Dedicated Customer & Supplier Baki Buttons */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('customers')}
-            className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer ${
-              activeSubTab === 'customers'
-                ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-xs'
-                : 'bg-[#E0F2F1] text-[#0E6B6B] border-[#B2DFDB] hover:bg-[#B2DFDB]'
-            }`}
-          >
-            👥 কাস্টমার ({customers.length})
-          </button>
+        {/* Dedicated Customer & Supplier Baki Buttons (only shown when not in singleSectionMode) */}
+        {!singleSectionMode && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('customers')}
+              className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer ${
+                activeSubTab === 'customers'
+                  ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-xs'
+                  : 'bg-[#E0F2F1] text-[#0E6B6B] border-[#B2DFDB] hover:bg-[#B2DFDB]'
+              }`}
+            >
+              👥 কাস্টমার ({customers.length})
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('suppliers')}
-            className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer ${
-              activeSubTab === 'suppliers'
-                ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-xs'
-                : 'bg-[#E0F2F1] text-[#0E6B6B] border-[#B2DFDB] hover:bg-[#B2DFDB]'
-            }`}
-          >
-            🏢 সাপ্লায়ার ({suppliers.length})
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('suppliers')}
+              className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer ${
+                activeSubTab === 'suppliers'
+                  ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-xs'
+                  : 'bg-[#E0F2F1] text-[#0E6B6B] border-[#B2DFDB] hover:bg-[#B2DFDB]'
+              }`}
+            >
+              🏢 সাপ্লায়ার ({suppliers.length})
+            </button>
+          </div>
+        )}
       </div>
 
       {activeSubTab === 'suppliers' ? (
         <SupplierKhataView
           suppliers={suppliers}
           supplierTransactions={supplierTransactions}
+          products={products}
           profile={profile}
           language={language}
           appMode={appMode}
@@ -437,6 +481,7 @@ export const BakiKhataView: React.FC<Props> = ({
           onAddSupplierDue={onAddSupplierDue}
           onSupplierReturn={onSupplierReturn}
           onUpdateSupplier={onUpdateSupplier}
+          onUpdateSupplierTransaction={onUpdateSupplierTransaction}
           onDeleteSupplier={onDeleteSupplier}
         />
       ) : (
@@ -569,84 +614,117 @@ export const BakiKhataView: React.FC<Props> = ({
                           setConfirmDeleteCustomerId(null);
                           setSelectedCustomer(cust);
                         }}
-                        className={`bg-white rounded-[20px] p-3.5 border transition-all cursor-pointer flex items-center justify-between gap-3 shadow-xs hover:border-[#0E6B6B] ${
+                        className={`bg-white rounded-[20px] p-3.5 border transition-all cursor-pointer space-y-2.5 shadow-xs hover:border-[#0E6B6B] ${
                           selectedCustomer?.id === cust.id
                             ? 'border-[#0E6B6B] ring-2 ring-[#0E6B6B]/20'
                             : 'border-[#E2E8F0]'
                         }`}
                       >
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          {/* Circular Avatar */}
-                          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#E0F2F1] text-[#0E6B6B] font-black text-base sm:text-lg flex items-center justify-center shrink-0">
-                            {cust.name.slice(0, 1)}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h4 className="font-bold text-sm sm:text-base text-[#102A43] truncate">
-                              {cust.name}
-                            </h4>
-                            <div className="flex items-center gap-1.5 mt-0.5 text-xs text-[#64748B] font-mono truncate">
-                              <span>{cust.phone || '---'}</span>
-                              {cust.address && (
-                                <span className="font-sans font-normal truncate">• {cust.address}</span>
-                              )}
+                        {/* Row 1: Avatar + Name/Phone + Total Due */}
+                        <div className="flex items-center justify-between gap-2.5">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#E0F2F1] text-[#0E6B6B] font-black text-base sm:text-lg flex items-center justify-center shrink-0">
+                              {cust.name.slice(0, 1)}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h4 className="font-bold text-sm sm:text-base text-[#102A43] truncate">
+                                {cust.name}
+                              </h4>
+                              <div className="flex items-center gap-1.5 mt-0.5 text-xs text-[#64748B] font-mono truncate">
+                                <span>{cust.phone || '---'}</span>
+                                {cust.address && (
+                                  <span className="font-sans font-normal truncate">• {cust.address}</span>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
                           <div className="text-right shrink-0">
                             <span className="text-[11px] text-[#64748B] block font-medium leading-tight">
                               মোট বাকি
                             </span>
                             <span
-                              className={`text-sm sm:text-base font-black font-mono tracking-tight leading-tight block ${
+                              className={`text-sm sm:text-base font-black font-mono tracking-tight leading-tight block tabular-nums ${
                                 hasDue ? 'text-[#D32F2F]' : 'text-[#2E7D32]'
                               }`}
                             >
                               ৳ {cust.totalDue.toLocaleString()}
                             </span>
                           </div>
+                        </div>
 
-                          {/* Edit Customer button */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenEditCustomer(cust);
-                            }}
-                            className="p-2 rounded-xl border border-[#B2DFDB] bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] transition active:scale-95 cursor-pointer"
-                            title="কাস্টমার তথ্য এডিট করুন"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
+                        {/* Row 2: Quick Action Buttons (+ বাকি, ৳ জমা, Edit, WhatsApp) */}
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#F1F5F9]">
+                          <div className="flex items-center gap-1.5 flex-1">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCustomerForAddDue(cust);
+                                setNewDueAmount('');
+                                setNewDueNote('');
+                                setShowAddDueModal(true);
+                              }}
+                              className="flex-1 py-2 px-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[#D32F2F] text-xs font-extrabold transition active:scale-95 cursor-pointer whitespace-nowrap"
+                            >
+                              + বাকি
+                            </button>
 
-                          {/* WhatsApp button next to customer (locked after 60 days in Normal Mode) */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSendReminder(cust);
-                            }}
-                            className={`px-2.5 py-2 rounded-xl border text-xs font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer ${
-                              appMode === 'normal'
-                                ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
-                                : 'bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] border-[#B2DFDB]'
-                            }`}
-                            title={
-                              appMode === 'normal'
-                                ? 'হোয়াটসঅ্যাপ মেসেজ পাঠাতে Pro আনলক করুন'
-                                : 'কাস্টমারের হোয়াটসঅ্যাপে তাগাদা মেসেজ পাঠান'
-                            }
-                          >
-                            {appMode === 'normal' ? (
-                              <>
-                                <Lock className="w-3.5 h-3.5 text-amber-600" />
-                                <span className="text-[10px]">Pro</span>
-                              </>
-                            ) : (
-                              <MessageCircle className="w-4 h-4" />
-                            )}
-                          </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCustomerForPayment(cust);
+                                setPaymentAmount(cust.totalDue || '');
+                                setPaymentNote('');
+                                setShowPaymentModal(true);
+                              }}
+                              className="flex-1 py-2 px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[#2E7D32] text-xs font-extrabold transition active:scale-95 cursor-pointer whitespace-nowrap"
+                            >
+                              ৳ জমা
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenEditCustomer(cust);
+                              }}
+                              className="p-2 rounded-xl border border-[#B2DFDB] bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] transition active:scale-95 cursor-pointer"
+                              title="কাস্টমার তথ্য এডিট করুন"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSendReminder(cust);
+                              }}
+                              className={`px-2.5 py-2 rounded-xl border text-xs font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer ${
+                                appMode === 'normal'
+                                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                                  : 'bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] border-[#B2DFDB]'
+                              }`}
+                              title={
+                                appMode === 'normal'
+                                  ? 'হোয়াটসঅ্যাপ মেসেজ পাঠাতে Pro আনলক করুন'
+                                  : 'কাস্টমারের হোয়াটসঅ্যাপে তাগাদা মেসেজ পাঠান'
+                              }
+                            >
+                              {appMode === 'normal' ? (
+                                <>
+                                  <Lock className="w-3.5 h-3.5 text-amber-600" />
+                                  <span className="text-[10px]">Pro</span>
+                                </>
+                              ) : (
+                                <MessageCircle className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );

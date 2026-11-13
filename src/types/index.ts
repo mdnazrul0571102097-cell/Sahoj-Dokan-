@@ -195,6 +195,8 @@ export interface SupplierTransaction {
   note?: string;         // চালানের বিবরণ / পণ্যের নাম
   purchaseId?: string;
   balanceAfter: number;
+  damageDeduction?: number; // ড্যামেজ মাল ফেরত বাদ (৳)
+  stockValue?: number;      // নতুন কেনা মালের নিট স্টক মূল্য (Items Total - Damage Amount)
 }
 
 // ================= DAILY SHOP EXPENSES (দোকানের দৈনন্দিন খরচ) =================
@@ -247,13 +249,15 @@ export interface BulkPurchase {
   supplierName?: string;
   supplierPhone?: string;
   items: BulkPurchaseItem[];
-  totalAmount: number;   // মোট ক্রয় মূল্য
-  paidAmount: number;    // পরিশোধিত টাকা
+  grossTotalAmount?: number; // ড্যামেজ বাদ দেওয়ার আগে মোট নতুন মালের মূল্য
+  damageDeduction?: number;  // ড্যামেজ মাল ফেরত বাদ (৳)
+  totalAmount: number;   // নিট ক্রয় মূল্য (Items Total - Damage Deduction)
+  paidAmount: number;    // পরিশোধিত টাকা (নিট নগদ বিল)
   dueAmount: number;     // বাকি টাকা (সাপ্লায়ারের পাওনা)
   paymentType: 'cash' | 'due' | 'partial' | 'bkash' | 'nagad' | 'bank';
   note?: string;         // মেমো বা ভাউচার বিবরণ
-  returnedAmount?: number; // মোট ফেরত আসা টাকার পরিমাণ
-  returns?: PurchaseReturnItem[]; // ফেরত সংক্রান্ত হিস্ট্রি
+  returnedAmount?: number; // মোট ফেরত আসা টাকার পরিমাণ (legacy)
+  returns?: PurchaseReturnItem[]; // ফেরত সংক্রান্ত হিস্ট্রি (legacy)
   createdAt: string;
 }
 

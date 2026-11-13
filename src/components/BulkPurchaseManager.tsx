@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import {
   BulkPurchase,
   BulkPurchaseItem,
-  PurchaseReturnItem,
   Supplier,
   Product,
   ShopProfile,
@@ -11,12 +10,13 @@ import {
 import { translations } from '../i18n/translations';
 import { playSuccessChime } from '../utils/audio';
 import { DB } from '../storage/db';
+import { MemoScannerCard } from './MemoScannerCard';
+import { ScannedMemoResult } from '../utils/memoScanner';
 import {
   PackagePlus,
   Plus,
   Trash2,
   Edit2,
-  RotateCcw,
   X,
   ChevronDown,
   ChevronUp,
@@ -88,14 +88,12 @@ export const BulkPurchaseManager: React.FC<Props> = ({
   const [editingPurchase, setEditingPurchase] = useState<BulkPurchase | null>(null);
   const [expandedPurchaseId, setExpandedPurchaseId] = useState<string | null>(null);
   const [purchaseToDelete, setPurchaseToDelete] = useState<BulkPurchase | null>(null);
-  const [purchaseToReturn, setPurchaseToReturn] = useState<BulkPurchase | null>(null);
-  const [returnAmountInput, setReturnAmountInput] = useState<string>('');
-  const [returnNoteInput, setReturnNoteInput] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Form States
   const [supplierNameInput, setSupplierNameInput] = useState<string>('');
   const [purchaseNote, setPurchaseNote] = useState('');
+  const [damageDeductionInput, setDamageDeductionInput] = useState<string>('');
   const [purchaseDate, setPurchaseDate] = useState(todayStr);
 
   // Cart of items in this bulk purchase
@@ -158,10 +156,48 @@ export const BulkPurchaseManager: React.FC<Props> = ({
     setItems(items.filter((_, idx) => idx !== index));
   };
 
-  // Grand Total of purchase
+  // Grand Total of items in this purchase (before damage deduction)
   const purchaseGrandTotal = useMemo(() => {
-    return items.reduce((sum, it) => sum + (it.totalCost || 0), 0);
+    return Math.round(items.reduce((sum, it) => sum + (it.totalCost || 0), 0));
   }, [items]);
+
+  const damageDeductionAmount = useMemo(() => {
+    return Math.max(0, Math.round(Number(damageDeductionInput) || 0));
+  }, [damageDeductionInput]);
+
+  const netCashBill = useMemo(() => {
+    return Math.max(0, purchaseGrandTotal - damageDeductionAmount);
+  }, [purchaseGrandTotal, damageDeductionAmount]);
+
+  // Auto-fill form from AI Memo Scanner
+  const handleMemoExtracted = (result: ScannedMemoResult) => {
+    if (result.supplierName) {
+      setSupplierNameInput(result.supplierName);
+    }
+    if (result.memoNumber) {
+      setPurchaseNote(`মেমো #${result.memoNumber}`);
+    }
+    if (result.items && result.items.length > 0) {
+      const mappedItems: BulkPurchaseItem[] = result.items.map((scanned) => {
+        const cleanScanned = scanned.name.trim().toLowerCase();
+        const exactMatch = products.find(
+          (p) => p.name.trim().toLowerCase() === cleanScanned
+        );
+        const qty = Math.max(0.01, Number(scanned.quantity) || 1);
+        const rate = Math.max(0, Number(scanned.purchasePrice) || 0);
+        return {
+          productId: exactMatch ? exactMatch.id : '',
+          productName: scanned.name,
+          category: exactMatch ? exactMatch.category : 'মুদি আইটেম',
+          quantity: qty,
+          unit: scanned.unit,
+          unitCostPrice: rate,
+          totalCost: Math.round(qty * rate),
+        };
+      });
+      setItems(mappedItems);
+    }
+  };
 
   // Effective filter date string
   const effectiveFilterDate = useMemo(() => {
@@ -272,6 +308,7 @@ export const BulkPurchaseManager: React.FC<Props> = ({
     setEditingPurchase(null);
     setSupplierNameInput('');
     setPurchaseNote('');
+    setDamageDeductionInput('');
     setPurchaseDate(todayStr);
     setItems([
       {
@@ -292,6 +329,11 @@ export const BulkPurchaseManager: React.FC<Props> = ({
     setEditingPurchase(purchase);
     setSupplierNameInput(purchase.supplierName || '');
     setPurchaseNote(purchase.note || '');
+    setDamageDeductionInput(
+      purchase.damageDeduction && purchase.damageDeduction > 0
+        ? String(purchase.damageDeduction)
+        : ''
+    );
     setPurchaseDate(getLocalDateStr(purchase.date) || todayStr);
     setItems(
       purchase.items.map((it) => ({
@@ -370,8 +412,10 @@ export const BulkPurchaseManager: React.FC<Props> = ({
         supplierName: trimmedSupplierName || 'নগদ ক্রয় রসিদ',
         supplierPhone: matchedSupplier ? matchedSupplier.phone : editingPurchase.supplierPhone,
         items: items.filter((it) => it.productName.trim() && it.totalCost > 0),
-        totalAmount: purchaseGrandTotal,
-        paidAmount: purchaseGrandTotal,
+        grossTotalAmount: purchaseGrandTotal,
+        damageDeduction: damageDeductionAmount,
+        totalAmount: netCashBill,
+        paidAmount: netCashBill,
         dueAmount: 0,
         paymentType: 'cash',
         note: purchaseNote.trim() || undefined,
@@ -391,6 +435,7 @@ export const BulkPurchaseManager: React.FC<Props> = ({
 
       setShowNewPurchaseModal(false);
       setEditingPurchase(null);
+      setDamageDeductionInput('');
       playSuccessChime();
       return;
     }
@@ -403,8 +448,10 @@ export const BulkPurchaseManager: React.FC<Props> = ({
       supplierName: trimmedSupplierName || 'নগদ ক্রয় রসিদ',
       supplierPhone: matchedSupplier ? matchedSupplier.phone : undefined,
       items: items.filter((it) => it.productName.trim() && it.totalCost > 0),
-      totalAmount: purchaseGrandTotal,
-      paidAmount: purchaseGrandTotal,
+      grossTotalAmount: purchaseGrandTotal,
+      damageDeduction: damageDeductionAmount,
+      totalAmount: netCashBill,
+      paidAmount: netCashBill,
       dueAmount: 0,
       paymentType: 'cash',
       note: purchaseNote.trim() || undefined,
@@ -434,6 +481,7 @@ export const BulkPurchaseManager: React.FC<Props> = ({
 
     setShowNewPurchaseModal(false);
     setPurchaseNote('');
+    setDamageDeductionInput('');
     setSupplierNameInput('');
     setItems([
       {
@@ -447,49 +495,6 @@ export const BulkPurchaseManager: React.FC<Props> = ({
       },
     ]);
     playSuccessChime();
-  };
-
-  const handleOpenReturnModal = (p: BulkPurchase) => {
-    setPurchaseToReturn(p);
-    setReturnAmountInput('');
-    setReturnNoteInput('');
-  };
-
-  const handleSubmitReturn = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!purchaseToReturn) return;
-    const amount = Math.round(Number(returnAmountInput) || 0);
-    const alreadyRet = Number(purchaseToReturn.returnedAmount) || 0;
-    const maxReturnable = Math.max(0, (Number(purchaseToReturn.totalAmount) || 0) - alreadyRet);
-
-    if (amount <= 0 || amount > maxReturnable) return;
-
-    const newReturn: PurchaseReturnItem = {
-      id: `pret_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      date: new Date().toISOString(),
-      amount,
-      note: returnNoteInput.trim() || 'ড্যামেজ/পণ্য ফেরত',
-      createdAt: new Date().toISOString(),
-    };
-
-    const updatedReturns = [...(purchaseToReturn.returns || []), newReturn];
-    const updatedPurchase: BulkPurchase = {
-      ...purchaseToReturn,
-      returnedAmount: alreadyRet + amount,
-      returns: updatedReturns,
-    };
-
-    const allPurchases = DB.getBulkPurchases();
-    const nextAll = allPurchases.map((p: BulkPurchase) =>
-      p.id === purchaseToReturn.id ? updatedPurchase : p
-    );
-    DB.saveBulkPurchases(nextAll);
-
-    if (onUpdateBulkPurchase) {
-      onUpdateBulkPurchase(updatedPurchase);
-    }
-    playSuccessChime();
-    setPurchaseToReturn(null);
   };
 
   return (
@@ -697,22 +702,8 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                         )}
                       </div>
 
-                      {/* Right side: Action buttons ([ ↩️ ফেরত ], [ ✏️ ], [ 🗑️ ], [ ⌄ ]) */}
+                      {/* Right side: Action buttons ([ ✏️ ], [ 🗑️ ], [ ⌄ ]) */}
                       <div className="flex items-center gap-1.5 shrink-0">
-                        {/* Return Button [ ↩️ ফেরত ] */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenReturnModal(purchase);
-                          }}
-                          className="px-2.5 py-1 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs flex items-center gap-1 transition active:scale-95 cursor-pointer"
-                          title="পণ্য ফেরত ও নগদ টাকা ড্রয়ারে জমা"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
-                          <span>ফেরত</span>
-                        </button>
-
                         {/* Edit Button */}
                         <button
                           type="button"
@@ -763,7 +754,22 @@ export const BulkPurchaseManager: React.FC<Props> = ({
 
                       {/* Right: Exact monetary breakdown */}
                       <div className="text-right shrink-0">
-                        {(purchase.returnedAmount || 0) > 0 ? (
+                        {(purchase.damageDeduction || 0) > 0 ? (
+                          <div className="flex flex-col sm:flex-row sm:items-baseline items-end gap-0.5 sm:gap-2">
+                            <div className="flex items-center gap-1.5 text-[11px]">
+                              <span className="text-[#64748B] line-through font-mono">
+                                ৳{(purchase.grossTotalAmount ?? purchase.totalAmount + (purchase.damageDeduction || 0)).toLocaleString()}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-100 text-amber-900 border border-amber-300 font-bold">
+                                ড্যামেজ বাদ: -৳{(purchase.damageDeduction || 0).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="text-sm sm:text-base font-black font-mono text-[#0E6B6B]">
+                              <span className="text-[11px] font-sans font-bold text-[#486581] mr-1">নিট নগদ বিল:</span>
+                              ৳{purchase.totalAmount.toLocaleString()}
+                            </div>
+                          </div>
+                        ) : (purchase.returnedAmount || 0) > 0 ? (
                           <div className="flex flex-col sm:flex-row sm:items-baseline items-end gap-0.5 sm:gap-2">
                             <div className="flex items-center gap-1.5 text-[11px]">
                               <span className="text-[#64748B] line-through font-mono">
@@ -821,59 +827,55 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                           ))}
                         </tbody>
                         <tfoot>
-                          <tr className="border-t border-[#E2E8F0] font-bold text-[#102A43]">
-                            <td colSpan={3} className="pt-2 text-right">মূল নগদ বিল:</td>
-                            <td className="pt-2 text-right font-mono text-sm text-[#102A43]">
-                              ৳{purchase.totalAmount.toLocaleString()}
-                            </td>
-                          </tr>
-                          {(purchase.returnedAmount || 0) > 0 && (
+                          {(purchase.damageDeduction || 0) > 0 ? (
                             <>
+                              <tr className="border-t border-[#E2E8F0] font-bold text-[#102A43]">
+                                <td colSpan={3} className="pt-2 text-right">মোট নতুন মাল:</td>
+                                <td className="pt-2 text-right font-mono text-sm text-[#102A43]">
+                                  ৳{(purchase.grossTotalAmount ?? purchase.totalAmount + (purchase.damageDeduction || 0)).toLocaleString()}
+                                </td>
+                              </tr>
                               <tr className="text-amber-800 font-bold text-xs">
-                                <td colSpan={3} className="pt-1 text-right">মোট ফেরত (ড্রয়ারে জমা):</td>
+                                <td colSpan={3} className="pt-1 text-right">ড্যামেজ মাল ফেরত বাদ:</td>
                                 <td className="pt-1 text-right font-mono text-xs text-amber-800">
-                                  -৳{(purchase.returnedAmount || 0).toLocaleString()}
+                                  -৳{(purchase.damageDeduction || 0).toLocaleString()}
                                 </td>
                               </tr>
                               <tr className="font-extrabold text-[#0E6B6B] text-sm">
-                                <td colSpan={3} className="pt-1 text-right">নিট পরিশোধিত বিল:</td>
+                                <td colSpan={3} className="pt-1 text-right">নিট নগদ বিল:</td>
                                 <td className="pt-1 text-right font-mono text-sm text-[#0E6B6B]">
-                                  ৳{Math.max(0, purchase.totalAmount - (purchase.returnedAmount || 0)).toLocaleString()}
+                                  ৳{purchase.totalAmount.toLocaleString()}
                                 </td>
                               </tr>
+                            </>
+                          ) : (
+                            <>
+                              <tr className="border-t border-[#E2E8F0] font-bold text-[#102A43]">
+                                <td colSpan={3} className="pt-2 text-right">মোট নগদ বিল:</td>
+                                <td className="pt-2 text-right font-mono text-sm text-[#102A43]">
+                                  ৳{purchase.totalAmount.toLocaleString()}
+                                </td>
+                              </tr>
+                              {(purchase.returnedAmount || 0) > 0 && (
+                                <>
+                                  <tr className="text-amber-800 font-bold text-xs">
+                                    <td colSpan={3} className="pt-1 text-right">পূর্বের ফেরত:</td>
+                                    <td className="pt-1 text-right font-mono text-xs text-amber-800">
+                                      -৳{(purchase.returnedAmount || 0).toLocaleString()}
+                                    </td>
+                                  </tr>
+                                  <tr className="font-extrabold text-[#0E6B6B] text-sm">
+                                    <td colSpan={3} className="pt-1 text-right">নিট পরিশোধিত বিল:</td>
+                                    <td className="pt-1 text-right font-mono text-sm text-[#0E6B6B]">
+                                      ৳{Math.max(0, purchase.totalAmount - (purchase.returnedAmount || 0)).toLocaleString()}
+                                    </td>
+                                  </tr>
+                                </>
+                              )}
                             </>
                           )}
                         </tfoot>
                       </table>
-
-                      {purchase.returns && purchase.returns.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-[#E2E8F0]">
-                          <span className="block text-xs font-bold text-amber-800 mb-1.5 flex items-center gap-1">
-                            <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
-                            ফেরত হিস্ট্রি ({purchase.returns.length}টি):
-                          </span>
-                          <div className="space-y-1.5">
-                            {purchase.returns.map((ret) => (
-                              <div
-                                key={ret.id}
-                                className="flex items-center justify-between text-xs bg-amber-50/70 px-3 py-1.5 rounded-xl border border-amber-200"
-                              >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <span className="font-bold text-slate-700 shrink-0">
-                                    {formatDateDDMMYYYY(ret.date)}
-                                  </span>
-                                  <span className="text-slate-600 truncate">
-                                    • {ret.note || 'ড্যামেজ/পণ্য ফেরত'}
-                                  </span>
-                                </div>
-                                <span className="font-black text-amber-800 tabular-nums shrink-0">
-                                  +৳{ret.amount.toLocaleString()} (ক্যাশে জমা)
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
@@ -911,6 +913,9 @@ export const BulkPurchaseManager: React.FC<Props> = ({
               onSubmit={handleSubmitPurchase}
               className="flex-1 overflow-y-auto px-4 py-3.5 space-y-3.5"
             >
+              {/* Zero-Setup AI Memo Scanner Card */}
+              <MemoScannerCard onMemoExtracted={handleMemoExtracted} />
+
               {/* Row 1: Supplier & Purchase Date side-by-side */}
               <div className="grid grid-cols-12 gap-2.5">
                 <div className="col-span-7">
@@ -1079,12 +1084,42 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                 />
               </div>
 
+              {/* Direct Damage Return / Deduction Field */}
+              <div>
+                <label className="block text-xs sm:text-sm font-extrabold text-[#111827] mb-1.5">
+                  ড্যামেজ মাল ফেরত বাদ (৳) (ঐচ্ছিক)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={damageDeductionInput}
+                  onChange={(e) => setDamageDeductionInput(e.target.value)}
+                  placeholder="যেমন: 200"
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-amber-400 bg-amber-50/40 text-xs sm:text-sm font-bold text-[#111827] placeholder-[#64748B] focus:ring-2 focus:ring-amber-500 focus:bg-white focus:outline-none"
+                />
+              </div>
+
               {/* Mint Green Total Cash Bill Box */}
-              <div className="px-4 py-3 rounded-[20px] bg-[#DCFCE7]">
-                <div className="text-sm sm:text-base font-extrabold text-[#111827]">
-                  সর্বমোট নগদ বিল: ৳ {purchaseGrandTotal.toLocaleString()}
+              <div className="px-4 py-3 rounded-[20px] bg-[#DCFCE7] space-y-1">
+                {damageDeductionAmount > 0 && (
+                  <>
+                    <div className="flex items-center justify-between text-xs sm:text-sm font-bold text-[#1F2937]">
+                      <span>মোট নতুন মাল:</span>
+                      <span className="font-mono">৳{purchaseGrandTotal.toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs sm:text-sm font-bold text-amber-800">
+                      <span>ড্যামেজ মাল ফেরত বাদ:</span>
+                      <span className="font-mono">-৳{damageDeductionAmount.toLocaleString()}</span>
+                    </div>
+                    <div className="border-t border-emerald-300/80 my-1" />
+                  </>
+                )}
+                <div className="flex items-center justify-between text-sm sm:text-base font-extrabold text-[#111827]">
+                  <span>সর্বমোট নগদ বিল:</span>
+                  <span className="font-mono">৳{netCashBill.toLocaleString()}</span>
                 </div>
-                <div className="text-xs sm:text-sm font-medium text-[#1F2937] mt-0.5">
+                <div className="text-xs sm:text-sm font-medium text-[#1F2937]">
                   (ক্যাশ ড্রয়ার থেকে বিয়োগ হবে)
                 </div>
               </div>
@@ -1147,107 +1182,6 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                 হ্যাঁ, ডিলিট করুন
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Cash Purchase Return Modal */}
-      {purchaseToReturn && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-[24px] bg-white p-5 shadow-2xl border border-[#E2E8F0] space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E2E8F0]">
-              <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
-                  <RotateCcw className="w-5 h-5 stroke-[2.5]" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-[#102A43]">
-                    নগদ ক্রয় ফেরত
-                  </h3>
-                  <p className="text-xs text-[#64748B]">
-                    রসিদ #{purchaseToReturn.purchaseNo} ({purchaseToReturn.supplierName})
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPurchaseToReturn(null)}
-                className="p-1 rounded-full hover:bg-slate-100 text-slate-500 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs space-y-1">
-              <div className="flex justify-between">
-                <span className="text-slate-600 font-semibold">আসল ক্রয় বিল:</span>
-                <span className="font-bold text-slate-900">৳{purchaseToReturn.totalAmount.toLocaleString()}</span>
-              </div>
-              {(purchaseToReturn.returnedAmount || 0) > 0 && (
-                <div className="flex justify-between text-amber-800">
-                  <span className="font-semibold">পূর্বে ফেরত হয়েছে:</span>
-                  <span className="font-bold">৳{(purchaseToReturn.returnedAmount || 0).toLocaleString()}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-emerald-800 pt-1 border-t border-amber-200 font-bold">
-                <span>সর্বোচ্চ ফেরত সম্ভব:</span>
-                <span>৳{Math.max(0, purchaseToReturn.totalAmount - (purchaseToReturn.returnedAmount || 0)).toLocaleString()}</span>
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmitReturn} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-[#102A43] mb-1">
-                  ফেরতকৃত টাকার পরিমাণ (৳) *
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  max={Math.max(0, purchaseToReturn.totalAmount - (purchaseToReturn.returnedAmount || 0))}
-                  step="any"
-                  autoFocus
-                  value={returnAmountInput}
-                  onChange={(e) => setReturnAmountInput(e.target.value)}
-                  placeholder="যেমন: 500"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F8FAFC] border-2 border-amber-400 text-base font-black text-[#102A43] focus:outline-none focus:border-amber-600"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[#102A43] mb-1">
-                  নোট / কারণ (ঐচ্ছিক)
-                </label>
-                <input
-                  type="text"
-                  value={returnNoteInput}
-                  onChange={(e) => setReturnNoteInput(e.target.value)}
-                  placeholder="যেমন: ড্যামেজ মাল ফেরত"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs text-[#102A43] focus:outline-none focus:border-[#0E6B6B]"
-                />
-              </div>
-
-              <div className="text-[11px] text-[#64748B] leading-tight space-y-0.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                <p>• ফেরত পাওয়া টাকা সরাসরি <strong>ক্যাশ বাক্সে নগদ</strong> ব্যালেন্সে জমা হবে (+)।</p>
-                <p>• <strong>মূল মালের পুঁজি</strong> থেকে সমপরিমাণ টাকা বিয়োগ হবে (−)।</p>
-              </div>
-
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setPurchaseToReturn(null)}
-                  className="flex-1 py-2.5 rounded-xl bg-[#EDF2F7] text-[#102A43] font-bold text-xs cursor-pointer"
-                >
-                  বাতিল
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-[#D97706] hover:bg-amber-700 text-white font-black text-xs shadow-xs transition active:scale-95 cursor-pointer"
-                >
-                  নগদ ফেরত জমা করুন
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
