@@ -306,6 +306,7 @@ export const MenuHubView: React.FC<Props> = ({
     bgClass: string;
     icon: React.ComponentType<{ className?: string }>;
   }[] = [
+    // Row 1: পণ্য / স্টক | বিক্রি ও লাভ | নগদ ক্রয়
     {
       id: 'products',
       label: 'পণ্য / স্টক',
@@ -313,16 +314,23 @@ export const MenuHubView: React.FC<Props> = ({
       icon: Package,
     },
     {
+      id: 'salesProfit',
+      label: 'বিক্রি ও লাভ',
+      bgClass: 'bg-[#E5980B] hover:bg-[#CE8808]',
+      icon: TrendingUp,
+    },
+    {
       id: 'bulkPurchases',
       label: 'নগদ ক্রয়',
       bgClass: 'bg-[#EA7400] hover:bg-[#D56900]',
       icon: ShoppingCart,
     },
+    // Row 2: সাপ্লাইয়ার বাকি | দোকান খরচ | মালিক খরচ/জমা
     {
-      id: 'salesProfit',
-      label: 'বিক্রি ও লাভ',
-      bgClass: 'bg-[#E5980B] hover:bg-[#CE8808]',
-      icon: TrendingUp,
+      id: 'suppliersDue',
+      label: 'সাপ্লাইয়ার বাকি',
+      bgClass: 'bg-[#AD1457] hover:bg-[#931049]',
+      icon: Building2,
     },
     {
       id: 'expenses',
@@ -336,17 +344,12 @@ export const MenuHubView: React.FC<Props> = ({
       bgClass: 'bg-[#E21765] hover:bg-[#C91359]',
       icon: UserCheck,
     },
+    // Row 3: কাস্টমার বাকি | ক্যাশ বক্স | সকল রিপোর্ট
     {
       id: 'customersDue',
       label: 'কাস্টমার বাকি',
       bgClass: 'bg-[#6A1B9A] hover:bg-[#581682]',
       icon: Users,
-    },
-    {
-      id: 'suppliersDue',
-      label: 'সাপ্লাইয়ার বাকি',
-      bgClass: 'bg-[#AD1457] hover:bg-[#931049]',
-      icon: Building2,
     },
     {
       id: 'cashBox',
@@ -360,6 +363,7 @@ export const MenuHubView: React.FC<Props> = ({
       bgClass: 'bg-[#0097A7] hover:bg-[#008290]',
       icon: BarChart3,
     },
+    // Row 4: ক্যালকুলেটর (left single-column, middle & right empty)
     {
       id: 'calculator',
       label: 'ক্যালকুলেটর',
@@ -369,35 +373,35 @@ export const MenuHubView: React.FC<Props> = ({
   ];
 
   return (
-    <div className="min-h-[calc(100vh-110px)] flex flex-col p-3 max-w-md mx-auto pb-20 overflow-y-auto">
-      {/* Top Dark Teal Summary Card */}
-      <div className="bg-[#036368] text-white rounded-[24px] p-4 sm:p-5 shadow-md mb-4 border border-[#024F53]">
+    <div className="flex flex-col px-2.5 pt-2 pb-16 max-w-md mx-auto">
+      {/* Compact Top Dark Teal Summary Card (~20% tighter vertical footprint) */}
+      <div className="bg-[#036368] text-white rounded-[20px] px-3.5 py-2.5 shadow-md mb-2.5 border border-[#024F53]">
         {/* Date Row */}
-        <div className="flex items-center justify-between pb-3 border-b border-white/15">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-teal-100 shrink-0" />
-            <span className="text-sm sm:text-base font-extrabold tracking-tight text-white">
+        <div className="flex items-center justify-between pb-1.5 border-b border-white/15">
+          <div className="flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-teal-100 shrink-0" />
+            <span className="text-xs sm:text-sm font-extrabold tracking-tight text-white">
               {bengaliDateStr}
             </span>
           </div>
         </div>
 
         {/* 2 Summary Columns: আজকের বিক্রি | ক্যাশ বাক্সে নগদ */}
-        <div className="grid grid-cols-2 divide-x divide-white/20 pt-3.5">
-          <div className="pr-3">
-            <p className="text-xs font-semibold text-teal-100/90 mb-1">
+        <div className="grid grid-cols-2 divide-x divide-white/20 pt-2">
+          <div className="pr-2.5">
+            <p className="text-[11px] font-semibold text-teal-100/90 leading-tight mb-0.5">
               আজকের বিক্রি
             </p>
-            <p className="text-xl sm:text-2xl font-black text-white tracking-tight tabular-nums">
+            <p className="text-lg sm:text-xl font-black text-white tracking-tight tabular-nums leading-tight">
               ৳ {todaySalesTotal.toLocaleString('en-US')}
             </p>
           </div>
 
-          <div className="pl-3">
-            <p className="text-xs font-semibold text-teal-100/90 mb-1">
+          <div className="pl-2.5">
+            <p className="text-[11px] font-semibold text-teal-100/90 leading-tight mb-0.5">
               ক্যাশ বাক্সে নগদ
             </p>
-            <p className="text-xl sm:text-2xl font-black text-white tracking-tight tabular-nums">
+            <p className="text-lg sm:text-xl font-black text-white tracking-tight tabular-nums leading-tight">
               ৳ {isDeficit ? '০' : displayCashBalance.toLocaleString('en-US')}
             </p>
             {isDeficit && (
@@ -410,12 +414,12 @@ export const MenuHubView: React.FC<Props> = ({
       </div>
 
       {/* Section Title */}
-      <h2 className="text-sm font-extrabold text-[#475569] px-1 mb-2.5">
+      <h2 className="text-xs font-extrabold text-[#475569] px-1 mb-1.5">
         হিসাব / মেনু
       </h2>
 
-      {/* 10 Vibrant Solid-Colored Rounded Square Tiles (2-Column Grid) */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Compact 3-Column Grid (3 + 3 + 3 + 1) */}
+      <div className="grid grid-cols-3 gap-2">
         {tiles.map((tile) => {
           const Icon = tile.icon;
           return (
@@ -423,10 +427,10 @@ export const MenuHubView: React.FC<Props> = ({
               key={tile.id}
               type="button"
               onClick={() => onSelectTile(tile.id)}
-              className={`${tile.bgClass} rounded-[20px] p-4 min-h-[112px] flex flex-col items-center justify-center gap-2.5 text-white shadow-sm transition-transform duration-150 active:scale-[0.97] cursor-pointer`}
+              className={`${tile.bgClass} rounded-[18px] px-1.5 py-2.5 min-h-[78px] flex flex-col items-center justify-center gap-1.5 text-white shadow-sm transition-transform duration-150 active:scale-[0.97] cursor-pointer`}
             >
-              <Icon className="w-9 h-9 text-white stroke-[2.2]" />
-              <span className="text-sm sm:text-[15px] font-extrabold text-white tracking-tight text-center leading-snug">
+              <Icon className="w-7 h-7 text-white stroke-[2.2] shrink-0" />
+              <span className="text-[11.5px] sm:text-xs font-extrabold text-white tracking-tight text-center leading-tight">
                 {tile.label}
               </span>
             </button>

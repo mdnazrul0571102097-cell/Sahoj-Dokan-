@@ -30,6 +30,7 @@ import {
   AlertCircle,
   TrendingUp,
   Trash2,
+  BookOpen,
 } from 'lucide-react';
 
 interface Props {
@@ -73,6 +74,7 @@ export const SettingsView: React.FC<Props> = ({
   const [showPrinterModal, setShowPrinterModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showWipeDemoModal, setShowWipeDemoModal] = useState(false);
+  const [showHowToUseModal, setShowHowToUseModal] = useState(false);
   const [keepProductsOnWipe, setKeepProductsOnWipe] = useState(true);
   const [quickSaleMargin, setQuickSaleMargin] = useState<number>(() =>
     DB.getQuickSaleProfitMargin()
@@ -665,6 +667,27 @@ export const SettingsView: React.FC<Props> = ({
           </button>
         </div>
 
+        {/* ১.৫ অ্যাপ যেভাবে ব্যবহার করবেন (সহজ গাইড) */}
+        <div
+          onClick={() => setShowHowToUseModal(true)}
+          className="bg-white rounded-2xl px-3.5 py-2.5 border border-teal-300/90 shadow-2xs flex items-center justify-between cursor-pointer hover:border-[#0E6B6B] transition active:scale-[0.99]"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-[#E0F2F1] text-[#0E6B6B] flex items-center justify-center shrink-0 border border-[#B2DFDB]">
+              <BookOpen className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="font-extrabold text-xs sm:text-sm text-[#102A43] block leading-tight truncate">
+                📖 অ্যাপ যেভাবে ব্যবহার করবেন
+              </span>
+              <span className="text-[10.5px] text-[#64748B] block truncate">
+                কোন বাটনে কী কাজ হয় এক নজরে দেখুন
+              </span>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-[#0E6B6B] shrink-0" />
+        </div>
+
         {/* ২. ভাষা পরিবর্তন (স্বতন্ত্র কার্ড) */}
         <div className="bg-white rounded-2xl px-3.5 py-2.5 border border-sky-200/80 shadow-2xs flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -932,7 +955,7 @@ export const SettingsView: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* ৯. ব্যবহার নির্দেশিকা ও শর্তাবলী (স্বতন্ত্র কার্ড) */}
+        {/* ৯. শর্তাবলী ও ডাটা পলিসি (স্বতন্ত্র কার্ড) */}
         <div
           onClick={() => setShowTermsModal(true)}
           className="bg-white rounded-2xl px-3.5 py-2.5 border border-purple-200/80 shadow-2xs flex items-center justify-between cursor-pointer hover:border-purple-400 transition active:scale-[0.99]"
@@ -944,11 +967,11 @@ export const SettingsView: React.FC<Props> = ({
             <div className="min-w-0">
               <span className="font-extrabold text-xs sm:text-sm text-[#102A43] block leading-tight truncate">
                 {language === 'bn'
-                  ? 'ব্যবহার নির্দেশিকা ও শর্তাবলী'
-                  : 'User Guide & Terms'}
+                  ? '📄 শর্তাবলী ও ডাটা পলিসি'
+                  : '📄 Terms & Data Policy'}
               </span>
               <span className="text-[10.5px] text-[#64748B] block truncate">
-                অ্যাপ ব্যবহারের নিয়ম ও গোপনীয়তা নীতিমালা
+                অ্যাপ ব্যবহারের নিয়ম ও ডাটা নিরাপত্তা নীতিমালা
               </span>
             </div>
           </div>
@@ -1377,14 +1400,14 @@ export const SettingsView: React.FC<Props> = ({
         </div>
       )}
 
-      {/* ================= MODAL: USER GUIDE & TERMS ================= */}
+      {/* ================= MODAL: TERMS & DATA POLICY ================= */}
       {showTermsModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-white rounded-3xl p-5 shadow-2xl border border-[#E2E8F0] max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-bold text-base text-[#102A43] flex items-center gap-2">
                 <FileText className="w-4 h-4 text-[#0E6B6B]" />
-                <span>ব্যবহার নির্দেশিকা ও শর্তাবলী</span>
+                <span>📄 শর্তাবলী ও ডাটা পলিসি</span>
               </h3>
               <button
                 type="button"
@@ -1395,17 +1418,6 @@ export const SettingsView: React.FC<Props> = ({
               </button>
             </div>
             <div className="text-xs text-[#64748B] space-y-2.5 leading-relaxed">
-              <p className="font-bold text-[#102A43]">📌 সংক্ষিপ্ত ব্যবহার নির্দেশিকা:</p>
-              <p>
-                • <b>পণ্য ও স্টক:</b> স্টক মেনু থেকে পণ্য যোগ করুন অথবা বারকোড স্ক্যান করে সরাসরি বিক্রি করুন।
-              </p>
-              <p>
-                • <b>দ্রুত বিক্রি ও চলমান পুঁজি:</b> স্টক এন্ট্রি ছাড়াই ‘দ্রুত বিক্রি’ বাটনে বেচাকেনা ও লাভ এন্ট্রি করা যায় এবং চলমান পুঁজি স্বয়ংক্রিয়ভাবে হিসাব হয়।
-              </p>
-              <p>
-                • <b>বাকি খাতা ও পাইকারি হিসাব:</b> কাস্টমারের বকেয়া এবং মহাজনের পাইকারি ক্রয় সহজেই ট্র্যাক করুন।
-              </p>
-              <hr className="border-[#E2E8F0] my-1.5" />
               <p className="font-bold text-[#102A43]">🔒 শর্তাবলী ও ডাটা পলিসি:</p>
               <p>১. সহজ দোকান আপনার দোকানের সম্পূর্ণ তথ্য নিরাপদে আপনার নিজস্ব ডিভাইসে ও ক্লাউড ব্যাকআপে সংরক্ষণ করে।</p>
               <p>২. আপনার সম্মতি ছাড়া কোনো ব্যবসায়িক হিসাব বা খাতার তথ্য তৃতীয় পক্ষের কাছে পৌঁছায় না।</p>
@@ -1741,6 +1753,103 @@ export const SettingsView: React.FC<Props> = ({
                 className="py-2.5 rounded-xl bg-[#D32F2F] hover:bg-rose-700 text-white text-xs font-bold shadow-xs cursor-pointer"
               >
                 হ্যাঁ, মুছে ফ্রেশ শুরু করুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: HOW TO USE THE APP (অ্যাপ যেভাবে ব্যবহার করবেন) ================= */}
+      {showHowToUseModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md max-h-[88vh] bg-white rounded-3xl shadow-2xl border border-[#E2E8F0] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="px-4 py-3.5 bg-[#0E6B6B] text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-teal-100" />
+                <h3 className="font-extrabold text-base">
+                  📖 অ্যাপ যেভাবে ব্যবহার করবেন
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowHowToUseModal(false)}
+                className="p-1 rounded-full hover:bg-white/20 text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Guide Content */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3.5 text-xs sm:text-[13px] text-[#102A43] leading-relaxed">
+              {/* Section 1 */}
+              <div className="p-3.5 rounded-2xl bg-[#F0FDFA] border border-[#B2DFDB] space-y-1.5">
+                <h4 className="font-black text-sm text-[#0E6B6B]">
+                  ১/ 🏠 হোম / বিক্রি:
+                </h4>
+                <p className="text-[#334E68] font-medium">
+                  উপরে থাকা ক্যামেরা আইকন দিয়ে পণ্যের বারকোড স্ক্যান করে বিক্রি করতে পারবেন, এবং নিচে কার্টে ক্লিক করলে মেমো প্রিন্ট করার ব্যবস্থা আছে। স্ক্যান করে বিক্রি না করতে চাইলে উপরে (দ্রুত বিক্রি) বাটনে ক্লিক করলে দ্রুত হিসাব রাখার ব্যবস্থা আছে।
+                </p>
+              </div>
+
+              {/* Section 2 */}
+              <div className="p-3.5 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-2.5">
+                <h4 className="font-black text-sm text-[#102A43]">
+                  ২/ 🎛️ হিসাব / মেনু-তে ক্লিক করলে:
+                </h4>
+                <ul className="space-y-2 text-[#334E68] font-medium">
+                  <li>
+                    <strong className="text-[#102A43]">📦 পণ্য / স্টক:</strong> দোকানের নতুন পণ্য যোগ করা, দাম ঠিক করা ও বর্তমান স্টক দেখা।
+                  </li>
+                  <li>
+                    <strong className="text-[#102A43]">📈 বিক্রি ও লাভ:</strong> সারাদিনের বিক্রির তালিকা এবং কোন বিক্রিতে কত টাকা লাভ হলো তা দেখা।
+                  </li>
+                  <li>
+                    <strong className="text-[#102A43]">🛒 নগদ ক্রয়:</strong> নগদ টাকায় মাল কিনলে এখানে লিখুন (মেমোর ছবি তুলে অটো এন্ট্রি ও ড্যামেজ বাদ দেওয়ার সুবিধা আছে)।
+                  </li>
+                  <li>
+                    <strong className="text-[#102A43]">🏢 সাপ্লাইয়ার বাকি:</strong> মহাজন বা কোম্পানির কাছে কত টাকা বাকি আছে ও পরিশোধের হিসাব।
+                  </li>
+                  <li>
+                    <strong className="text-[#102A43]">👛 দোকান খরচ:</strong> দোকানের ভাড়া, কারেন্ট বিল, কর্মচারী বেতন বা নাশতার খরচ।
+                  </li>
+                  <li>
+                    <strong className="text-[#102A43]">👤 মালিক খরচ/জমা:</strong> মালিক নিজের বা সংসারের/বাসার জন্য টাকা নিলে বা দোকানে জমা দিলে এখানে লিখুন।
+                  </li>
+                  <li>
+                    <strong className="text-[#102A43]">👥 কাস্টমার বাকি:</strong> কাস্টমারের বকেয়া টাকার হিসাব ও বাকি আদায়।
+                  </li>
+                  <li>
+                    <strong className="text-[#102A43]">🏦 ক্যাশ বক্স:</strong> দোকানের মোট পুজি যোগ করা ও দোকানের ক্যাশ বাক্সে বর্তমানে মোট কত নগদ টাকা আছে তা দেখা এবং দিনশেষে ক্যাশ মিলানো।
+                  </li>
+                  <li>
+                    <strong className="text-[#102A43]">📊 সকল রিপোর্ট:</strong> দিন, মাস বা বছরের মোট বিক্রি, খরচ, বাকি ও নিট লাভের পূর্ণাঙ্গ রিপোর্ট।
+                  </li>
+                  <li>
+                    <strong className="text-[#102A43]">🧮 ক্যালকুলেটর:</strong> দ্রুত হিসাব-নিকাশ করার জন্য বিল্ট-ইন ক্যালকুলেটর।
+                  </li>
+                </ul>
+              </div>
+
+              {/* Section 3 */}
+              <div className="p-3.5 rounded-2xl bg-[#FFFBEB] border border-amber-200 space-y-1.5">
+                <h4 className="font-black text-sm text-amber-900">
+                  ৩/ ⚙️ সেটিংস:
+                </h4>
+                <p className="text-[#486581] font-medium">
+                  দোকানের নাম, ঠিকানা, প্রিন্টার ও ব্যাকআপ সেটআপ।
+                </p>
+              </div>
+            </div>
+
+            {/* Footer Close Button */}
+            <div className="p-3.5 border-t border-[#E2E8F0] bg-[#F8FAFC] shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowHowToUseModal(false)}
+                className="w-full py-2.5 rounded-2xl bg-[#0E6B6B] hover:bg-[#094747] text-white font-black text-xs sm:text-sm shadow-xs transition active:scale-95 cursor-pointer"
+              >
+                বুঝেছি / বন্ধ করুন
               </button>
             </div>
           </div>
