@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Customer, BakiTransaction, ShopProfile, Language, Supplier, SupplierTransaction, Product, AppMode } from '../types';
+import { Customer, BakiTransaction, ShopProfile, Language, Supplier, SupplierTransaction, Product, AppMode, BulkPurchase, Sale } from '../types';
 import { translations } from '../i18n/translations';
+import { DB } from '../storage/db';
 import { playSuccessChime } from '../utils/audio';
 import { SupplierKhataView } from './SupplierKhataView';
+import { ReceiptModal } from './ReceiptModal';
 import {
   BookOpen,
   Search,
@@ -24,6 +26,8 @@ import {
   Edit2,
   Info,
   ArrowLeft,
+  TrendingUp,
+  Printer,
 } from 'lucide-react';
 
 interface Props {
@@ -32,11 +36,20 @@ interface Props {
   suppliers?: Supplier[];
   supplierTransactions?: SupplierTransaction[];
   products?: Product[];
+  sales?: Sale[];
   profile: ShopProfile;
   language: Language;
   appMode?: AppMode;
   onOpenSubscriptionModal?: () => void;
-  onAddCustomer: (customer: Customer) => void;
+  onAddCustomer: (
+    customer: Customer,
+    extra?: {
+      isAdjustment?: boolean;
+      profit?: number;
+      costPrice?: number;
+      note?: string;
+    }
+  ) => Sale | null | void;
   onUpdateCustomer?: (customer: Customer) => void;
   onReceivePayment: (
     customerId: string,
@@ -48,8 +61,13 @@ interface Props {
     customerId: string,
     amount: number,
     note: string,
-    newBalance: number
-  ) => void;
+    newBalance: number,
+    extra?: {
+      isAdjustment?: boolean;
+      profit?: number;
+      costPrice?: number;
+    }
+  ) => Sale | null | void;
   onDeleteCustomer?: (customerId: string) => void;
   onAddSupplier?: (supplier: Supplier) => void;
   onPaySupplier?: (
@@ -66,6 +84,7 @@ interface Props {
     extra?: {
       damageDeduction?: number;
       stockValue?: number;
+      cashPaid?: number;
       updatedProducts?: Product[];
     }
   ) => void;
@@ -82,6 +101,13 @@ interface Props {
     nextAllTxs: SupplierTransaction[]
   ) => void;
   onDeleteSupplier?: (supplierId: string) => void;
+  bulkPurchases?: BulkPurchase[];
+  onAddBulkPurchase?: (
+    purchase: BulkPurchase,
+    updatedProducts: Product[],
+    supplierDueAddition?: { supplierId: string; dueAmount: number; note?: string }
+  ) => void;
+  onDeleteBulkPurchase?: (id: string) => void;
   initialSubTab?: 'customers' | 'suppliers';
   singleSectionMode?: boolean;
   onBackToMenu?: () => void;
@@ -93,6 +119,7 @@ export const BakiKhataView: React.FC<Props> = ({
   suppliers = [],
   supplierTransactions = [],
   products = [],
+  sales = [],
   profile,
   language,
   appMode = 'trial',
@@ -109,6 +136,9 @@ export const BakiKhataView: React.FC<Props> = ({
   onUpdateSupplier = () => {},
   onUpdateSupplierTransaction,
   onDeleteSupplier = () => {},
+  bulkPurchases = [],
+  onAddBulkPurchase,
+  onDeleteBulkPurchase,
   initialSubTab = 'customers',
   singleSectionMode = false,
   onBackToMenu,
@@ -140,10 +170,34 @@ export const BakiKhataView: React.FC<Props> = ({
   const [customerForAddDue, setCustomerForAddDue] = useState<Customer | null>(null);
   const [newDueAmount, setNewDueAmount] = useState<number | ''>('');
   const [newDueNote, setNewDueNote] = useState('');
+  const defaultQuickMargin = DB.getQuickSaleProfitMargin();
+  const [dueEntryMode, setDueEntryMode] = useState<'sale' | 'adjustment'>('sale');
+  const [dueProfitMode, setDueProfitMode] = useState<'default' | '10' | '15' | '20' | 'custom'>('default');
+  const [dueCustomProfit, setDueCustomProfit] = useState<string>('');
+  const [receiptSale, setReceiptSale] = useState<Sale | null>(null);
+  const [lastCreatedMemo, setLastCreatedMemo] = useState<Sale | null>(null);
+
+  const newDueNum = Math.max(0, Number(newDueAmount) || 0);
+  const dueCalculatedProfit = useMemo(() => {
+    if (dueEntryMode === 'adjustment' || newDueNum <= 0) return 0;
+    if (dueProfitMode === 'default') return Math.round(newDueNum * (defaultQuickMargin / 100));
+    if (dueProfitMode === '10') return Math.round(newDueNum * 0.1);
+    if (dueProfitMode === '15') return Math.round(newDueNum * 0.15);
+    if (dueProfitMode === '20') return Math.round(newDueNum * 0.2);
+    if (dueProfitMode === 'custom') {
+      return Math.min(newDueNum, Math.max(0, Math.round(Number(dueCustomProfit) || 0)));
+    }
+    return 0;
+  }, [dueEntryMode, dueProfitMode, dueCustomProfit, newDueNum, defaultQuickMargin]);
+  const dueCalculatedCost = Math.max(0, newDueNum - dueCalculatedProfit);
 
   // Register sub-view back handler for Android hardware back button
   useEffect(() => {
     (window as any).__sdSubViewBack = () => {
+      if (receiptSale) {
+        setReceiptSale(null);
+        return true;
+      }
       if (customerToEdit) {
         setCustomerToEdit(null);
         return true;
@@ -174,13 +228,31 @@ export const BakiKhataView: React.FC<Props> = ({
     return () => {
       (window as any).__sdSubViewBack = null;
     };
-  }, [customerToEdit, showAddCustomerModal, showPaymentModal, showAddDueModal, selectedCustomer, activeSubTab, singleSectionMode]);
+  }, [receiptSale, customerToEdit, showAddCustomerModal, showPaymentModal, showAddDueModal, selectedCustomer, activeSubTab, singleSectionMode]);
 
   // Forms
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [initialDue, setInitialDue] = useState<number | ''>('');
+  const [newCustDueMode, setNewCustDueMode] = useState<'sale' | 'adjustment'>('sale');
+  const [newCustProfitMode, setNewCustProfitMode] = useState<'default' | '10' | '15' | '20' | 'custom'>('default');
+  const [newCustCustomProfit, setNewCustCustomProfit] = useState<string>('');
+  const [newCustDueNote, setNewCustDueNote] = useState('');
+
+  const newCustDueNum = Math.max(0, Number(initialDue) || 0);
+  const newCustCalculatedProfit = useMemo(() => {
+    if (newCustDueMode === 'adjustment' || newCustDueNum <= 0) return 0;
+    if (newCustProfitMode === 'default') return Math.round(newCustDueNum * (defaultQuickMargin / 100));
+    if (newCustProfitMode === '10') return Math.round(newCustDueNum * 0.1);
+    if (newCustProfitMode === '15') return Math.round(newCustDueNum * 0.15);
+    if (newCustProfitMode === '20') return Math.round(newCustDueNum * 0.2);
+    if (newCustProfitMode === 'custom') {
+      return Math.min(newCustDueNum, Math.max(0, Math.round(Number(newCustCustomProfit) || 0)));
+    }
+    return 0;
+  }, [newCustDueMode, newCustProfitMode, newCustCustomProfit, newCustDueNum, defaultQuickMargin]);
+  const newCustCalculatedCost = Math.max(0, newCustDueNum - newCustCalculatedProfit);
 
   // Payment form
   const [paymentAmount, setPaymentAmount] = useState<number | ''>('');
@@ -208,25 +280,49 @@ export const BakiKhataView: React.FC<Props> = ({
   }, [customers, searchQuery]);
 
   // Add new customer submit
-  const handleAddCustomerSubmit = (e: React.FormEvent) => {
+  const handleAddCustomerSubmit = (e: React.FormEvent, openReceipt: boolean = true) => {
     e.preventDefault();
     if (!name.trim()) return;
+
+    const dueAmt = newCustDueNum;
+    const isAdj = newCustDueMode === 'adjustment';
 
     const newCust: Customer = {
       id: `cust_${Date.now()}`,
       name: name.trim(),
       phone: phone.trim() || '---',
       address: address.trim(),
-      totalDue: Number(initialDue) || 0,
+      totalDue: dueAmt,
       createdAt: new Date().toISOString(),
     };
 
-    onAddCustomer(newCust);
+    const createdSale =
+      dueAmt > 0
+        ? onAddCustomer(newCust, {
+            isAdjustment: isAdj,
+            profit: isAdj ? 0 : newCustCalculatedProfit,
+            costPrice: isAdj ? 0 : newCustCalculatedCost,
+            note: newCustDueNote.trim() || (isAdj ? 'পূর্বের জের / প্রারম্ভিক বাকি' : 'বাকি বিক্রি'),
+          })
+        : onAddCustomer(newCust);
+
+    playSuccessChime();
     setName('');
     setPhone('');
     setAddress('');
     setInitialDue('');
+    setNewCustDueMode('sale');
+    setNewCustProfitMode('default');
+    setNewCustCustomProfit('');
+    setNewCustDueNote('');
     setShowAddCustomerModal(false);
+
+    if (createdSale) {
+      setLastCreatedMemo(createdSale);
+      if (openReceipt) {
+        setReceiptSale(createdSale);
+      }
+    }
   };
 
   // Open Edit Customer Modal
@@ -289,18 +385,25 @@ export const BakiKhataView: React.FC<Props> = ({
   };
 
   // Add new due submit
-  const handleAddDueSubmit = (e: React.FormEvent) => {
+  const handleAddDueSubmit = (e: React.FormEvent, openReceipt: boolean = false) => {
     e.preventDefault();
     if (!customerForAddDue || !newDueAmount || Number(newDueAmount) <= 0) return;
 
     const amt = Number(newDueAmount);
     const newBalance = Math.round(((customerForAddDue.totalDue || 0) + amt) * 100) / 100;
+    const trimmedNote = newDueNote.trim();
+    const isAdjustment = dueEntryMode === 'adjustment' || trimmedNote === 'ভুল হিসাব সংশোধন';
 
-    onAddDue(
+    const createdSale = onAddDue(
       customerForAddDue.id,
       amt,
-      newDueNote.trim() || (language === 'bn' ? 'সরাসরি বাকি যোগ' : 'Direct Due Added'),
-      newBalance
+      trimmedNote || (isAdjustment ? 'ভুল হিসাব সংশোধন' : (language === 'bn' ? 'বাকি বিক্রি' : 'Credit Sale')),
+      newBalance,
+      {
+        isAdjustment,
+        profit: isAdjustment ? 0 : dueCalculatedProfit,
+        costPrice: isAdjustment ? 0 : dueCalculatedCost,
+      }
     );
 
     if (selectedCustomer && selectedCustomer.id === customerForAddDue.id) {
@@ -313,8 +416,18 @@ export const BakiKhataView: React.FC<Props> = ({
     playSuccessChime();
     setNewDueAmount('');
     setNewDueNote('');
+    setDueEntryMode('sale');
+    setDueProfitMode('default');
+    setDueCustomProfit('');
     setShowAddDueModal(false);
     setCustomerForAddDue(null);
+
+    if (createdSale) {
+      setLastCreatedMemo(createdSale);
+      if (openReceipt) {
+        setReceiptSale(createdSale);
+      }
+    }
   };
 
   // WhatsApp Reminder message (Locked in Normal Mode after 60 days)
@@ -433,7 +546,7 @@ export const BakiKhataView: React.FC<Props> = ({
             </button>
           )}
           <h2 className="text-sm sm:text-lg font-bold text-[#102A43] truncate">
-            {activeSubTab === 'suppliers' ? 'সাপ্লাইয়ার বাকি' : 'কাস্টমার বাকি'}
+            {activeSubTab === 'suppliers' ? 'মাল ক্রয় ও সাপ্লায়ার' : 'কাস্টমার বাকি'}
           </h2>
         </div>
 
@@ -483,6 +596,9 @@ export const BakiKhataView: React.FC<Props> = ({
           onUpdateSupplier={onUpdateSupplier}
           onUpdateSupplierTransaction={onUpdateSupplierTransaction}
           onDeleteSupplier={onDeleteSupplier}
+          bulkPurchases={bulkPurchases}
+          onAddBulkPurchase={onAddBulkPurchase}
+          onDeleteBulkPurchase={onDeleteBulkPurchase}
         />
       ) : (
         <>
@@ -592,6 +708,37 @@ export const BakiKhataView: React.FC<Props> = ({
             </button>
           </div>
 
+          {lastCreatedMemo && (
+            <div className="mb-2.5 px-3 py-2 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-2 shrink-0">
+              <div className="min-w-0">
+                <p className="text-xs font-extrabold text-[#1B5E20] truncate">
+                  ✅ মেমো #{lastCreatedMemo.invoiceNo} তৈরি হয়েছে ({lastCreatedMemo.customerName} — ৳{lastCreatedMemo.grandTotal.toLocaleString()})
+                </p>
+                <p className="text-[10px] font-semibold text-emerald-700">
+                  মূল পুঁজি কমেছে ৳{lastCreatedMemo.totalCost.toLocaleString()} • লাভ ৳{lastCreatedMemo.profit.toLocaleString()}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setReceiptSale(lastCreatedMemo)}
+                  className="px-2.5 py-1.5 rounded-xl bg-[#0E6B6B] hover:bg-[#094747] text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>মেমো দেখুন</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLastCreatedMemo(null)}
+                  className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold cursor-pointer"
+                  aria-label="বন্ধ করুন"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col md:flex-row gap-3 overflow-hidden">
             {/* Customer Directory List */}
@@ -663,6 +810,9 @@ export const BakiKhataView: React.FC<Props> = ({
                                 setCustomerForAddDue(cust);
                                 setNewDueAmount('');
                                 setNewDueNote('');
+                                setDueEntryMode('sale');
+                                setDueProfitMode('default');
+                                setDueCustomProfit('');
                                 setShowAddDueModal(true);
                               }}
                               className="flex-1 py-2 px-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[#D32F2F] text-xs font-extrabold transition active:scale-95 cursor-pointer whitespace-nowrap"
@@ -816,6 +966,9 @@ export const BakiKhataView: React.FC<Props> = ({
                       setCustomerForAddDue(selectedCustomer);
                       setNewDueAmount('');
                       setNewDueNote('');
+                      setDueEntryMode('sale');
+                      setDueProfitMode('default');
+                      setDueCustomProfit('');
                       setShowAddDueModal(true);
                     }}
                     className="py-2.5 px-2 rounded-xl bg-[#D32F2F] hover:bg-rose-700 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-xs transition active:scale-95"
@@ -879,54 +1032,70 @@ export const BakiKhataView: React.FC<Props> = ({
                 {bakiTransactions
                   .filter((tx) => tx.customerId === selectedCustomer.id)
                   .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                  .map((tx) => (
-                    <div
-                      key={tx.id}
-                      className="p-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span
-                          className={`font-bold flex items-center gap-1 ${
-                            tx.type === 'payment_received'
-                              ? 'text-[#2E7D32]'
-                              : tx.type === 'due_added'
-                              ? 'text-[#D32F2F]'
-                              : 'text-amber-600'
-                          }`}
-                        >
-                          {tx.type === 'payment_received' ? (
-                            <>
-                              <ArrowDownLeft className="w-3.5 h-3.5" />
-                              <span>{t.paymentCash}</span>
-                            </>
-                          ) : tx.type === 'due_added' ? (
-                            <>
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>{t.dueAdded}</span>
-                            </>
-                          ) : (
-                            <>
-                              <ArrowUpRight className="w-3.5 h-3.5" />
-                              <span>{t.saleOnCredit}</span>
-                            </>
-                          )}
-                        </span>
-                        <span className="font-extrabold text-sm text-[#102A43]">
-                          {tx.type === 'payment_received' ? '-' : '+'}৳{tx.amount}
-                        </span>
-                      </div>
+                  .map((tx) => {
+                    const linkedSale = tx.saleId ? sales.find((s) => s.id === tx.saleId) : undefined;
+                    return (
+                      <div
+                        key={tx.id}
+                        className="p-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span
+                            className={`font-bold flex items-center gap-1 ${
+                              tx.type === 'payment_received'
+                                ? 'text-[#2E7D32]'
+                                : tx.type === 'due_added'
+                                ? 'text-[#D32F2F]'
+                                : 'text-amber-600'
+                            }`}
+                          >
+                            {tx.type === 'payment_received' ? (
+                              <>
+                                <ArrowDownLeft className="w-3.5 h-3.5" />
+                                <span>{t.paymentCash}</span>
+                              </>
+                            ) : tx.type === 'due_added' ? (
+                              <>
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>{t.dueAdded}</span>
+                              </>
+                            ) : (
+                              <>
+                                <ArrowUpRight className="w-3.5 h-3.5" />
+                                <span>{t.saleOnCredit}</span>
+                              </>
+                            )}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {linkedSale && (
+                              <button
+                                type="button"
+                                onClick={() => setReceiptSale(linkedSale)}
+                                className="px-2 py-0.5 rounded-lg bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] font-bold text-[10px] flex items-center gap-1 cursor-pointer transition"
+                                title="ক্যাশ মেমো দেখুন ও প্রিন্ট করুন"
+                              >
+                                <Printer className="w-3 h-3" />
+                                <span>মেমো</span>
+                              </button>
+                            )}
+                            <span className="font-extrabold text-sm text-[#102A43]">
+                              {tx.type === 'payment_received' ? '-' : '+'}৳{tx.amount}
+                            </span>
+                          </div>
+                        </div>
 
-                      <div className="flex items-center justify-between text-[11px] text-[#64748B] mt-1">
-                        <span>{tx.note || '---'}</span>
-                        <span>
-                          {new Date(tx.date).toLocaleDateString('bn-BD', {
-                            day: 'numeric',
-                            month: 'short',
-                          })}
-                        </span>
+                        <div className="flex items-center justify-between text-[11px] text-[#64748B] mt-1">
+                          <span>{tx.note || '---'}</span>
+                          <span>
+                            {new Date(tx.date).toLocaleDateString('bn-BD', {
+                              day: 'numeric',
+                              month: 'short',
+                            })}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
             </div>
           </div>
@@ -950,12 +1119,12 @@ export const BakiKhataView: React.FC<Props> = ({
       {/* Add New Customer Modal */}
       {showAddCustomerModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 p-5 shadow-2xl border border-slate-200 dark:border-slate-800">
+          <div className="w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 p-5 shadow-2xl border border-slate-200 dark:border-slate-800">
             <h4 className="font-bold text-base text-slate-800 dark:text-white mb-3">
               {t.addNewCustomer}
             </h4>
 
-            <form onSubmit={handleAddCustomerSubmit} className="space-y-3">
+            <form onSubmit={(e) => handleAddCustomerSubmit(e, true)} className="space-y-3">
               <div>
                 <label className="block text-xs font-bold text-slate-800 dark:text-slate-100 mb-1">
                   {t.customerName} *
@@ -999,11 +1168,12 @@ export const BakiKhataView: React.FC<Props> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-800 dark:text-slate-100 mb-1">
-                  পূর্বের কোন বাকি থাকলে (৳)
+                  বাকি বিক্রি / পূর্বের বাকি থাকলে (৳)
                 </label>
                 <input
                   type="number"
                   min="0"
+                  step="any"
                   value={initialDue}
                   onChange={(e) => setInitialDue(e.target.value === '' ? '' : Number(e.target.value))}
                   placeholder="৳ ০"
@@ -1011,19 +1181,126 @@ export const BakiKhataView: React.FC<Props> = ({
                 />
               </div>
 
+              {newCustDueNum > 0 && (
+                <div className="space-y-2.5 pt-1">
+                  <div className="p-0.5 bg-[#F1F5F9] rounded-xl grid grid-cols-2 gap-1 border border-[#E2E8F0]">
+                    <button
+                      type="button"
+                      onClick={() => setNewCustDueMode('sale')}
+                      className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] transition cursor-pointer ${
+                        newCustDueMode === 'sale'
+                          ? 'bg-[#D32F2F] text-white shadow-2xs'
+                          : 'text-[#64748B] hover:text-[#102A43]'
+                      }`}
+                    >
+                      📒 বাকি বিক্রি (মেমোসহ)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewCustDueMode('adjustment')}
+                      className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] transition cursor-pointer ${
+                        newCustDueMode === 'adjustment'
+                          ? 'bg-[#102A43] text-white shadow-2xs'
+                          : 'text-[#64748B] hover:text-[#102A43]'
+                      }`}
+                    >
+                      ⚙️ পূর্বের জের (বিক্রি নয়)
+                    </button>
+                  </div>
+
+                  {newCustDueMode === 'sale' && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1">
+                          <TrendingUp className="w-3 h-3 text-[#2E7D32]" />
+                          <span>বিক্রয় লাভের হিসাব</span>
+                        </label>
+                        <span className="text-[11px] font-black text-[#2E7D32]">
+                          লাভ: +৳{newCustCalculatedProfit.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-5 gap-1">
+                        {[
+                          { id: 'default', label: `ডিফল্ট (${defaultQuickMargin}%)` },
+                          { id: '10', label: '১০%' },
+                          { id: '15', label: '১৫%' },
+                          { id: '20', label: '২০%' },
+                          { id: 'custom', label: 'নিজে লিখুন' },
+                        ].map((pm) => (
+                          <button
+                            key={pm.id}
+                            type="button"
+                            onClick={() => setNewCustProfitMode(pm.id as any)}
+                            className={`py-1 px-1 rounded-lg text-[10px] font-bold border transition cursor-pointer text-center whitespace-nowrap truncate ${
+                              newCustProfitMode === pm.id
+                                ? 'bg-[#2E7D32] text-white border-[#2E7D32]'
+                                : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:bg-emerald-50'
+                            }`}
+                          >
+                            {pm.label}
+                          </button>
+                        ))}
+                      </div>
+                      {newCustProfitMode === 'custom' && (
+                        <input
+                          type="number"
+                          min="0"
+                          max={newCustDueNum}
+                          value={newCustCustomProfit}
+                          onChange={(e) => setNewCustCustomProfit(e.target.value)}
+                          placeholder="এই বাকি বিক্রিতে কত টাকা লাভ হয়েছে লিখুন (৳)"
+                          className="w-full px-2.5 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-bold text-[#102A43]"
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1">
+                      বিবরণ / পণ্যের নাম (ঐচ্ছিক)
+                    </label>
+                    <input
+                      type="text"
+                      value={newCustDueNote}
+                      onChange={(e) => setNewCustDueNote(e.target.value)}
+                      placeholder={
+                        newCustDueMode === 'adjustment'
+                          ? 'যেমন: পূর্বের জের / প্রারম্ভিক বাকি'
+                          : 'যেমন: চাল, ডাল ও তেল বাকি'
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {newCustDueMode === 'sale' && (
+                    <div className="p-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex justify-between text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                      <span>ইনভেস্ট (পুঁজি কমবে): ৳{newCustCalculatedCost.toLocaleString()}</span>
+                      <span className="text-[#2E7D32]">লাভ: +৳{newCustCalculatedProfit.toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="pt-2 flex gap-2">
                 <button
                   type="button"
                   onClick={() => setShowAddCustomerModal(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-md shadow-emerald-700/20"
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-md shadow-emerald-700/20 flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  {t.confirm}
+                  {newCustDueNum > 0 && newCustDueMode === 'sale' ? (
+                    <>
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>বাকি বিক্রি ও মেমো</span>
+                    </>
+                  ) : (
+                    <span>{t.confirm}</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -1043,6 +1320,32 @@ export const BakiKhataView: React.FC<Props> = ({
             </p>
 
             <form onSubmit={handleAddDueSubmit} className="space-y-3">
+              {/* Entry Mode Switch: Credit Sale vs Adjustment */}
+              <div className="p-0.5 bg-[#F1F5F9] rounded-xl grid grid-cols-2 gap-1 border border-[#E2E8F0]">
+                <button
+                  type="button"
+                  onClick={() => setDueEntryMode('sale')}
+                  className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] transition cursor-pointer ${
+                    dueEntryMode === 'sale'
+                      ? 'bg-[#D32F2F] text-white shadow-2xs'
+                      : 'text-[#64748B] hover:text-[#102A43]'
+                  }`}
+                >
+                  📒 বাকি বিক্রি (মেমোসহ)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDueEntryMode('adjustment')}
+                  className={`py-1.5 px-2 rounded-lg font-extrabold text-[11px] transition cursor-pointer ${
+                    dueEntryMode === 'adjustment'
+                      ? 'bg-[#102A43] text-white shadow-2xs'
+                      : 'text-[#64748B] hover:text-[#102A43]'
+                  }`}
+                >
+                  ⚙️ হিসাব সংশোধন
+                </button>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-800 dark:text-slate-100 mb-1">
                   {t.dueAmountToAdd} *
@@ -1065,6 +1368,55 @@ export const BakiKhataView: React.FC<Props> = ({
                 </div>
               </div>
 
+              {dueEntryMode === 'sale' && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1">
+                      <TrendingUp className="w-3 h-3 text-[#2E7D32]" />
+                      <span>বিক্রয় লাভের হিসাব</span>
+                    </label>
+                    {newDueNum > 0 && (
+                      <span className="text-[11px] font-black text-[#2E7D32]">
+                        লাভ: +৳{dueCalculatedProfit.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-5 gap-1">
+                    {[
+                      { id: 'default', label: `ডিফল্ট (${defaultQuickMargin}%)` },
+                      { id: '10', label: '১০%' },
+                      { id: '15', label: '১৫%' },
+                      { id: '20', label: '২০%' },
+                      { id: 'custom', label: 'নিজে লিখুন' },
+                    ].map((pm) => (
+                      <button
+                        key={pm.id}
+                        type="button"
+                        onClick={() => setDueProfitMode(pm.id as any)}
+                        className={`py-1 px-1 rounded-lg text-[10px] font-bold border transition cursor-pointer text-center whitespace-nowrap truncate ${
+                          dueProfitMode === pm.id
+                            ? 'bg-[#2E7D32] text-white border-[#2E7D32]'
+                            : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:bg-emerald-50'
+                        }`}
+                      >
+                        {pm.label}
+                      </button>
+                    ))}
+                  </div>
+                  {dueProfitMode === 'custom' && (
+                    <input
+                      type="number"
+                      min="0"
+                      max={newDueNum > 0 ? newDueNum : undefined}
+                      value={dueCustomProfit}
+                      onChange={(e) => setDueCustomProfit(e.target.value)}
+                      placeholder="এই বাকি বিক্রিতে কত টাকা লাভ হয়েছে লিখুন (৳)"
+                      className="w-full px-2.5 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-bold text-[#102A43]"
+                    />
+                  )}
+                </div>
+              )}
+
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-800 dark:text-slate-100">
@@ -1072,7 +1424,10 @@ export const BakiKhataView: React.FC<Props> = ({
                   </label>
                   <button
                     type="button"
-                    onClick={() => setNewDueNote('ভুল হিসাব সংশোধন')}
+                    onClick={() => {
+                      setDueEntryMode('adjustment');
+                      setNewDueNote('ভুল হিসাব সংশোধন');
+                    }}
                     className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-[#D32F2F] hover:bg-rose-100 cursor-pointer"
                   >
                     + ভুল হিসাব সংশোধন
@@ -1082,15 +1437,27 @@ export const BakiKhataView: React.FC<Props> = ({
                   type="text"
                   value={newDueNote}
                   onChange={(e) => setNewDueNote(e.target.value)}
-                  placeholder="যেমন: ৩ কেজি তেল ও চাল বাকি বা ভুল হিসাব সংশোধন"
+                  placeholder={
+                    dueEntryMode === 'adjustment'
+                      ? 'যেমন: ভুল হিসাব সংশোধন'
+                      : 'যেমন: ৩ কেজি তেল ও চাল বাকি'
+                  }
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-rose-500 focus:outline-none shadow-sm"
                 />
               </div>
 
               {Number(newDueAmount) > 0 && (
-                <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex justify-between text-xs font-bold text-rose-900 dark:text-rose-200">
-                  <span>যোগের পর নতুন মোট বাকি:</span>
-                  <span>৳{((customerForAddDue.totalDue || 0) + Number(newDueAmount)).toLocaleString()}</span>
+                <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 space-y-1 text-xs font-bold text-rose-900 dark:text-rose-200">
+                  {dueEntryMode === 'sale' && (
+                    <div className="flex justify-between text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                      <span>ইনভেস্ট (পুঁজি কমবে): ৳{dueCalculatedCost.toLocaleString()}</span>
+                      <span className="text-[#2E7D32] font-bold">লাভ: +৳{dueCalculatedProfit.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span>যোগের পর নতুন মোট বাকি:</span>
+                    <span>৳{((customerForAddDue.totalDue || 0) + Number(newDueAmount)).toLocaleString()}</span>
+                  </div>
                 </div>
               )}
 
@@ -1098,16 +1465,28 @@ export const BakiKhataView: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => setShowAddDueModal(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-600/20"
+                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-600/20 cursor-pointer"
                 >
-                  বাকি যুক্ত করুন
+                  {dueEntryMode === 'sale' ? 'বাকি বিক্রি সেভ করুন' : 'বাকি যুক্ত করুন'}
                 </button>
+                {dueEntryMode === 'sale' && (
+                  <button
+                    type="button"
+                    disabled={!newDueAmount || Number(newDueAmount) <= 0}
+                    onClick={(e) => handleAddDueSubmit(e, true)}
+                    className="px-3 py-2.5 rounded-xl bg-[#0E6B6B] hover:bg-[#094747] disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer shrink-0"
+                    title="বাকি বিক্রি সেভ করে রসিদ প্রিন্ট করুন"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>রসিদসহ</span>
+                  </button>
+                )}
               </div>
             </form>
           </div>
@@ -1290,6 +1669,17 @@ export const BakiKhataView: React.FC<Props> = ({
             </form>
           </div>
         </div>
+      )}
+      {/* Printable Cash Memo Modal for Customer Due Sales */}
+      {receiptSale && (
+        <ReceiptModal
+          sale={receiptSale}
+          profile={profile}
+          language={language}
+          onClose={() => setReceiptSale(null)}
+          appMode={appMode}
+          onOpenSubscriptionModal={onOpenSubscriptionModal}
+        />
       )}
     </div>
   );

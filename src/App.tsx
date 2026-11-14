@@ -352,14 +352,16 @@ export default function App() {
 
     // If sale had due amount, record in Baki Ledger
     if (sale.dueAmount > 0 && sale.customerId) {
-      let updatedCustTotalDue = sale.dueAmount;
+      const targetCust = customers.find((c) => c.id === sale.customerId);
+      const updatedCustTotalDue =
+        Math.round(((targetCust?.totalDue || 0) + sale.dueAmount) * 100) / 100;
+
       setCustomers((prevCusts) => {
         const nextCustomers = prevCusts.map((c) => {
           if (c.id === sale.customerId) {
-            updatedCustTotalDue = Math.round(((c.totalDue || 0) + sale.dueAmount) * 100) / 100;
             return {
               ...c,
-              totalDue: updatedCustTotalDue,
+              totalDue: Math.round(((c.totalDue || 0) + sale.dueAmount) * 100) / 100,
             };
           }
           return c;
@@ -566,8 +568,16 @@ export default function App() {
     }
   };
 
-  // Handle Add Customer
-  const handleAddNewCustomer = (customer: Customer) => {
+  // Handle Add Customer (When initial due > 0 in sale mode, creates full Due Sale & Cash Memo so Stock Capital & Profit update)
+  const handleAddNewCustomer = (
+    customer: Customer,
+    extra?: {
+      isAdjustment?: boolean;
+      profit?: number;
+      costPrice?: number;
+      note?: string;
+    }
+  ): Sale | null => {
     setCustomers((prev) => {
       const next = [customer, ...prev];
       DB.saveCustomers(next);
@@ -575,13 +585,82 @@ export default function App() {
     });
 
     if (customer.totalDue > 0) {
+      if (extra?.isAdjustment) {
+        const initTx: BakiTransaction = {
+          id: `btx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          customerId: customer.id,
+          date: new Date().toISOString(),
+          type: 'due_added',
+          amount: customer.totalDue,
+          note: extra.note?.trim() || 'পূর্বের জের / প্রারম্ভিক বাকি',
+          balanceAfter: customer.totalDue,
+        };
+        setBakiTransactions((prevTxs) => {
+          const nextTxs = [initTx, ...prevTxs];
+          DB.saveBakiTransactions(nextTxs);
+          return nextTxs;
+        });
+        return null;
+      }
+
+      const defaultMargin = DB.getQuickSaleProfitMargin();
+      const saleProfit =
+        extra?.profit !== undefined
+          ? Math.max(0, Math.round(extra.profit))
+          : Math.round(customer.totalDue * (defaultMargin / 100));
+      const saleCost =
+        extra?.costPrice !== undefined
+          ? Math.max(0, Math.round(extra.costPrice))
+          : Math.max(0, Math.round(customer.totalDue - saleProfit));
+
+      const nowIso = new Date().toISOString();
+      const itemLabel = extra?.note?.trim() || 'বাকি বিক্রি';
+      const newSale: Sale = {
+        id: `sale_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+        invoiceNo: `${Math.floor(100000 + Math.random() * 900000)}`,
+        date: nowIso,
+        items: [
+          {
+            productId: 'quick_sale_entry',
+            productName: itemLabel,
+            quantity: 1,
+            unit: 'বার' as any,
+            unitPrice: customer.totalDue,
+            costPrice: saleCost,
+            totalPrice: customer.totalDue,
+          },
+        ],
+        subTotal: customer.totalDue,
+        discount: 0,
+        grandTotal: customer.totalDue,
+        totalCost: saleCost,
+        profit: saleProfit,
+        paidAmount: 0,
+        dueAmount: customer.totalDue,
+        changeAmount: 0,
+        paymentType: 'due',
+        customerId: customer.id,
+        customerName: customer.name || 'বাকি গ্রাহক',
+        customerPhone:
+          customer.phone && customer.phone !== '---'
+            ? customer.phone
+            : undefined,
+      };
+
+      setSales((prevSales) => {
+        const nextSales = [newSale, ...prevSales];
+        DB.saveSales(nextSales);
+        return nextSales;
+      });
+
       const initTx: BakiTransaction = {
         id: `btx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         customerId: customer.id,
-        date: new Date().toISOString(),
-        type: 'due_added',
+        date: nowIso,
+        type: 'sale_due',
         amount: customer.totalDue,
-        note: 'পূর্বের জের / প্রারম্ভিক বাকি',
+        note: `${itemLabel} (ইনভয়েস #${newSale.invoiceNo})`,
+        saleId: newSale.id,
         balanceAfter: customer.totalDue,
       };
       setBakiTransactions((prevTxs) => {
@@ -589,7 +668,11 @@ export default function App() {
         DB.saveBakiTransactions(nextTxs);
         return nextTxs;
       });
+
+      return newSale;
     }
+
+    return null;
   };
 
   // Handle Payment Received in Baki Khata
@@ -626,13 +709,20 @@ export default function App() {
     });
   };
 
-  // Handle Add New Due in Baki Khata
+  // Handle Add New Due in Baki Khata (Creates Sale invoice/memo & updates Stock Capital/Profit unless pure ledger adjustment)
   const handleAddNewDue = (
     customerId: string,
     amount: number,
     note: string,
-    newBalance: number
-  ) => {
+    newBalance: number,
+    extra?: {
+      isAdjustment?: boolean;
+      profit?: number;
+      costPrice?: number;
+    }
+  ): Sale | null => {
+    const targetCustomer = customers.find((c) => c.id === customerId);
+
     setCustomers((prev) => {
       const nextCustomers = prev.map((c) => {
         if (c.id === customerId) {
@@ -644,13 +734,85 @@ export default function App() {
       return nextCustomers;
     });
 
+    const isAdjustment = Boolean(
+      extra?.isAdjustment || note.trim() === 'ভুল হিসাব সংশোধন'
+    );
+
+    if (isAdjustment) {
+      const newTx: BakiTransaction = {
+        id: `btx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        customerId,
+        date: new Date().toISOString(),
+        type: 'due_added',
+        amount,
+        note,
+        balanceAfter: newBalance,
+      };
+      setBakiTransactions((prevTxs) => {
+        const nextTxs = [newTx, ...prevTxs];
+        DB.saveBakiTransactions(nextTxs);
+        return nextTxs;
+      });
+      return null;
+    }
+
+    const defaultMargin = DB.getQuickSaleProfitMargin();
+    const saleProfit =
+      extra?.profit !== undefined
+        ? Math.max(0, Math.round(extra.profit))
+        : Math.round(amount * (defaultMargin / 100));
+    const saleCost =
+      extra?.costPrice !== undefined
+        ? Math.max(0, Math.round(extra.costPrice))
+        : Math.max(0, Math.round(amount - saleProfit));
+
+    const nowIso = new Date().toISOString();
+    const newSale: Sale = {
+      id: `sale_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+      invoiceNo: `${Math.floor(100000 + Math.random() * 900000)}`,
+      date: nowIso,
+      items: [
+        {
+          productId: 'quick_sale_entry',
+          productName: note.trim() || 'বাকি বিক্রি',
+          quantity: 1,
+          unit: 'বার' as any,
+          unitPrice: amount,
+          costPrice: saleCost,
+          totalPrice: amount,
+        },
+      ],
+      subTotal: amount,
+      discount: 0,
+      grandTotal: amount,
+      totalCost: saleCost,
+      profit: saleProfit,
+      paidAmount: 0,
+      dueAmount: amount,
+      changeAmount: 0,
+      paymentType: 'due',
+      customerId,
+      customerName: targetCustomer?.name || 'বাকি গ্রাহক',
+      customerPhone:
+        targetCustomer?.phone && targetCustomer.phone !== '---'
+          ? targetCustomer.phone
+          : undefined,
+    };
+
+    setSales((prevSales) => {
+      const nextSales = [newSale, ...prevSales];
+      DB.saveSales(nextSales);
+      return nextSales;
+    });
+
     const newTx: BakiTransaction = {
       id: `btx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       customerId,
-      date: new Date().toISOString(),
-      type: 'due_added',
+      date: nowIso,
+      type: 'sale_due',
       amount,
-      note,
+      note: `${note.trim() || 'বাকি বিক্রি'} (ইনভয়েস #${newSale.invoiceNo})`,
+      saleId: newSale.id,
       balanceAfter: newBalance,
     };
     setBakiTransactions((prevTxs) => {
@@ -658,6 +820,8 @@ export default function App() {
       DB.saveBakiTransactions(nextTxs);
       return nextTxs;
     });
+
+    return newSale;
   };
 
   const handleDeleteCustomer = (customerId: string) => {
@@ -792,18 +956,24 @@ export default function App() {
     extra?: {
       damageDeduction?: number;
       stockValue?: number;
+      cashPaid?: number;
       updatedProducts?: Product[];
+      purchaseId?: string;
     }
   ) => {
-    let computedNewDue = newBalance ?? amount;
+    const existingSupp = suppliers.find((s) => s.id === supplierId);
+    const currentDueSync = existingSupp
+      ? existingSupp.totalDue ?? existingSupp.totalPayableDue ?? 0
+      : 0;
+    const cashPaidAmt = Math.max(0, Math.round(Number(extra?.cashPaid) || 0));
+    const computedNewDue =
+      typeof newBalance === 'number'
+        ? newBalance
+        : Math.max(0, Math.round((currentDueSync + amount - cashPaidAmt) * 100) / 100);
+
     setSuppliers((prev) => {
       const target = prev.find((s) => s.id === supplierId);
       if (!target) return prev;
-      const currentDue = target.totalDue ?? target.totalPayableDue ?? 0;
-      computedNewDue =
-        typeof newBalance === 'number'
-          ? newBalance
-          : Math.round((currentDue + amount) * 100) / 100;
       const nextSuppliers = prev.map((s) =>
         s.id === supplierId
           ? { ...s, totalDue: computedNewDue, totalPayableDue: computedNewDue }
@@ -818,19 +988,39 @@ export default function App() {
       DB.saveProducts(extra.updatedProducts);
     }
 
-    const newTx: SupplierTransaction = {
-      id: `stx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    const baseTs = Date.now();
+    const afterPurchaseBalance = Math.round((currentDueSync + amount) * 100) / 100;
+
+    const purchaseTx: SupplierTransaction = {
+      id: `stx_${baseTs}_${Math.random().toString(36).slice(2, 6)}`,
       supplierId,
-      date: new Date().toISOString(),
+      date: new Date(baseTs).toISOString(),
       type: 'purchase_due',
       amount,
-      note: note || 'নতুন বাকি যোগ',
-      balanceAfter: computedNewDue,
+      note: note || 'নতুন মাল ক্রয়',
+      balanceAfter: afterPurchaseBalance,
+      ...(extra?.purchaseId ? { purchaseId: extra.purchaseId } : {}),
       ...(extra?.damageDeduction !== undefined ? { damageDeduction: extra.damageDeduction } : {}),
       ...(extra?.stockValue !== undefined ? { stockValue: extra.stockValue } : {}),
     };
+
+    const createdTxs: SupplierTransaction[] = [purchaseTx];
+
+    if (cashPaidAmt > 0) {
+      const cashPayTx: SupplierTransaction = {
+        id: `stx_${baseTs + 1}_${Math.random().toString(36).slice(2, 6)}`,
+        supplierId,
+        date: new Date(baseTs + 1).toISOString(),
+        type: 'payment_made',
+        amount: cashPaidAmt,
+        note: `মাল ক্রয় বাবদ নগদ পরিশোধ${note ? ` (${note})` : ''}`,
+        balanceAfter: computedNewDue,
+      };
+      createdTxs.unshift(cashPayTx);
+    }
+
     setSupplierTransactions((prev) => {
-      const nextTxs = [newTx, ...prev];
+      const nextTxs = [...createdTxs, ...prev];
       DB.saveSupplierTransactions(nextTxs);
       return nextTxs;
     });
@@ -990,7 +1180,7 @@ export default function App() {
   const handleAddBulkPurchase = (
     purchase: BulkPurchase,
     updatedProducts: Product[],
-    supplierDueAddition?: { supplierId: string; dueAmount: number }
+    supplierDueAddition?: { supplierId: string; dueAmount: number; note?: string }
   ) => {
     setBulkPurchases((prev) => {
       const nextBulk = [purchase, ...prev];
@@ -999,15 +1189,19 @@ export default function App() {
     });
 
     // Update inventory products
-    setProducts(updatedProducts);
-    DB.saveProducts(updatedProducts);
+    if (updatedProducts) {
+      setProducts(updatedProducts);
+      DB.saveProducts(updatedProducts);
+    }
 
-    // If due to supplier, add to supplier ledger
+    // If due to supplier, add to supplier ledger (without duplicating stockValue or payment_made)
     if (supplierDueAddition && supplierDueAddition.dueAmount > 0) {
       handleAddSupplierDue(
         supplierDueAddition.supplierId,
         supplierDueAddition.dueAmount,
-        `ক্রয় রসিদ #${purchase.purchaseNo} থেকে বাকি`
+        supplierDueAddition.note || `ক্রয় রসিদ #${purchase.purchaseNo} থেকে বাকি`,
+        undefined,
+        { purchaseId: purchase.id }
       );
     }
   };
@@ -1059,6 +1253,39 @@ export default function App() {
           }
           return prevProducts;
         });
+      }
+
+      // Reverse linked supplier due & transaction if this receipt created supplier due
+      if ((targetPurchase.dueAmount || 0) > 0 && targetPurchase.supplierId) {
+        const linkedTx = supplierTransactions.find(
+          (stx) =>
+            stx.purchaseId === id ||
+            (stx.supplierId === targetPurchase.supplierId &&
+              stx.type === 'purchase_due' &&
+              stx.note?.includes(targetPurchase.purchaseNo))
+        );
+        const dueToReverse = linkedTx ? Number(linkedTx.amount) || 0 : Number(targetPurchase.dueAmount) || 0;
+        if (dueToReverse > 0) {
+          setSuppliers((prev) => {
+            const nextSuppliers = prev.map((s) => {
+              if (s.id === targetPurchase.supplierId) {
+                const cur = s.totalDue ?? s.totalPayableDue ?? 0;
+                const nextDue = Math.max(0, Math.round((cur - dueToReverse) * 100) / 100);
+                return { ...s, totalDue: nextDue, totalPayableDue: nextDue };
+              }
+              return s;
+            });
+            DB.saveSuppliers(nextSuppliers);
+            return nextSuppliers;
+          });
+        }
+        if (linkedTx) {
+          setSupplierTransactions((prev) => {
+            const nextTxs = prev.filter((stx) => stx.id !== linkedTx.id);
+            DB.saveSupplierTransactions(nextTxs);
+            return nextTxs;
+          });
+        }
       }
 
       // If closed day, record post-close adjustment
@@ -1247,6 +1474,8 @@ export default function App() {
             bulkPurchases={bulkPurchases}
             purchases={purchases}
             ownerTransactions={ownerTransactions}
+            bakiTransactions={bakiTransactions}
+            supplierTransactions={supplierTransactions}
           />
         )}
 
@@ -1292,6 +1521,7 @@ export default function App() {
             suppliers={suppliers}
             supplierTransactions={supplierTransactions}
             products={products}
+            sales={sales}
             profile={profile}
             language={language}
             appMode={appMode}
@@ -1308,6 +1538,9 @@ export default function App() {
             onUpdateSupplier={handleUpdateSupplier}
             onUpdateSupplierTransaction={handleUpdateSupplierTransaction}
             onDeleteSupplier={handleDeleteSupplier}
+            bulkPurchases={bulkPurchases}
+            onAddBulkPurchase={handleAddBulkPurchase}
+            onDeleteBulkPurchase={handleDeleteBulkPurchase}
             initialSubTab={activeMenuPage === 'suppliersDue' ? 'suppliers' : 'customers'}
             singleSectionMode={true}
             onBackToMenu={() => setActiveMenuPage(null)}

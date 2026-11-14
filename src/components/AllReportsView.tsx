@@ -113,7 +113,12 @@ export const AllReportsView: React.FC<Props> = ({
     if (s.id.startsWith('return_') || (s.grandTotal || 0) < 0) return Number(s.profit) || 0;
     const isQuick = Boolean(s.items && s.items.some((it) => it.productId === 'quick_sale_entry'));
     if (isQuick) {
-      if (s.profit !== undefined && s.profit > 0) return Math.round(s.profit);
+      if (
+        s.profit !== undefined &&
+        (s.profit > 0 || (s.totalCost !== undefined && s.totalCost > 0))
+      ) {
+        return Math.round(s.profit);
+      }
       return Math.round((Number(s.grandTotal) || 0) * (defaultMargin / 100));
     }
     if (s.profit !== undefined && s.profit !== 0) return Math.round(s.profit);

@@ -114,7 +114,10 @@ export function calculateRunningCapital({
     );
 
     const sProfit =
-      isQuickSaleEntry && (s.profit === undefined || s.profit === 0) && grand > 0
+      isQuickSaleEntry &&
+      (s.profit === undefined ||
+        (s.profit === 0 && (s.totalCost === undefined || s.totalCost === 0))) &&
+      grand > 0
         ? Math.round(grand * (defaultMargin / 100))
         : Math.round(Number(s.profit) || 0);
 

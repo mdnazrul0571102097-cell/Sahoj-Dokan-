@@ -13,7 +13,6 @@ import {
 import {
   Calendar,
   Package,
-  ShoppingCart,
   TrendingUp,
   Wallet,
   UserCheck,
@@ -306,7 +305,7 @@ export const MenuHubView: React.FC<Props> = ({
     bgClass: string;
     icon: React.ComponentType<{ className?: string }>;
   }[] = [
-    // Row 1: পণ্য / স্টক | বিক্রি ও লাভ | নগদ ক্রয়
+    // Row 1: পণ্য / স্টক | বিক্রি ও লাভ | মাল ক্রয় ও সাপ্লায়ার
     {
       id: 'products',
       label: 'পণ্য / স্টক',
@@ -320,18 +319,12 @@ export const MenuHubView: React.FC<Props> = ({
       icon: TrendingUp,
     },
     {
-      id: 'bulkPurchases',
-      label: 'নগদ ক্রয়',
-      bgClass: 'bg-[#EA7400] hover:bg-[#D56900]',
-      icon: ShoppingCart,
-    },
-    // Row 2: সাপ্লাইয়ার বাকি | দোকান খরচ | মালিক খরচ/জমা
-    {
       id: 'suppliersDue',
-      label: 'সাপ্লাইয়ার বাকি',
+      label: 'মাল ক্রয় ও সাপ্লায়ার',
       bgClass: 'bg-[#AD1457] hover:bg-[#931049]',
       icon: Building2,
     },
+    // Row 2: দোকান খরচ | মালিক খরচ/জমা | কাস্টমার বাকি
     {
       id: 'expenses',
       label: 'দোকান খরচ',

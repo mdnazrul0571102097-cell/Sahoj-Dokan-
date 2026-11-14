@@ -4,9 +4,10 @@ import { scanMemoFileWithAI, ScannedMemoResult } from '../utils/memoScanner';
 
 interface Props {
   onMemoExtracted: (result: ScannedMemoResult) => void;
+  compact?: boolean;
 }
 
-export const MemoScannerCard: React.FC<Props> = ({ onMemoExtracted }) => {
+export const MemoScannerCard: React.FC<Props> = ({ onMemoExtracted, compact = false }) => {
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -86,17 +87,29 @@ export const MemoScannerCard: React.FC<Props> = ({ onMemoExtracted }) => {
   };
 
   return (
-    <div className="space-y-2.5">
+    <div className={compact ? 'space-y-1.5' : 'space-y-2.5'}>
       {/* Dark-blue / slate AI Memo Scanner Card */}
-      <div className="rounded-[20px] bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#0F2942] text-white p-3.5 sm:p-4 shadow-md border border-slate-700/80 space-y-3">
-        <div>
-          <h4 className="text-sm sm:text-base font-black tracking-tight text-white flex items-center gap-1.5">
-            <span>📷 মেমো থেকে অটো স্টক / ক্রয়</span>
-          </h4>
-          <p className="text-[11px] sm:text-xs text-slate-300 leading-relaxed mt-1">
-            আড়ত বা ডিলারের মেমোর ছবি তুলুন বা গ্যালারি/PDF দিন। সাপ্লাইয়ারের নাম, পণ্যের নাম, পরিমাণ ও দাম নিজে থেকেই নিচের ঘরে বসে যাবে। সেভ করার আগে আপনি মিলিয়ে নিতে পারবেন।
+      <div
+        className={
+          compact
+            ? 'rounded-2xl bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#0F2942] text-white px-3 py-2 shadow-sm border border-slate-700/80 space-y-2'
+            : 'rounded-[20px] bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#0F2942] text-white p-3.5 sm:p-4 shadow-md border border-slate-700/80 space-y-3'
+        }
+      >
+        {compact ? (
+          <p className="text-[11px] font-bold text-slate-200 leading-snug text-center">
+            ডিলারের মেমোর ছবি তুলুন — অটো যোগ হয়ে যাবে, সেভ করার আগে মিলিয়ে নিন।
           </p>
-        </div>
+        ) : (
+          <div>
+            <h4 className="text-sm sm:text-base font-black tracking-tight text-white flex items-center gap-1.5">
+              <span>📷 মেমো থেকে অটো স্টক / ক্রয়</span>
+            </h4>
+            <p className="text-[11px] sm:text-xs text-slate-300 leading-relaxed mt-1">
+              আড়ত বা ডিলারের মেমোর ছবি তুলুন বা গ্যালারি/PDF দিন। সাপ্লাইয়ারের নাম, পণ্যের নাম, পরিমাণ ও দাম নিজে থেকেই নিচের ঘরে বসে যাবে। সেভ করার আগে আপনি মিলিয়ে নিতে পারবেন।
+            </p>
+          </div>
+        )}
 
         {/* Hidden Inputs */}
         <input
@@ -116,28 +129,40 @@ export const MemoScannerCard: React.FC<Props> = ({ onMemoExtracted }) => {
         />
 
         {isScanning ? (
-          <div className="w-full py-3 px-4 rounded-2xl bg-white/10 border border-sky-400/40 flex items-center justify-center gap-2.5 text-xs sm:text-sm font-extrabold text-sky-200">
+          <div
+            className={`w-full rounded-xl bg-white/10 border border-sky-400/40 flex items-center justify-center gap-2 font-extrabold text-sky-200 ${
+              compact ? 'py-2 px-3 text-xs' : 'py-3 px-4 rounded-2xl text-xs sm:text-sm'
+            }`}
+          >
             <Loader2 className="w-4 h-4 animate-spin text-sky-300 shrink-0" />
             <span>মেমো পড়া হচ্ছে, অনুগ্রহ করে অপেক্ষা করুন...</span>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className={compact ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-2 gap-2.5'}>
             <button
               type="button"
               onClick={handleOpenCamera}
-              className="py-2.5 px-3 rounded-2xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
+              className={
+                compact
+                  ? 'py-1.5 px-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 cursor-pointer'
+                  : 'py-2.5 px-3 rounded-2xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer'
+              }
             >
-              <Camera className="w-4 h-4 shrink-0 stroke-[2.5]" />
-              <span>📷 ছবি তুলুন</span>
+              <Camera className={compact ? 'w-3.5 h-3.5 shrink-0 stroke-[2.5]' : 'w-4 h-4 shrink-0 stroke-[2.5]'} />
+              <span>{compact ? 'ছবি তুলুন' : '📷 ছবি তুলুন'}</span>
             </button>
 
             <button
               type="button"
               onClick={handleOpenGallery}
-              className="py-2.5 px-3 rounded-2xl bg-white/15 hover:bg-white/25 text-white border border-white/25 font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
+              className={
+                compact
+                  ? 'py-1.5 px-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/25 font-black text-xs flex items-center justify-center gap-1.5 shadow-2xs transition active:scale-95 cursor-pointer'
+                  : 'py-2.5 px-3 rounded-2xl bg-white/15 hover:bg-white/25 text-white border border-white/25 font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer'
+              }
             >
-              <ImageIcon className="w-4 h-4 shrink-0 stroke-[2.2]" />
-              <span>🖼️ গ্যালারি / PDF</span>
+              <ImageIcon className={compact ? 'w-3.5 h-3.5 shrink-0 stroke-[2.2]' : 'w-4 h-4 shrink-0 stroke-[2.2]'} />
+              <span>{compact ? 'গ্যালারি / PDF' : '🖼️ গ্যালারি / PDF'}</span>
             </button>
           </div>
         )}

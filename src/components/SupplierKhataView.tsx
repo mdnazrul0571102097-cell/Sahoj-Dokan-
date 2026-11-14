@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Supplier, SupplierTransaction, ShopProfile, Language, AppMode, BulkPurchaseItem, Product } from '../types';
+import { Supplier, SupplierTransaction, ShopProfile, Language, AppMode, BulkPurchase, BulkPurchaseItem, Product } from '../types';
 import { translations } from '../i18n/translations';
 import { playSuccessChime } from '../utils/audio';
 import { DB } from '../storage/db';
@@ -24,7 +24,15 @@ import {
   TrendingUp,
   Lock,
   RotateCcw,
+  Receipt,
+  ChevronDown,
+  ChevronUp,
+  UserPlus,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react';
+
+const WALK_IN_CASH_SUPPLIER = 'সাধারণ মহাজন (নগদ)';
 
 interface Props {
   suppliers: Supplier[];
@@ -49,6 +57,7 @@ interface Props {
     extra?: {
       damageDeduction?: number;
       stockValue?: number;
+      cashPaid?: number;
       updatedProducts?: Product[];
     }
   ) => void;
@@ -65,6 +74,13 @@ interface Props {
     nextAllTxs: SupplierTransaction[]
   ) => void;
   onDeleteSupplier?: (supplierId: string) => void;
+  bulkPurchases?: BulkPurchase[];
+  onAddBulkPurchase?: (
+    purchase: BulkPurchase,
+    updatedProducts: Product[],
+    supplierDueAddition?: { supplierId: string; dueAmount: number; note?: string }
+  ) => void;
+  onDeleteBulkPurchase?: (id: string) => void;
 }
 
 export const SupplierKhataView: React.FC<Props> = ({
@@ -82,6 +98,9 @@ export const SupplierKhataView: React.FC<Props> = ({
   onUpdateSupplier = () => {},
   onUpdateSupplierTransaction,
   onDeleteSupplier = () => {},
+  bulkPurchases = [],
+  onAddBulkPurchase,
+  onDeleteBulkPurchase,
 }) => {
   const t = translations[language];
 
@@ -121,12 +140,22 @@ export const SupplierKhataView: React.FC<Props> = ({
   const [paymentNote, setPaymentNote] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'bkash' | 'nagad' | 'bank'>('cash');
 
-  // Form states: Add Credit Purchase Due
+  // Form states: Unified Supplier Purchase (New, Existing & Walk-in Cash Supplier + Cash/Due/Damage)
   const [dueSupplierNameInput, setDueSupplierNameInput] = useState('');
+  const [dueNewSupplierPhone, setDueNewSupplierPhone] = useState('');
   const [dueAmount, setDueAmount] = useState<number | ''>('');
   const [dueNote, setDueNote] = useState('');
   const [dueDamageDeduction, setDueDamageDeduction] = useState<string>('');
+  const [dueCashPaid, setDueCashPaid] = useState<string>('');
   const [dueItems, setDueItems] = useState<BulkPurchaseItem[]>([]);
+  const [dueFormError, setDueFormError] = useState('');
+  const [showSupplierSuggestions, setShowSupplierSuggestions] = useState(false);
+
+  // Unified list filter tabs & receipt expand/delete states
+  const [purchaseFilterTab, setPurchaseFilterTab] = useState<'all' | 'cash' | 'due'>('all');
+  const [expandedPurchaseId, setExpandedPurchaseId] = useState<string | null>(null);
+  const [confirmDeletePurchaseId, setConfirmDeletePurchaseId] = useState<string | null>(null);
+  const [saveFeedbackMsg, setSaveFeedbackMsg] = useState('');
 
   // Auto-sync selected supplier when suppliers array updates
   const selectedSupplier = useMemo(() => {
@@ -336,24 +365,28 @@ export const SupplierKhataView: React.FC<Props> = ({
       setDueSupplierNameInput(targetSupp.name);
     } else {
       setActiveSupplier(null);
-      setDueSupplierNameInput('');
+      setSelectedSupplierId(null);
+      setDueSupplierNameInput(WALK_IN_CASH_SUPPLIER);
     }
+    setDueNewSupplierPhone('');
     setDueAmount('');
     setDueNote('');
     setDueDamageDeduction('');
+    setDueCashPaid('');
     setDueItems([]);
+    setDueFormError('');
+    setShowSupplierSuggestions(false);
     setShowAddDueModal(true);
   };
+
+  const isWalkInCashSupplier = dueSupplierNameInput.trim() === WALK_IN_CASH_SUPPLIER;
 
   // Match supplier typed/scanned by name
   const matchedDueSupplier = useMemo(() => {
     const trimmed = dueSupplierNameInput.trim().toLowerCase();
-    if (trimmed) {
-      const exact = suppliers.find((s) => s.name.trim().toLowerCase() === trimmed);
-      if (exact) return exact;
-    }
-    return currentActiveSupplier || selectedSupplier || null;
-  }, [dueSupplierNameInput, suppliers, currentActiveSupplier, selectedSupplier]);
+    if (!trimmed || trimmed === WALK_IN_CASH_SUPPLIER.toLowerCase()) return null;
+    return suppliers.find((s) => s.name.trim().toLowerCase() === trimmed) || null;
+  }, [dueSupplierNameInput, suppliers]);
 
   const dueItemsGrossTotal = useMemo(() => {
     return Math.round(dueItems.reduce((sum, it) => sum + (it.totalCost || 0), 0));
@@ -371,6 +404,18 @@ export const SupplierKhataView: React.FC<Props> = ({
   const dueNetAmount = useMemo(() => {
     return Math.max(0, dueGrossTotal - dueDamageAmount);
   }, [dueGrossTotal, dueDamageAmount]);
+
+  const dueCashPaidAmount = useMemo(() => {
+    return Math.max(0, Math.round(Number(dueCashPaid) || 0));
+  }, [dueCashPaid]);
+
+  const effectiveDueCashPaid = useMemo(() => {
+    return Math.min(dueNetAmount, dueCashPaidAmount);
+  }, [dueNetAmount, dueCashPaidAmount]);
+
+  const dueRemainingDueAmount = useMemo(() => {
+    return Math.max(0, dueNetAmount - effectiveDueCashPaid);
+  }, [dueNetAmount, effectiveDueCashPaid]);
 
   const handleDueItemChange = (index: number, field: keyof BulkPurchaseItem, val: any) => {
     const updated = [...dueItems];
@@ -455,23 +500,38 @@ export const SupplierKhataView: React.FC<Props> = ({
     }
   };
 
-  // Submit Add Credit Purchase Due
+  // Submit Unified Supplier Purchase (Walk-in Cash / New / Existing Supplier + Stock + Cash + Remaining Due)
   const handleAddDueSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setDueFormError('');
     if (dueGrossTotal <= 0) return;
 
-    let target = matchedDueSupplier;
     const typedSupplierName = dueSupplierNameInput.trim();
+    if (!typedSupplierName) {
+      setDueFormError('অনুগ্রহ করে মহাজনের নাম লিখুন বা তালিকা থেকে সিলেক্ট করুন।');
+      return;
+    }
 
-    if (!target) {
-      if (!typedSupplierName) return;
-      // Auto-create supplier record with 0 initial balance, then add due transaction below
+    const isWalkIn = typedSupplierName === WALK_IN_CASH_SUPPLIER;
+    const cashPaid = effectiveDueCashPaid;
+    const remainingDue = dueRemainingDueAmount;
+
+    if (isWalkIn && remainingDue > 0) {
+      setDueFormError(
+        'বাকি হিসাব রাখতে হলে অনুগ্রহ করে নির্দিষ্ট মহাজনের নাম লিখুন বা তালিকা থেকে সিলেক্ট করুন।'
+      );
+      return;
+    }
+
+    let target = matchedDueSupplier;
+    if (!isWalkIn && !target) {
+      // Auto-create supplier record with 0 initial balance; remainingDue added via handleAddBulkPurchase -> handleAddSupplierDue
       const newSupp: Supplier = {
         id: `supp_${Date.now()}`,
         name: typedSupplierName,
         company: '',
         contactPerson: '',
-        phone: '---',
+        phone: dueNewSupplierPhone.trim() || '---',
         address: '',
         totalDue: 0,
         totalPayableDue: 0,
@@ -483,33 +543,43 @@ export const SupplierKhataView: React.FC<Props> = ({
       setActiveSupplier(newSupp);
     }
 
-    const currentDue = target.totalDue ?? target.totalPayableDue ?? 0;
-    const newBalance = currentDue + dueNetAmount;
-
+    const validItems = dueItems.filter((it) => it.productName.trim());
     const itemSummary =
-      dueItems.length > 0
-        ? dueItems
-            .filter((it) => it.productName.trim())
+      validItems.length > 0
+        ? validItems
             .map((it) => `${it.productName} (${it.quantity} ${it.unit})`)
             .slice(0, 3)
             .join(', ')
         : '';
 
     const baseNote =
-      dueNote.trim() || itemSummary || 'নতুন মাল ক্রয় বাবদ বাকি';
+      dueNote.trim() ||
+      itemSummary ||
+      (remainingDue === 0
+        ? 'নগদ মাল ক্রয়'
+        : cashPaid > 0
+        ? 'মাল ক্রয় (নগদ ও বাকি)'
+        : 'নতুন মাল ক্রয় বাবদ বাকি');
 
-    const finalNote =
-      dueDamageAmount > 0
-        ? `${baseNote} | মোট মাল: ৳${dueGrossTotal.toLocaleString()}, ড্যামেজ বাদ: -৳${dueDamageAmount.toLocaleString()}, নিট বাকি: ৳${dueNetAmount.toLocaleString()}`
-        : baseNote;
+    const noteParts: string[] = [baseNote];
+    if (dueDamageAmount > 0) {
+      noteParts.push(
+        `মোট মাল: ৳${dueGrossTotal.toLocaleString()}, ড্যামেজ বাদ: -৳${dueDamageAmount.toLocaleString()}, নিট: ৳${dueNetAmount.toLocaleString()}`
+      );
+    }
+    if (cashPaid > 0 && remainingDue > 0) {
+      noteParts.push(
+        `নগদ জমা: ৳${cashPaid.toLocaleString()}, অবশিষ্ট বাকি: ৳${remainingDue.toLocaleString()}`
+      );
+    }
+    const finalNote = noteParts.join(' | ');
 
     // Update inventory products when itemized products match catalog items
     let updatedProducts: Product[] | undefined = undefined;
-    if (dueItems.length > 0 && products.length > 0) {
+    if (validItems.length > 0 && products.length > 0) {
       const nextProducts = [...products];
       let anyMatched = false;
-      dueItems.forEach((item) => {
-        if (!item.productName.trim()) return;
+      validItems.forEach((item) => {
         const matchIndex = nextProducts.findIndex(
           (p) =>
             (item.productId && p.id === item.productId) ||
@@ -531,17 +601,64 @@ export const SupplierKhataView: React.FC<Props> = ({
       }
     }
 
-    onAddSupplierDue(target.id, dueNetAmount, finalNote, newBalance, {
+    const purchaseNo = `PO-${Math.floor(1000 + Math.random() * 9000)}`;
+    const nowIso = new Date().toISOString();
+    const newPurchase: BulkPurchase = {
+      id: `bp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      purchaseNo,
+      date: nowIso,
+      supplierId: target ? target.id : undefined,
+      supplierName: target ? target.name : WALK_IN_CASH_SUPPLIER,
+      supplierPhone: target && target.phone !== '---' ? target.phone : undefined,
+      items: validItems,
+      grossTotalAmount: dueGrossTotal,
       damageDeduction: dueDamageAmount,
-      stockValue: dueNetAmount,
-      updatedProducts,
-    });
+      totalAmount: dueNetAmount,
+      paidAmount: cashPaid,
+      dueAmount: remainingDue,
+      paymentType: remainingDue === 0 ? 'cash' : cashPaid > 0 ? 'partial' : 'due',
+      note: finalNote,
+      createdAt: nowIso,
+    };
+
+    if (onAddBulkPurchase) {
+      onAddBulkPurchase(
+        newPurchase,
+        updatedProducts || products,
+        remainingDue > 0 && target
+          ? {
+              supplierId: target.id,
+              dueAmount: remainingDue,
+              note: `রসিদ #${purchaseNo} (${finalNote})`,
+            }
+          : undefined
+      );
+    } else if (target) {
+      const currentDue = target.totalDue ?? target.totalPayableDue ?? 0;
+      const newBalance = Math.max(0, currentDue + remainingDue);
+      onAddSupplierDue(target.id, dueNetAmount, finalNote, newBalance, {
+        damageDeduction: dueDamageAmount,
+        stockValue: dueNetAmount,
+        cashPaid,
+        updatedProducts,
+      });
+    }
+
+    setSaveFeedbackMsg(
+      remainingDue === 0
+        ? `নগদ ক্রয় রসিদ #${purchaseNo} সেভ হয়েছে (৳${dueNetAmount.toLocaleString()})`
+        : `ক্রয় রসিদ #${purchaseNo} সেভ হয়েছে (নগদ: ৳${cashPaid.toLocaleString()}, বাকি: ৳${remainingDue.toLocaleString()})`
+    );
+    setTimeout(() => setSaveFeedbackMsg(''), 4000);
 
     setDueSupplierNameInput('');
+    setDueNewSupplierPhone('');
     setDueAmount('');
     setDueNote('');
     setDueDamageDeduction('');
+    setDueCashPaid('');
     setDueItems([]);
+    setDueFormError('');
     setShowAddDueModal(false);
     playSuccessChime();
   };
@@ -664,6 +781,13 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
     }
   };
 
+  const formatDateDDMMYYYY = (d?: string | Date): string => {
+    const ymd = getLocalDateStr(d);
+    if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd || '';
+    const [yyyy, mm, dd] = ymd.split('-');
+    return `${dd}-${mm}-${yyyy}`;
+  };
+
   const totalSupplierDueAddedToday = useMemo(() => {
     const todayStr = getLocalDateStr(new Date());
     return Math.round(
@@ -675,23 +799,108 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
     );
   }, [supplierTransactions]);
 
-  const totalSupplierPaidToday = useMemo(() => {
+  const totalCashPurchasesAll = useMemo(() => {
+    return Math.round(
+      bulkPurchases.reduce((sum, bp) => {
+        const paid =
+          bp.paidAmount !== undefined
+            ? Number(bp.paidAmount) || 0
+            : Math.max(0, (Number(bp.totalAmount) || 0) - (Number(bp.dueAmount) || 0));
+        const ret = Number(bp.returnedAmount) || 0;
+        return sum + Math.max(0, paid - ret);
+      }, 0)
+    );
+  }, [bulkPurchases]);
+
+  const totalCashPurchasesToday = useMemo(() => {
     const todayStr = getLocalDateStr(new Date());
     return Math.round(
-      supplierTransactions
+      bulkPurchases
         .filter(
-          (tx) => getLocalDateStr(tx.date) === todayStr && tx.type === 'payment_made'
+          (bp) =>
+            getLocalDateStr(bp.date) === todayStr ||
+            (bp.date || '').slice(0, 10) === todayStr
         )
-        .reduce((sum, tx) => sum + (tx.amount || 0), 0)
+        .reduce((sum, bp) => {
+          const paid =
+            bp.paidAmount !== undefined
+              ? Number(bp.paidAmount) || 0
+              : Math.max(0, (Number(bp.totalAmount) || 0) - (Number(bp.dueAmount) || 0));
+          const ret = Number(bp.returnedAmount) || 0;
+          return sum + Math.max(0, paid - ret);
+        }, 0)
     );
-  }, [supplierTransactions]);
+  }, [bulkPurchases]);
+
+  // Search-filtered & sorted purchase receipts
+  const searchMatchedPurchases = useMemo(() => {
+    const sorted = [...bulkPurchases].sort((a, b) => {
+      const ta = new Date(a.createdAt || a.date).getTime() || 0;
+      const tb = new Date(b.createdAt || b.date).getTime() || 0;
+      return tb - ta;
+    });
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return sorted;
+    return sorted.filter((bp) => {
+      const pNo = (bp.purchaseNo || '').toLowerCase();
+      const sup = (bp.supplierName || WALK_IN_CASH_SUPPLIER).toLowerCase();
+      const note = (bp.note || '').toLowerCase();
+      const prodMatch = (bp.items || []).some((it) =>
+        (it.productName || '').toLowerCase().includes(q)
+      );
+      const ymd = getLocalDateStr(bp.date);
+      const ddmm = formatDateDDMMYYYY(bp.date);
+      return (
+        pNo.includes(q) ||
+        sup.includes(q) ||
+        note.includes(q) ||
+        prodMatch ||
+        ymd.includes(q) ||
+        ddmm.includes(q)
+      );
+    });
+  }, [bulkPurchases, searchQuery]);
+
+  const cashPurchasesList = useMemo(
+    () => searchMatchedPurchases.filter((bp) => (Number(bp.dueAmount) || 0) === 0),
+    [searchMatchedPurchases]
+  );
+
+  const creditPurchasesList = useMemo(
+    () => searchMatchedPurchases.filter((bp) => (Number(bp.dueAmount) || 0) > 0),
+    [searchMatchedPurchases]
+  );
+
+  const visiblePurchases = useMemo(() => {
+    if (purchaseFilterTab === 'cash') return cashPurchasesList;
+    if (purchaseFilterTab === 'due') return creditPurchasesList;
+    return searchMatchedPurchases;
+  }, [purchaseFilterTab, cashPurchasesList, creditPurchasesList, searchMatchedPurchases]);
+
+  const visibleSuppliers = useMemo(() => {
+    if (purchaseFilterTab === 'cash') return [];
+    if (purchaseFilterTab === 'due') {
+      return filteredSuppliers.filter((s) => (s.totalDue ?? s.totalPayableDue ?? 0) > 0);
+    }
+    return filteredSuppliers;
+  }, [purchaseFilterTab, filteredSuppliers]);
+
+  const handleOpenAddSupplierModal = () => {
+    setName('');
+    setCompany('');
+    setContactPerson('');
+    setPhone('');
+    setAddress('');
+    setInitialDue('');
+    setShowAddSupplierModal(true);
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Main Summary Card matching Customer Baki Khata */}
-      <div className="bg-white rounded-[24px] p-4 shadow-sm border border-[#E2E8F0] mb-3 shrink-0">
+      {/* Main Summary Card */}
+      <div className="bg-white rounded-[24px] p-3.5 sm:p-4 shadow-sm border border-[#E2E8F0] mb-2.5 shrink-0">
         {/* Pill Toggle: সর্বমোট vs আজ */}
-        <div className="flex justify-center mb-3">
+        <div className="flex justify-center mb-2.5">
           <div className="inline-flex rounded-full bg-[#EDF2F7] p-1 border border-[#E2E8F0]">
             <button
               type="button"
@@ -719,15 +928,15 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
         </div>
 
         <div className="grid grid-cols-2 divide-x divide-[#E2E8F0] mb-3">
-          {/* Left: মহাজনের মোট পাওনা (দেনা) / আজকের বাকি মাল ক্রয় */}
+          {/* Left: মহাজনের মোট পাওনা (দেনা) / আজকের বাকি ক্রয় */}
           <div className="text-center pr-2">
-            <p className="text-xs font-semibold text-[#64748B] mb-1">
+            <p className="text-[11px] sm:text-xs font-semibold text-[#64748B] mb-0.5">
               {summaryTimeMode === 'all'
                 ? 'মহাজনের মোট পাওনা (দেনা)'
-                : 'আজকের বাকি মাল ক্রয়'}
+                : 'আজকের বাকি ক্রয়'}
             </p>
-            <div className="flex items-center justify-center gap-1.5">
-              <p className="text-xl sm:text-2xl font-extrabold text-[#D32F2F] tracking-tight">
+            <div className="flex items-center justify-center gap-1">
+              <p className="text-lg sm:text-2xl font-extrabold text-[#D32F2F] tracking-tight tabular-nums">
                 ৳{' '}
                 {summaryTimeMode === 'all'
                   ? totalPayableDue.toLocaleString()
@@ -739,249 +948,485 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
             </div>
           </div>
 
-          {/* Right: বাকি থাকা মহাজন / আজকের পরিশোধ (জমা) */}
+          {/* Right: মোট নগদ ক্রয় / আজকের নগদ ক্রয় */}
           <div className="text-center pl-2">
-            <p className="text-xs font-semibold text-[#64748B] mb-1">
-              {summaryTimeMode === 'all'
-                ? 'পাওনা বাকি থাকা মহাজন'
-                : 'আজকের পরিশোধ (জমা)'}
+            <p className="text-[11px] sm:text-xs font-semibold text-[#64748B] mb-0.5">
+              {summaryTimeMode === 'all' ? 'মোট নগদ ক্রয়' : 'আজকের নগদ ক্রয়'}
             </p>
-            {summaryTimeMode === 'all' ? (
-              <p className="text-xl sm:text-2xl font-extrabold text-[#0E6B6B] tracking-tight">
-                {dueSuppliersCount} জন
-              </p>
-            ) : (
-              <div className="flex items-center justify-center gap-1.5">
-                <p className="text-xl sm:text-2xl font-extrabold text-[#2E7D32] tracking-tight">
-                  ৳ {totalSupplierPaidToday.toLocaleString()}
-                </p>
-                <span className="text-xs font-bold text-[#2E7D32]">↙</span>
-              </div>
-            )}
+            <p className="text-lg sm:text-2xl font-extrabold text-[#2E7D32] tracking-tight tabular-nums">
+              ৳{' '}
+              {summaryTimeMode === 'all'
+                ? totalCashPurchasesAll.toLocaleString()
+                : totalCashPurchasesToday.toLocaleString()}
+            </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        {/* Single Full-Width Primary Button */}
+        <div>
           <button
             type="button"
-            onClick={() => {
-              setName('');
-              setCompany('');
-              setContactPerson('');
-              setPhone('');
-              setAddress('');
-              setInitialDue('');
-              setShowAddSupplierModal(true);
-            }}
-            className="w-full py-2.5 px-3 rounded-2xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
+            onClick={() => openAddDueModal(null)}
+            className="w-full py-2.5 px-3 rounded-2xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer"
           >
-            <Plus className="w-4 h-4 stroke-[2.5] shrink-0" />
-            <span>নতুন সাপ্লায়ার</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => openAddDueModal(suppliers[0] || null)}
-            className="w-full py-2.5 px-3 rounded-2xl bg-[#D32F2F] hover:bg-red-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
-          >
-            <ArrowUpRight className="w-4 h-4 stroke-[2.5] shrink-0" />
-            <span>নতুন বাকি ক্রয়</span>
+            <span>+ নতুন মাল ক্রয় (নগদ / বাকি)</span>
           </button>
         </div>
       </div>
 
-      {/* Search bar matching Customer Baki Khata */}
-      <div className="flex items-center gap-2 mb-2.5 shrink-0">
+      {/* Save Feedback Toast */}
+      {saveFeedbackMsg && (
+        <div className="mb-2 px-3 py-2 rounded-2xl bg-[#E8F5E9] border border-emerald-200 text-[#2E7D32] text-xs font-bold flex items-center gap-2 shrink-0">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span className="truncate">{saveFeedbackMsg}</span>
+        </div>
+      )}
+
+      {/* Search bar */}
+      <div className="flex items-center gap-2 mb-2 shrink-0">
         <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-[#9AA5B1]" />
+          <Search className="w-4 h-4 absolute left-3.5 top-3 text-[#9AA5B1]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="সাপ্লায়ার, কোম্পানি, ফোন বা মোকাম খুঁজুন..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-white border border-[#E2E8F0] text-xs sm:text-sm text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B] shadow-xs"
+            placeholder="সাপ্লায়ার, পণ্য, রসিদ নং বা তারিখ খুঁজুন..."
+            className="w-full pl-10 pr-4 py-2 rounded-2xl bg-white border border-[#E2E8F0] text-xs sm:text-sm text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B] shadow-xs"
           />
         </div>
       </div>
 
-      {/* Supplier Cards List */}
-      <div className="flex-1 overflow-y-auto space-y-2.5 pr-0.5 pb-16">
-        {filteredSuppliers.length === 0 ? (
-          <div className="bg-white rounded-[24px] p-8 text-center border border-[#E2E8F0] shadow-xs">
-            <Building2 className="w-10 h-10 text-[#9AA5B1] mx-auto mb-2 stroke-1" />
-            <p className="text-xs font-semibold text-[#64748B]">
-              কোনো সাপ্লায়ার পাওয়া যায়নি
-            </p>
-          </div>
-        ) : (
-          filteredSuppliers.map((supp) => {
-            const due = supp.totalDue ?? supp.totalPayableDue ?? 0;
-            const hasDue = due > 0;
+      {/* 3 Filter Tabs: সব ক্রয় | নগদ ক্রয় | বাকি ক্রয় */}
+      <div className="grid grid-cols-3 gap-1.5 mb-2.5 shrink-0 bg-white p-1 rounded-2xl border border-[#E2E8F0]">
+        <button
+          type="button"
+          onClick={() => setPurchaseFilterTab('all')}
+          className={`py-2 px-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+            purchaseFilterTab === 'all'
+              ? 'bg-[#0E6B6B] text-white shadow-xs'
+              : 'text-[#64748B] hover:bg-[#F8FAFC]'
+          }`}
+        >
+          সব ক্রয় ({searchMatchedPurchases.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setPurchaseFilterTab('cash')}
+          className={`py-2 px-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+            purchaseFilterTab === 'cash'
+              ? 'bg-[#2E7D32] text-white shadow-xs'
+              : 'text-[#64748B] hover:bg-[#F8FAFC]'
+          }`}
+        >
+          নগদ ক্রয় ({cashPurchasesList.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setPurchaseFilterTab('due')}
+          className={`py-2 px-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+            purchaseFilterTab === 'due'
+              ? 'bg-[#D32F2F] text-white shadow-xs'
+              : 'text-[#64748B] hover:bg-[#F8FAFC]'
+          }`}
+        >
+          বাকি ক্রয় ({creditPurchasesList.length})
+        </button>
+      </div>
 
-            return (
-              <div
-                key={supp.id}
-                onClick={() => {
-                  setSelectedSupplierId(supp.id);
-                  setActiveSupplier(supp);
-                  setShowDetailModal(true);
-                }}
-                className="bg-white rounded-[20px] p-3.5 border border-[#E2E8F0] hover:border-[#0E6B6B] shadow-xs transition-all cursor-pointer"
-              >
-                {/* Top row: Avatar, Name, Company, Due */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    {/* Circular Avatar matching Customer Baki Khata */}
-                    <div className="w-11 h-11 rounded-full bg-[#E0F2F1] text-[#0E6B6B] font-bold text-lg flex items-center justify-center shrink-0">
-                      {supp.name.slice(0, 1)}
+      {/* Unified Scrollable Content Area */}
+      <div className="flex-1 overflow-y-auto space-y-3 pr-0.5 pb-16">
+        {/* Cash-only Tab Summary Strip */}
+        {purchaseFilterTab === 'cash' && (
+          <div className="px-3.5 py-2.5 rounded-2xl bg-[#E8F5E9] border border-emerald-200 flex items-center justify-between text-xs">
+            <span className="font-bold text-[#2E7D32]">
+              মোট নগদ ক্রয় রসিদ: {cashPurchasesList.length} টি
+            </span>
+            <span className="font-mono font-black text-sm text-[#2E7D32]">
+              ৳{Math.round(cashPurchasesList.reduce((s, p) => s + (Number(p.totalAmount) || 0), 0)).toLocaleString()}
+            </span>
+          </div>
+        )}
+
+        {/* Section 1: Suppliers List (Compact so Purchase Vouchers list stays prominent) */}
+        {purchaseFilterTab !== 'cash' && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-xs font-extrabold text-[#475569] flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-[#0E6B6B]" />
+                <span>
+                  {purchaseFilterTab === 'due'
+                    ? `পাওনাদার সাপ্লায়ার (${visibleSuppliers.length})`
+                    : `সাপ্লায়ার ও মহাজন (${visibleSuppliers.length})`}
+                </span>
+              </h3>
+              {purchaseFilterTab === 'due' && (
+                <span className="text-[11px] font-bold text-[#D32F2F] tabular-nums">
+                  মোট বাকি: ৳{totalPayableDue.toLocaleString()}
+                </span>
+              )}
+            </div>
+
+            {visibleSuppliers.length === 0 ? (
+              <div className="bg-white rounded-xl px-3 py-2 border border-[#E2E8F0] shadow-2xs flex items-center justify-center gap-1.5 text-[#64748B]">
+                <Building2 className="w-4 h-4 text-[#9AA5B1] shrink-0" />
+                <p className="text-[11px] font-semibold">
+                  {purchaseFilterTab === 'due'
+                    ? 'কোনো বাকি থাকা সাপ্লায়ার নেই'
+                    : 'কোনো সাপ্লায়ার যোগ করা হয়নি'}
+                </p>
+              </div>
+            ) : (
+              visibleSuppliers.map((supp) => {
+                const due = supp.totalDue ?? supp.totalPayableDue ?? 0;
+                const hasDue = due > 0;
+
+                return (
+                  <div
+                    key={supp.id}
+                    onClick={() => {
+                      setSelectedSupplierId(supp.id);
+                      setActiveSupplier(supp);
+                      setShowDetailModal(true);
+                    }}
+                    className="bg-white rounded-2xl p-2.5 sm:p-3 border border-[#E2E8F0] hover:border-[#0E6B6B] shadow-xs transition-all cursor-pointer"
+                  >
+                    {/* Top row: Avatar, Name, Company, Due */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-10 h-10 rounded-full bg-[#E0F2F1] text-[#0E6B6B] font-bold text-base flex items-center justify-center shrink-0">
+                          {supp.name.slice(0, 1)}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h4 className="font-bold text-sm sm:text-base text-[#102A43] truncate">
+                              {supp.name}
+                            </h4>
+                            {supp.company && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#E3F2FD] text-[#1976D2] font-bold truncate max-w-[140px]">
+                                {supp.company}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 text-xs text-[#64748B] flex-wrap">
+                            {supp.contactPerson && (
+                              <span className="flex items-center gap-1">
+                                <User className="w-3 h-3 text-[#0E6B6B]" />
+                                <span>{supp.contactPerson}</span>
+                              </span>
+                            )}
+                            <span className="font-mono">{supp.phone}</span>
+                            {supp.address && <span>• {supp.address}</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] font-semibold text-[#64748B] block">
+                          {hasDue ? 'পাওনা বাকি' : 'পরিশোধিত'}
+                        </span>
+                        <div
+                          className={`text-base sm:text-lg font-extrabold font-mono ${
+                            hasDue ? 'text-[#D32F2F]' : 'text-[#2E7D32]'
+                          }`}
+                        >
+                          ৳{due.toLocaleString()}
+                        </div>
+                      </div>
                     </div>
 
+                    {/* Bottom row: Direct Quick Action Buttons */}
+                    <div className="mt-3 pt-2.5 border-t border-[#F1F5F9] flex items-center justify-between gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        {/* + নতুন ক্রয় বাটন */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openAddDueModal(supp);
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-[#FFEBEE] hover:bg-rose-200 text-[#D32F2F] border border-rose-200 text-xs font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer"
+                          title="এই মহাজন থেকে নতুন মাল ক্রয় ও হিসাব যোগ করুন"
+                        >
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                          <span>+ নতুন ক্রয়</span>
+                        </button>
+
+                        {/* টাকা দিন / পরিশোধ বাটন */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveSupplier(supp);
+                            setSelectedSupplierId(supp.id);
+                            setPaymentAmount(due > 0 ? due : '');
+                            setPaymentNote('');
+                            setShowPaymentModal(true);
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-[#E8F5E9] hover:bg-emerald-200 text-[#2E7D32] border border-emerald-200 text-xs font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer"
+                          title="মহাজনকে টাকা জমা / পরিশোধ করুন"
+                        >
+                          <ArrowDownLeft className="w-3.5 h-3.5" />
+                          <span>টাকা দিন</span>
+                        </button>
+
+                        {/* Edit Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal(supp);
+                          }}
+                          className="p-1.5 rounded-xl bg-[#EDF2F7] hover:bg-slate-200 text-[#64748B] transition active:scale-95 cursor-pointer"
+                          title="সাপ্লায়ারের তথ্য এডিট করুন"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Delete Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveSupplier(supp);
+                            setSelectedSupplierId(supp.id);
+                            setShowDeleteConfirmModal(true);
+                          }}
+                          className="p-1.5 rounded-xl bg-[#FFEBEE] hover:bg-rose-200 text-[#D32F2F] transition active:scale-95 cursor-pointer"
+                          title="সাপ্লায়ার ডিলিট করুন"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        {supp.phone && supp.phone !== '---' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleShareWhatsApp(supp);
+                            }}
+                            className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer ${
+                              appMode === 'normal'
+                                ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
+                                : 'bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] border-[#B2DFDB]'
+                            }`}
+                            title={
+                              appMode === 'normal'
+                                ? 'মহাজনের হোয়াটসঅ্যাপে হিসাব পাঠাতে Pro আনলক করুন'
+                                : 'মহাজনের হোয়াটসঅ্যাপে হিসাব পাঠান'
+                            }
+                          >
+                            {appMode === 'normal' ? (
+                              <>
+                                <Lock className="w-3.5 h-3.5 text-amber-600" />
+                                <span>হোয়াটসঅ্যাপ (Pro)</span>
+                              </>
+                            ) : (
+                              <>
+                                <MessageCircle className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">হোয়াটসঅ্যাপ</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        <span className="text-[11px] font-bold text-[#0E6B6B] flex items-center gap-0.5">
+                          <span>খাতা</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* Section 2: Purchase Vouchers / Receipts List */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs font-extrabold text-[#475569] flex items-center gap-1.5">
+              <Receipt className="w-3.5 h-3.5 text-[#0E6B6B]" />
+              <span>
+                {purchaseFilterTab === 'cash'
+                  ? `নগদ ক্রয় রসিদ (${visiblePurchases.length})`
+                  : purchaseFilterTab === 'due'
+                  ? `বাকি ক্রয় রসিদ (${visiblePurchases.length})`
+                  : `ক্রয় রসিদ ও ভাউচার (${visiblePurchases.length})`}
+              </span>
+            </h3>
+          </div>
+
+          {visiblePurchases.length === 0 ? (
+            <div className="bg-white rounded-[20px] p-6 text-center border border-[#E2E8F0] shadow-xs">
+              <Receipt className="w-9 h-9 text-[#9AA5B1] mx-auto mb-1.5 stroke-1" />
+              <p className="text-xs font-semibold text-[#64748B]">
+                {purchaseFilterTab === 'cash'
+                  ? 'কোনো নগদ ক্রয়ের রসিদ পাওয়া যায়নি'
+                  : purchaseFilterTab === 'due'
+                  ? 'কোনো বাকি ক্রয়ের রসিদ পাওয়া যায়নি'
+                  : 'এখনও কোনো মাল ক্রয়ের রসিদ নেই'}
+              </p>
+            </div>
+          ) : (
+            visiblePurchases.map((bp) => {
+              const dueAmt = Math.max(0, Number(bp.dueAmount) || 0);
+              const paidAmt = Math.max(
+                0,
+                bp.paidAmount !== undefined
+                  ? Number(bp.paidAmount) || 0
+                  : (Number(bp.totalAmount) || 0) - dueAmt
+              );
+              const dmgAmt = Math.max(0, Number(bp.damageDeduction) || 0);
+              const netAmt = Math.max(0, Number(bp.totalAmount) || 0);
+              const isExpanded = expandedPurchaseId === bp.id;
+              const isCashOnly = dueAmt === 0;
+              const isPartial = dueAmt > 0 && paidAmt > 0;
+
+              return (
+                <div
+                  key={bp.id}
+                  className="bg-white rounded-[20px] p-3.5 border border-[#E2E8F0] shadow-xs space-y-2"
+                >
+                  {/* Row 1: Receipt # + Date + Status Badge | Net Bill */}
+                  <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <h4 className="font-bold text-sm sm:text-base text-[#102A43] truncate">
-                          {supp.name}
-                        </h4>
-                        {supp.company && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#E3F2FD] text-[#1976D2] font-bold truncate max-w-[150px]">
-                            {supp.company}
-                          </span>
-                        )}
+                        <span className="text-xs font-black font-mono text-[#0E6B6B]">
+                          #{bp.purchaseNo}
+                        </span>
+                        <span className="text-[11px] font-semibold text-[#64748B]">
+                          • {formatDateDDMMYYYY(bp.date)}
+                        </span>
+                        <span
+                          className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                            isCashOnly
+                              ? 'bg-[#E8F5E9] text-[#2E7D32]'
+                              : isPartial
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-[#FFEBEE] text-[#D32F2F]'
+                          }`}
+                        >
+                          {isCashOnly ? 'নগদ ক্রয়' : isPartial ? 'নগদ + বাকি' : 'বাকি ক্রয়'}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5 text-xs text-[#64748B] flex-wrap">
-                        {supp.contactPerson && (
-                          <span className="flex items-center gap-1">
-                            <User className="w-3 h-3 text-[#0E6B6B]" />
-                            <span>{supp.contactPerson}</span>
-                          </span>
-                        )}
-                        <span className="font-mono">{supp.phone}</span>
-                        {supp.address && <span>• {supp.address}</span>}
-                      </div>
+
+                      <p className="font-bold text-sm text-[#102A43] mt-1 truncate">
+                        {bp.supplierName || WALK_IN_CASH_SUPPLIER}
+                      </p>
+                      {bp.note && (
+                        <p className="text-[11px] text-[#64748B] truncate mt-0.5">
+                          {bp.note}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="text-[10px] font-semibold text-[#64748B] block">
+                        নিট বিল
+                      </span>
+                      <span className="text-base font-black font-mono text-[#102A43] tabular-nums">
+                        ৳{netAmt.toLocaleString()}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0">
-                    <span className="text-[10px] font-semibold text-[#64748B] block">
-                      {hasDue ? 'পাওনা বাকি' : 'পরিশোধিত'}
-                    </span>
-                    <div
-                      className={`text-base sm:text-lg font-extrabold font-mono ${
-                        hasDue ? 'text-[#D32F2F]' : 'text-[#2E7D32]'
-                      }`}
-                    >
-                      ৳{due.toLocaleString()}
+                  {/* Row 2: Payment & Damage Breakdown + Actions */}
+                  <div className="pt-2 border-t border-[#F1F5F9] flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap text-[11px] font-bold">
+                      {dmgAmt > 0 && (
+                        <span className="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
+                          ড্যামেজ বাদ: -৳{dmgAmt.toLocaleString()}
+                        </span>
+                      )}
+                      {paidAmt > 0 && (
+                        <span className="px-2 py-0.5 rounded-lg bg-[#E8F5E9] text-[#2E7D32]">
+                          নগদ: ৳{paidAmt.toLocaleString()}
+                        </span>
+                      )}
+                      {dueAmt > 0 && (
+                        <span className="px-2 py-0.5 rounded-lg bg-[#FFEBEE] text-[#D32F2F]">
+                          বাকি: ৳{dueAmt.toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {bp.items && bp.items.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedPurchaseId(isExpanded ? null : bp.id)
+                          }
+                          className="px-2 py-1 rounded-lg bg-[#F8FAFC] hover:bg-[#EDF2F7] text-[#0E6B6B] border border-[#E2E8F0] text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>পণ্য ({bp.items.length})</span>
+                          {isExpanded ? (
+                            <ChevronUp className="w-3 h-3" />
+                          ) : (
+                            <ChevronDown className="w-3 h-3" />
+                          )}
+                        </button>
+                      )}
+
+                      {onDeleteBulkPurchase && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirmDeletePurchaseId === bp.id) {
+                              onDeleteBulkPurchase(bp.id);
+                              setConfirmDeletePurchaseId(null);
+                            } else {
+                              setConfirmDeletePurchaseId(bp.id);
+                              setTimeout(() => {
+                                setConfirmDeletePurchaseId((prev) =>
+                                  prev === bp.id ? null : prev
+                                );
+                              }, 5000);
+                            }
+                          }}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer ${
+                            confirmDeletePurchaseId === bp.id
+                              ? 'bg-[#D32F2F] text-white'
+                              : 'bg-[#FFEBEE] hover:bg-rose-200 text-[#D32F2F]'
+                          }`}
+                          title="রসিদ ডিলিট করতে দুবার চাপুন"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>
+                            {confirmDeletePurchaseId === bp.id ? 'নিশ্চিত?' : ''}
+                          </span>
+                        </button>
+                      )}
                     </div>
                   </div>
+
+                  {/* Expanded Itemized List */}
+                  {isExpanded && bp.items && bp.items.length > 0 && (
+                    <div className="mt-1.5 pt-2 border-t border-dashed border-[#E2E8F0] space-y-1">
+                      {bp.items.map((it, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between text-[11px] text-[#475569]"
+                        >
+                          <span className="font-semibold truncate pr-2">
+                            {idx + 1}. {it.productName} ({it.quantity} {it.unit} × ৳{it.unitCostPrice})
+                          </span>
+                          <span className="font-mono font-bold text-[#102A43] shrink-0">
+                            ৳{(it.totalCost || 0).toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-
-                {/* Bottom row: Direct Quick Action Buttons */}
-                <div className="mt-3 pt-2.5 border-t border-[#F1F5F9] flex items-center justify-between gap-1.5 flex-wrap">
-                  <div className="flex items-center gap-1.5">
-                    {/* + বাকি দিন বাটন */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openAddDueModal(supp);
-                      }}
-                      className="px-2.5 py-1.5 rounded-xl bg-[#FFEBEE] hover:bg-rose-200 text-[#D32F2F] border border-rose-200 text-xs font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer"
-                      title="সাপ্লায়ার থেকে নতুন বাকি মাল ক্রয় যোগ করুন"
-                    >
-                      <ArrowUpRight className="w-3.5 h-3.5" />
-                      <span>+ বাকি</span>
-                    </button>
-
-                    {/* টাকা দিন / পরিশোধ বাটন */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveSupplier(supp);
-                        setSelectedSupplierId(supp.id);
-                        setPaymentAmount(due > 0 ? due : '');
-                        setPaymentNote('');
-                        setShowPaymentModal(true);
-                      }}
-                      className="px-2.5 py-1.5 rounded-xl bg-[#E8F5E9] hover:bg-emerald-200 text-[#2E7D32] border border-emerald-200 text-xs font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer"
-                      title="মহাজনকে টাকা জমা / পরিশোধ করুন"
-                    >
-                      <ArrowDownLeft className="w-3.5 h-3.5" />
-                      <span>টাকা দিন</span>
-                    </button>
-
-                    {/* Edit Button */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditModal(supp);
-                      }}
-                      className="p-1.5 rounded-xl bg-[#EDF2F7] hover:bg-slate-200 text-[#64748B] transition active:scale-95 cursor-pointer"
-                      title="সাপ্লায়ারের তথ্য এডিট করুন"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Delete Button */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveSupplier(supp);
-                        setSelectedSupplierId(supp.id);
-                        setShowDeleteConfirmModal(true);
-                      }}
-                      className="p-1.5 rounded-xl bg-[#FFEBEE] hover:bg-rose-200 text-[#D32F2F] transition active:scale-95 cursor-pointer"
-                      title="সাপ্লায়ার ডিলিট করুন"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    {/* WhatsApp Button (Locked in Normal Mode after 60 days) */}
-                    {supp.phone && supp.phone !== '---' && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleShareWhatsApp(supp);
-                        }}
-                        className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer ${
-                          appMode === 'normal'
-                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
-                            : 'bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] border-[#B2DFDB]'
-                        }`}
-                        title={
-                          appMode === 'normal'
-                            ? 'মহাজনের হোয়াটসঅ্যাপে হিসাব পাঠাতে Pro আনলক করুন'
-                            : 'মহাজনের হোয়াটসঅ্যাপে হিসাব পাঠান'
-                        }
-                      >
-                        {appMode === 'normal' ? (
-                          <>
-                            <Lock className="w-3.5 h-3.5 text-amber-600" />
-                            <span>হোয়াটসঅ্যাপ (Pro)</span>
-                          </>
-                        ) : (
-                          <>
-                            <MessageCircle className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">হোয়াটসঅ্যাপ</span>
-                          </>
-                        )}
-                      </button>
-                    )}
-
-                    <span className="text-[11px] font-bold text-[#0E6B6B] flex items-center gap-0.5">
-                      <span>খাতা</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
+              );
+            })
+          )}
+        </div>
       </div>
 
       {/* Supplier Ledger & Details Modal */}
@@ -1089,7 +1534,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                   className="py-2.5 px-2 rounded-2xl bg-[#D32F2F] hover:bg-red-700 text-white font-black text-xs flex items-center justify-center gap-1 shadow-xs transition active:scale-95 cursor-pointer text-center"
                 >
                   <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
-                  <span>+ নতুন বাকি</span>
+                  <span>+ নতুন ক্রয়</span>
                 </button>
 
                 <button
@@ -1636,14 +2081,14 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
         </div>
       )}
 
-      {/* Add Due (Credit Purchase) Modal */}
+      {/* Unified Supplier Purchase Modal (New & Existing Supplier + Cash, Due & Damage) */}
       {showAddDueModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2.5 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
           <div className="w-full max-w-md my-auto rounded-[28px] bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden flex flex-col max-h-[95vh]">
-            <div className="p-4 bg-[#D32F2F] text-white flex items-center justify-between shrink-0">
+            <div className="p-4 bg-[#0E6B6B] text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
-                <ArrowUpRight className="w-5 h-5 text-rose-200" />
-                <h3 className="font-bold text-base">মহাজন থেকে নতুন বাকি ক্রয় যোগ</h3>
+                <Building2 className="w-5 h-5 text-emerald-200" />
+                <h3 className="font-bold text-base">মহাজন থেকে মাল ক্রয় ও হিসাব</h3>
               </div>
               <button
                 type="button"
@@ -1654,43 +2099,153 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
               </button>
             </div>
 
-            <form onSubmit={handleAddDueSubmit} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5">
-              {/* Zero-Setup AI Memo Scanner Card */}
-              <MemoScannerCard onMemoExtracted={handleDueMemoExtracted} />
+            <form onSubmit={handleAddDueSubmit} className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-3">
+              {/* Compact AI Memo Scanner Card (OCR preserved 100%) */}
+              <MemoScannerCard onMemoExtracted={handleDueMemoExtracted} compact />
 
-              {/* Supplier / মহাজন Field + Current Due Display */}
-              <div className="p-3 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-2">
-                <div className="flex items-center justify-between gap-2">
+              {/* Single Smart Supplier Input (Suggests Walk-in Cash + Saved Suppliers OR creates new supplier directly) */}
+              <div className="p-2.5 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-2 relative">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <label className="text-xs font-extrabold text-[#102A43]">
                     সাপ্লায়ার / মহাজন *
                   </label>
-                  {matchedDueSupplier && (
+                  {matchedDueSupplier ? (
                     <span className="text-xs font-black font-mono text-[#D32F2F]">
                       বর্তমান পাওনা: ৳{(matchedDueSupplier.totalDue ?? matchedDueSupplier.totalPayableDue ?? 0).toLocaleString()}
                     </span>
+                  ) : isWalkInCashSupplier ? (
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-[#E8F5E9] text-[#2E7D32]">
+                      নগদ ক্রয় (অ্যাকাউন্ট ছাড়াই)
+                    </span>
+                  ) : dueSupplierNameInput.trim() ? (
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-emerald-100 text-[#2E7D32]">
+                      নতুন সাপ্লায়ার তৈরি হবে
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    list="supplier-due-suggestions"
+                    value={dueSupplierNameInput}
+                    onFocus={() => setShowSupplierSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowSupplierSuggestions(false), 160)}
+                    onChange={(e) => {
+                      setDueFormError('');
+                      setShowSupplierSuggestions(true);
+                      setDueSupplierNameInput(e.target.value);
+                      const exact = suppliers.find(
+                        (s) => s.name.trim().toLowerCase() === e.target.value.trim().toLowerCase()
+                      );
+                      if (exact) {
+                        setActiveSupplier(exact);
+                        setSelectedSupplierId(exact.id);
+                      } else {
+                        setActiveSupplier(null);
+                      }
+                    }}
+                    placeholder="সাধারণ মহাজন (নগদ) বা সাপ্লায়ারের নাম লিখুন..."
+                    className="w-full pl-3 pr-8 py-2 rounded-xl border border-[#CBD5E1] bg-white text-xs sm:text-sm font-bold text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]"
+                  />
+                  {dueSupplierNameInput.length > 0 && (
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setDueFormError('');
+                        setDueSupplierNameInput('');
+                        setActiveSupplier(null);
+                        setShowSupplierSuggestions(true);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-slate-100 text-[#64748B] cursor-pointer"
+                      title="নাম মুছুন / অন্য সাপ্লায়ার বাছুন"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
+                  {/* Interactive Smart Suggestions List on Tap/Type */}
+                  {showSupplierSuggestions && (
+                    <div className="absolute left-0 right-0 top-full mt-1 z-30 max-h-44 overflow-y-auto rounded-xl bg-white border border-[#CBD5E1] shadow-lg divide-y divide-[#F1F5F9]">
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setDueFormError('');
+                          setActiveSupplier(null);
+                          setSelectedSupplierId(null);
+                          setDueSupplierNameInput(WALK_IN_CASH_SUPPLIER);
+                          setDueNewSupplierPhone('');
+                          setShowSupplierSuggestions(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-xs font-bold flex items-center justify-between hover:bg-[#E8F5E9] cursor-pointer ${
+                          isWalkInCashSupplier ? 'bg-[#E8F5E9]/70 text-[#2E7D32]' : 'text-[#102A43]'
+                        }`}
+                      >
+                        <span>{WALK_IN_CASH_SUPPLIER}</span>
+                        <span className="text-[10px] font-extrabold text-[#2E7D32]">নগদ ক্রয়</span>
+                      </button>
+
+                      {suppliers
+                        .filter((s) => {
+                          const q = dueSupplierNameInput.trim().toLowerCase();
+                          if (!q || q === WALK_IN_CASH_SUPPLIER.toLowerCase()) return true;
+                          return (
+                            s.name.toLowerCase().includes(q) ||
+                            (s.company && s.company.toLowerCase().includes(q))
+                          );
+                        })
+                        .map((s) => {
+                          const sDue = s.totalDue ?? s.totalPayableDue ?? 0;
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => {
+                                setDueFormError('');
+                                setActiveSupplier(s);
+                                setSelectedSupplierId(s.id);
+                                setDueSupplierNameInput(s.name);
+                                setDueNewSupplierPhone('');
+                                setShowSupplierSuggestions(false);
+                              }}
+                              className="w-full px-3 py-2 text-left text-xs font-bold flex items-center justify-between hover:bg-[#E0F2F1] text-[#102A43] cursor-pointer"
+                            >
+                              <span className="truncate pr-2">{s.name}</span>
+                              <span className={`text-[10px] font-mono font-extrabold shrink-0 ${sDue > 0 ? 'text-[#D32F2F]' : 'text-[#2E7D32]'}`}>
+                                {sDue > 0 ? `বাকি: ৳${sDue.toLocaleString()}` : 'বাকি: ৳০'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                    </div>
                   )}
                 </div>
-                <input
-                  type="text"
-                  required
-                  list="supplier-due-suggestions"
-                  value={dueSupplierNameInput}
-                  onChange={(e) => setDueSupplierNameInput(e.target.value)}
-                  placeholder="মহাজন বা কোম্পানির নাম লিখুন বা বাছুন..."
-                  className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] bg-white text-xs sm:text-sm font-bold text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#D32F2F]"
-                />
-                {suppliers.length > 0 && (
-                  <datalist id="supplier-due-suggestions">
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.name}>
-                        {s.company || s.address || 'সাপ্লায়ার'}
-                      </option>
-                    ))}
-                  </datalist>
+
+                <datalist id="supplier-due-suggestions">
+                  <option value={WALK_IN_CASH_SUPPLIER}>নগদ ক্রয়</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.name}>
+                      {s.company || s.address || 'সাপ্লায়ার'}
+                    </option>
+                  ))}
+                </datalist>
+
+                {!isWalkInCashSupplier && !matchedDueSupplier && dueSupplierNameInput.trim().length > 0 && (
+                  <input
+                    type="tel"
+                    value={dueNewSupplierPhone}
+                    onChange={(e) => setDueNewSupplierPhone(e.target.value)}
+                    placeholder="নতুন সাপ্লায়ারের মোবাইল নম্বর (ঐচ্ছিক)"
+                    className="w-full px-3 py-1.5 rounded-xl border border-emerald-200 bg-white text-xs font-mono text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]"
+                  />
                 )}
               </div>
 
-              {/* Extracted / Optional Itemized Products List */}
+              {/* 1. মোট নতুন মাল (৳) - Either Itemized List (OCR/Manual) or Single Amount */}
               {dueItems.length > 0 ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -1734,7 +2289,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                           value={item.productName}
                           onChange={(e) => handleDueItemChange(idx, 'productName', e.target.value)}
                           placeholder="পণ্যের নাম"
-                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] bg-white text-xs font-semibold text-[#102A43] focus:ring-2 focus:ring-[#D32F2F] focus:outline-none"
+                          className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] bg-white text-xs font-semibold text-[#102A43] focus:ring-2 focus:ring-[#0E6B6B] focus:outline-none"
                         />
                         <datalist id={`due-prod-suggestions-${idx}`}>
                           {products.map((p) => (
@@ -1783,18 +2338,23 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                           </div>
                         </div>
 
-                        <div className="text-right text-xs font-extrabold text-[#D32F2F]">
+                        <div className="text-right text-xs font-extrabold text-[#0E6B6B]">
                           মোট টাকা: ৳{(item.totalCost || 0).toLocaleString()}
                         </div>
                       </div>
                     ))}
+                  </div>
+
+                  <div className="px-3 py-2 rounded-xl bg-[#E0F2F1] border border-[#B2DFDB] flex items-center justify-between text-xs font-extrabold text-[#0E6B6B]">
+                    <span>মোট নতুন মাল (৳):</span>
+                    <span className="font-mono text-sm">৳{dueGrossTotal.toLocaleString()}</span>
                   </div>
                 </div>
               ) : (
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-bold text-[#102A43]">
-                      মোট নতুন মাল / বাকির পরিমাণ (৳) *
+                      *মোট নতুন মাল (৳)
                     </label>
                     <button
                       type="button"
@@ -1810,35 +2370,13 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                     min="1"
                     value={dueAmount}
                     onChange={(e) => setDueAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder="যেমন: 12000"
-                    className="w-full p-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] text-base font-black font-mono text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#D32F2F]"
+                    placeholder="যেমন: 1000"
+                    className="w-full p-3 rounded-2xl border border-[#CBD5E1] bg-[#F8FAFC] text-base font-black font-mono text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B] focus:bg-white"
                   />
                 </div>
               )}
 
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-[#102A43]">
-                    রসিদ বা ভাউচার বিবরণ (ঐচ্ছিক)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setDueNote('ভুল হিসাব সংশোধন')}
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#FFEBEE] text-[#D32F2F] hover:bg-rose-100 cursor-pointer"
-                  >
-                    + ভুল হিসাব সংশোধন
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  value={dueNote}
-                  onChange={(e) => setDueNote(e.target.value)}
-                  placeholder="যেমন: মিনিকেট চাল ৫ বস্তা চালান নং #551 বা ভুল হিসাব সংশোধন"
-                  className="w-full p-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#D32F2F]"
-                />
-              </div>
-
-              {/* Direct Damage Return Deduction Field */}
+              {/* 2. ড্যামেজ মাল ফেরত বাদ (৳) (ঐচ্ছিক) */}
               <div>
                 <label className="block text-xs font-bold text-[#102A43] mb-1">
                   ড্যামেজ মাল ফেরত বাদ (৳) (ঐচ্ছিক)
@@ -1849,42 +2387,145 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                   step="any"
                   value={dueDamageDeduction}
                   onChange={(e) => setDueDamageDeduction(e.target.value)}
-                  placeholder="যেমন: 200"
+                  placeholder="যেমন: 100"
                   className="w-full p-2.5 rounded-xl border border-amber-400 bg-amber-50/40 text-xs sm:text-sm font-bold text-[#102A43] placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white"
                 />
               </div>
 
-              {/* Automatic Live Calculation Preview */}
-              {dueGrossTotal > 0 && (
-                <div className="p-3 rounded-2xl bg-[#FFEBEE] border border-rose-200 space-y-1 text-xs">
-                  {dueDamageAmount > 0 && (
-                    <>
-                      <div className="flex justify-between items-center text-slate-700 font-bold">
-                        <span>মোট নতুন মাল:</span>
-                        <span className="font-mono">৳{dueGrossTotal.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-amber-800 font-bold">
-                        <span>ড্যামেজ মাল ফেরত বাদ:</span>
-                        <span className="font-mono">-৳{dueDamageAmount.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-[#0E6B6B] font-extrabold pt-1 border-t border-rose-200">
-                        <span>নিট নতুন বাকি:</span>
-                        <span className="font-mono text-sm">৳{dueNetAmount.toLocaleString()}</span>
-                      </div>
-                    </>
-                  )}
-                  <div className="flex justify-between items-center pt-0.5">
-                    <span className="font-semibold text-[#D32F2F]">
-                      যোগের পর মোট দেনা হবে:
-                    </span>
-                    <span className="font-mono font-black text-sm text-[#D32F2F]">
-                      ৳{(
-                        ((matchedDueSupplier?.totalDue ?? matchedDueSupplier?.totalPayableDue ?? 0) + dueNetAmount)
-                      ).toLocaleString()}
-                    </span>
+              {/* 3. নগদ পরিশোধ / জমা (৳) */}
+              <div>
+                <div className="flex items-center justify-between gap-1.5 mb-1 flex-wrap">
+                  <label className="block text-xs font-bold text-[#102A43]">
+                    নগদ পরিশোধ / জমা (৳)
+                  </label>
+                  <div className="flex items-center gap-1">
+                    {dueNetAmount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDueFormError('');
+                          setDueCashPaid(String(dueNetAmount));
+                        }}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#E8F5E9] text-[#2E7D32] hover:bg-emerald-200 cursor-pointer"
+                      >
+                        পুরো নগদ (৳{dueNetAmount.toLocaleString()})
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDueFormError('');
+                        setDueCashPaid('0');
+                      }}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#FFEBEE] text-[#D32F2F] hover:bg-rose-200 cursor-pointer"
+                    >
+                      সব বাকি (৳০)
+                    </button>
                   </div>
                 </div>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={dueCashPaid}
+                  onChange={(e) => {
+                    setDueFormError('');
+                    setDueCashPaid(e.target.value);
+                  }}
+                  placeholder="0"
+                  className="w-full p-2.5 rounded-xl border border-emerald-300 bg-emerald-50/30 text-xs sm:text-sm font-black font-mono text-[#2E7D32] placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-[#2E7D32] focus:bg-white"
+                />
+                {dueCashPaidAmount > dueNetAmount && dueNetAmount > 0 && (
+                  <p className="text-[10px] font-bold text-amber-700 mt-1">
+                    সর্বোচ্চ নিট বিল ৳{dueNetAmount.toLocaleString()} পর্যন্ত নগদ পরিশোধ ধরা হবে।
+                  </p>
+                )}
+              </div>
+
+              {/* 4. অবশিষ্ট বাকি (৳) - Auto-calculated Read-only Summary Box */}
+              <div
+                className={`p-3 rounded-2xl border space-y-1.5 text-xs ${
+                  dueRemainingDueAmount === 0 && dueGrossTotal > 0
+                    ? 'bg-[#E8F5E9] border-emerald-200'
+                    : 'bg-[#FFEBEE] border-rose-200'
+                }`}
+              >
+                <div className="flex justify-between items-center">
+                  <span className="font-extrabold text-[#102A43]">
+                    অবশিষ্ট বাকি (৳):
+                  </span>
+                  <span
+                    className={`font-mono font-black text-base ${
+                      dueRemainingDueAmount === 0 ? 'text-[#2E7D32]' : 'text-[#D32F2F]'
+                    }`}
+                  >
+                    ৳{dueRemainingDueAmount.toLocaleString()}
+                  </span>
+                </div>
+
+                {dueGrossTotal > 0 && (
+                  <div
+                    className={`pt-1.5 border-t space-y-1 ${
+                      dueRemainingDueAmount === 0 ? 'border-emerald-200' : 'border-rose-200'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center text-slate-700 font-semibold">
+                      <span>মোট নতুন মাল:</span>
+                      <span className="font-mono font-bold">৳{dueGrossTotal.toLocaleString()}</span>
+                    </div>
+                    {dueDamageAmount > 0 && (
+                      <div className="flex justify-between items-center text-amber-800 font-semibold">
+                        <span>ড্যামেজ মাল ফেরত বাদ:</span>
+                        <span className="font-mono font-bold">-৳{dueDamageAmount.toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center text-[#0E6B6B] font-bold">
+                      <span>মূল পুঁজিতে যোগ (নিট মাল):</span>
+                      <span className="font-mono">+৳{dueNetAmount.toLocaleString()}</span>
+                    </div>
+                    {effectiveDueCashPaid > 0 && (
+                      <div className="flex justify-between items-center text-[#2E7D32] font-bold">
+                        <span>ক্যাশ বাক্স থেকে নগদ প্রদান:</span>
+                        <span className="font-mono">-৳{effectiveDueCashPaid.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {!isWalkInCashSupplier && (matchedDueSupplier || dueRemainingDueAmount > 0) && (
+                      <div className="flex justify-between items-center pt-1 border-t border-rose-200/70">
+                        <span className="font-bold text-[#D32F2F]">
+                          হিসাব শেষে মহাজনের মোট পাওনা:
+                        </span>
+                        <span className="font-mono font-black text-sm text-[#D32F2F]">
+                          ৳{Math.max(
+                            0,
+                            (matchedDueSupplier?.totalDue ?? matchedDueSupplier?.totalPayableDue ?? 0) +
+                              dueRemainingDueAmount
+                          ).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {dueFormError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-300 text-[#D32F2F] text-xs font-bold flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{dueFormError}</span>
+                </div>
               )}
+
+              <div>
+                <label className="block text-xs font-bold text-[#102A43] mb-1">
+                  রসিদ বা ভাউচার বিবরণ (ঐচ্ছিক)
+                </label>
+                <input
+                  type="text"
+                  value={dueNote}
+                  onChange={(e) => setDueNote(e.target.value)}
+                  placeholder="যেমন: মিনিকেট চাল ৫ বস্তা চালান নং #551"
+                  className="w-full p-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]"
+                />
+              </div>
 
               <div className="pt-1 flex gap-2">
                 <button
@@ -1896,9 +2537,9 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-3 rounded-xl bg-[#D32F2F] hover:bg-red-700 text-white text-xs font-black shadow-xs transition active:scale-95 cursor-pointer"
+                  className="flex-1 py-3 rounded-xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white text-xs font-black shadow-xs transition active:scale-95 cursor-pointer"
                 >
-                  বাকি যুক্ত করুন
+                  ক্রয় ও হিসাব সেভ করুন
                 </button>
               </div>
             </form>

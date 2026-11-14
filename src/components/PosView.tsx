@@ -11,6 +11,8 @@ import {
   BulkPurchase,
   PurchaseRecord,
   OwnerTransaction,
+  BakiTransaction,
+  SupplierTransaction,
 } from '../types';
 import { translations } from '../i18n/translations';
 import { playBarcodeBeep, playSuccessChime } from '../utils/audio';
@@ -61,6 +63,8 @@ interface Props {
   bulkPurchases?: BulkPurchase[];
   purchases?: PurchaseRecord[];
   ownerTransactions?: OwnerTransaction[];
+  bakiTransactions?: BakiTransaction[];
+  supplierTransactions?: SupplierTransaction[];
 }
 
 export const PosView: React.FC<Props> = ({
@@ -82,6 +86,8 @@ export const PosView: React.FC<Props> = ({
   bulkPurchases = [],
   purchases = [],
   ownerTransactions = [],
+  bakiTransactions = [],
+  supplierTransactions = [],
 }) => {
   const t = translations[language];
 
@@ -259,6 +265,7 @@ export const PosView: React.FC<Props> = ({
   // Quick preset paid buttons
   const quickPaidPresets = [
     { label: language === 'bn' ? 'ঠিক ঠিক' : 'Exact', val: grandTotal },
+    { label: language === 'bn' ? 'বাকি (৳০)' : 'Due (৳0)', val: 0 },
     { label: '৳৫০', val: 50 },
     { label: '৳১০০', val: 100 },
     { label: '৳২০০', val: 200 },
@@ -898,6 +905,8 @@ export const PosView: React.FC<Props> = ({
         bulkPurchases={bulkPurchases}
         purchases={purchases}
         ownerTransactions={ownerTransactions}
+        bakiTransactions={bakiTransactions}
+        supplierTransactions={supplierTransactions}
       />
     </div>
   );

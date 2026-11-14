@@ -62,12 +62,20 @@ export const ReceiptModal: React.FC<Props> = ({
       )
       .join('\n');
 
+    const paymentTypeLabel =
+      sale.dueAmount > 0
+        ? sale.paidAmount > 0
+          ? 'আংশিক বাকি'
+          : 'বাকি বিক্রি'
+        : 'নগদ বিক্রি';
+
     return `🧾 *${profile.shopName || 'সহজ দোকান'}*
 📍 ${profile.address || 'বাজার'} | 📞 ${profile.phone}
 ---------------------------------
 ইনভয়েস: #${sale.invoiceNo}
 তারিখ: ${formattedDate}
 গ্রাহক: ${sale.customerName || 'নগদ ক্রেতা'}
+পেমেন্ট টাইপ: ${paymentTypeLabel}
 ---------------------------------
 ${itemsText}
 ---------------------------------
@@ -264,6 +272,22 @@ ${sale.dueAmount > 0 ? `*বাকি টাকা: ৳${sale.dueAmount}*` : `�
               <span className="font-semibold">
                 {sale.customerName || t.cashCustomer}
                 {sale.customerPhone ? ` (${sale.customerPhone})` : ''}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-600">পেমেন্ট টাইপ:</span>
+              <span
+                className={`font-bold ${
+                  sale.dueAmount > 0
+                    ? 'text-[#D32F2F]'
+                    : 'text-[#2E7D32]'
+                }`}
+              >
+                {sale.dueAmount > 0
+                  ? sale.paidAmount > 0
+                    ? 'আংশিক বাকি'
+                    : 'বাকি বিক্রি'
+                  : 'নগদ বিক্রি'}
               </span>
             </div>
           </div>

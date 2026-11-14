@@ -303,7 +303,12 @@ export const CashReconciliationManager: React.FC<Props> = ({
     const totalProfit = Math.round(
       daySalesList.reduce((sum, s) => {
         const isQuick = s.items && s.items.some((it) => it.productId === 'quick_sale_entry');
-        if (isQuick && (s.profit === undefined || s.profit === 0) && (s.grandTotal || 0) > 0) {
+        if (
+          isQuick &&
+          (s.profit === undefined ||
+            (s.profit === 0 && (s.totalCost === undefined || s.totalCost === 0))) &&
+          (s.grandTotal || 0) > 0
+        ) {
           return sum + Math.round((s.grandTotal || 0) * (defaultMargin / 100));
         }
         return sum + (s.profit || 0);
@@ -596,7 +601,12 @@ export const CashReconciliationManager: React.FC<Props> = ({
     const totalProfit = Math.round(
       monthSalesList.reduce((sum, s) => {
         const isQuick = s.items && s.items.some((it) => it.productId === 'quick_sale_entry');
-        if (isQuick && (s.profit === undefined || s.profit === 0) && (s.grandTotal || 0) > 0) {
+        if (
+          isQuick &&
+          (s.profit === undefined ||
+            (s.profit === 0 && (s.totalCost === undefined || s.totalCost === 0))) &&
+          (s.grandTotal || 0) > 0
+        ) {
           return sum + Math.round((s.grandTotal || 0) * (defaultMargin / 100));
         }
         return sum + (s.profit || 0);

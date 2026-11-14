@@ -8,6 +8,8 @@ import {
   BulkPurchase,
   PurchaseRecord,
   OwnerTransaction,
+  BakiTransaction,
+  SupplierTransaction,
 } from '../types';
 import { playSuccessChime } from '../utils/audio';
 import { calculateRunningCapital } from './RunningCapitalCard';
@@ -45,6 +47,8 @@ interface Props {
   bulkPurchases?: BulkPurchase[];
   purchases?: PurchaseRecord[];
   ownerTransactions?: OwnerTransaction[];
+  bakiTransactions?: BakiTransaction[];
+  supplierTransactions?: SupplierTransaction[];
 }
 
 export const QuickSaleModal: React.FC<Props> = ({
@@ -64,6 +68,8 @@ export const QuickSaleModal: React.FC<Props> = ({
   bulkPurchases = [],
   purchases = [],
   ownerTransactions = [],
+  bakiTransactions = [],
+  supplierTransactions = [],
 }) => {
   // Active tab inside modal: 'sale' (দ্রুত বিক্রি) | 'return' (পণ্য ফেরত)
   const [activeMode, setActiveMode] = useState<'sale' | 'return'>(initialMode);
@@ -139,7 +145,12 @@ export const QuickSaleModal: React.FC<Props> = ({
       todaySales.reduce((sum, s) => {
         const isQuick =
           s.items && s.items.some((it) => it.productId === 'quick_sale_entry');
-        if (isQuick && (s.profit === undefined || s.profit === 0) && (s.grandTotal || 0) > 0) {
+        if (
+          isQuick &&
+          (s.profit === undefined ||
+            (s.profit === 0 && (s.totalCost === undefined || s.totalCost === 0))) &&
+          (s.grandTotal || 0) > 0
+        ) {
           return sum + Math.round((s.grandTotal || 0) * (defaultMargin / 100));
         }
         return sum + (s.profit || 0);
@@ -156,8 +167,21 @@ export const QuickSaleModal: React.FC<Props> = ({
         purchases,
         expenses,
         ownerTransactions,
+        customers,
+        bakiTransactions,
+        supplierTransactions,
       }),
-    [initialStoreCapital, sales, bulkPurchases, purchases, expenses, ownerTransactions, customers]
+    [
+      initialStoreCapital,
+      sales,
+      bulkPurchases,
+      purchases,
+      expenses,
+      ownerTransactions,
+      customers,
+      bakiTransactions,
+      supplierTransactions,
+    ]
   );
 
   if (!isOpen) return null;
@@ -171,7 +195,9 @@ export const QuickSaleModal: React.FC<Props> = ({
     if (profitMode === '10') return Math.round(numericAmount * 0.1);
     if (profitMode === '15') return Math.round(numericAmount * 0.15);
     if (profitMode === '20') return Math.round(numericAmount * 0.2);
-    if (profitMode === 'custom') return Math.max(0, Number(customProfitInput) || 0);
+    if (profitMode === 'custom') {
+      return Math.min(numericAmount, Math.max(0, Math.round(Number(customProfitInput) || 0)));
+    }
     return 0;
   })();
 

@@ -293,7 +293,10 @@ export const ReportsView: React.FC<Props> = ({
       return Number(s.profit) || 0;
     }
     if (isQuickSaleRecord(s)) {
-      if (s.profit !== undefined && s.profit > 0) {
+      if (
+        s.profit !== undefined &&
+        (s.profit > 0 || (s.totalCost !== undefined && s.totalCost > 0))
+      ) {
         return Math.round(s.profit);
       }
       return Math.round((Number(s.grandTotal) || 0) * (defaultQuickSaleMargin / 100));
@@ -1016,6 +1019,8 @@ export const ReportsView: React.FC<Props> = ({
           bulkPurchases={bulkPurchases}
           purchases={purchases}
           ownerTransactions={ownerTransactions}
+          bakiTransactions={bakiTransactions}
+          supplierTransactions={supplierTransactions}
         />
       )}
 
@@ -1198,9 +1203,30 @@ export const ReportsView: React.FC<Props> = ({
                     editItems.reduce((sum, it) => sum + (it.costPrice || 0) * it.quantity, 0) * 100
                   ) / 100;
                   const isQuick = editItems.some((it) => it.productId === 'quick_sale_entry');
+                  const oldGrand = Number(saleToEdit.grandTotal) || 0;
                   const newProfit = isQuick
-                    ? Math.round(newGrandTotal * (defaultQuickSaleMargin / 100))
+                    ? newGrandTotal === oldGrand && saleToEdit.profit !== undefined
+                      ? Math.round(saleToEdit.profit)
+                      : oldGrand > 0 && saleToEdit.profit !== undefined
+                      ? Math.max(0, Math.round((saleToEdit.profit / oldGrand) * newGrandTotal))
+                      : Math.round(newGrandTotal * (defaultQuickSaleMargin / 100))
                     : Math.round(newGrandTotal - newTotalCost);
+                  const finalTotalCost = isQuick
+                    ? Math.max(0, Math.round(newGrandTotal - newProfit))
+                    : newTotalCost;
+                  const finalEditItems = isQuick
+                    ? editItems.map((it, idx) =>
+                        idx === 0
+                          ? {
+                              ...it,
+                              costPrice:
+                                it.quantity > 0
+                                  ? Math.round((finalTotalCost / it.quantity) * 100) / 100
+                                  : finalTotalCost,
+                            }
+                          : it
+                      )
+                    : editItems;
                   const paidVal =
                     editPaidAmount !== '' ? Math.max(0, Number(editPaidAmount) || 0) : newGrandTotal;
                   const newDue = Math.max(0, newGrandTotal - paidVal);
@@ -1208,11 +1234,11 @@ export const ReportsView: React.FC<Props> = ({
 
                   const updated: Sale = {
                     ...saleToEdit,
-                    items: editItems,
+                    items: finalEditItems,
                     subTotal: newSubTotal,
                     discount: Number(editDiscount) || 0,
                     grandTotal: newGrandTotal,
-                    totalCost: newTotalCost,
+                    totalCost: finalTotalCost,
                     profit: newProfit,
                     paidAmount: paidVal,
                     dueAmount: newDue,

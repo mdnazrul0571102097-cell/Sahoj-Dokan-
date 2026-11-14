@@ -126,6 +126,11 @@ export function buildEscPosReceipt(sale: Sale, profile: ShopProfile, paperWidth:
   enc.align('left');
   enc.tableRow(`Inv: #${sale.invoiceNo}`, new Date(sale.date).toLocaleDateString('en-GB'), paperWidth);
   enc.tableRow(`Customer:`, sale.customerName || 'Cash Buyer', paperWidth);
+  enc.tableRow(
+    `Payment:`,
+    sale.dueAmount > 0 ? (sale.paidAmount > 0 ? 'Partial Due' : 'Due Sale (Baki)') : 'Cash Sale',
+    paperWidth
+  );
   enc.divider('-', paperWidth);
 
   // 3. Table Header
