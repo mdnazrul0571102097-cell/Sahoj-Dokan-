@@ -12,7 +12,6 @@ import {
   SupplierTransaction,
 } from '../types';
 import { playSuccessChime } from '../utils/audio';
-import { calculateRunningCapital } from './RunningCapitalCard';
 import { DB } from '../storage/db';
 import {
   Zap,
@@ -25,9 +24,7 @@ import {
   Plus,
   ShoppingBag,
   TrendingUp,
-  Landmark,
-  Edit3,
-  Check,
+  Calendar,
 } from 'lucide-react';
 
 interface Props {
@@ -71,21 +68,38 @@ export const QuickSaleModal: React.FC<Props> = ({
   bakiTransactions = [],
   supplierTransactions = [],
 }) => {
+  const getLocalDateStr = (d?: string | Date): string => {
+    if (!d) return '';
+    try {
+      const dt = typeof d === 'string' ? new Date(d) : d;
+      if (isNaN(dt.getTime())) return typeof d === 'string' ? d.slice(0, 10) : '';
+      const year = dt.getFullYear();
+      const month = String(dt.getMonth() + 1).padStart(2, '0');
+      const day = String(dt.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    } catch {
+      return typeof d === 'string' ? d.slice(0, 10) : '';
+    }
+  };
+
+  const buildIsoForSelectedDate = (ymd: string): string => {
+    const todayYmd = getLocalDateStr(new Date());
+    if (!ymd || ymd === todayYmd) return new Date().toISOString();
+    const parts = ymd.split('-').map(Number);
+    if (parts.length === 3 && !parts.some(isNaN)) {
+      const dt = new Date();
+      dt.setFullYear(parts[0], parts[1] - 1, parts[2]);
+      if (!isNaN(dt.getTime())) return dt.toISOString();
+    }
+    return new Date().toISOString();
+  };
+
   // Active tab inside modal: 'sale' (দ্রুত বিক্রি) | 'return' (পণ্য ফেরত)
   const [activeMode, setActiveMode] = useState<'sale' | 'return'>(initialMode);
-  const [isEditingCapital, setIsEditingCapital] = useState(false);
-  const [capitalInputVal, setCapitalInputVal] = useState<string>(
-    initialStoreCapital > 0 ? String(initialStoreCapital) : ''
-  );
-
-  useEffect(() => {
-    if (isOpen) {
-      setActiveMode(initialMode);
-    }
-  }, [isOpen, initialMode]);
 
   // Quick Sale States
   const defaultMargin = DB.getQuickSaleProfitMargin();
+  const [saleDate, setSaleDate] = useState<string>(() => getLocalDateStr(new Date()));
   const [amountInput, setAmountInput] = useState<string>('');
   const [noteInput, setNoteInput] = useState<string>('');
   const [profitMode, setProfitMode] = useState<'default' | '10' | '15' | '20' | 'custom' | 'none'>('default');
@@ -98,6 +112,7 @@ export const QuickSaleModal: React.FC<Props> = ({
   const [newCustPhone, setNewCustPhone] = useState('');
 
   // Product Return States (পণ্য ফেরত)
+  const [returnDate, setReturnDate] = useState<string>(() => getLocalDateStr(new Date()));
   const [returnAmountInput, setReturnAmountInput] = useState<string>('');
   const [returnNoteInput, setReturnNoteInput] = useState<string>('');
   const [returnDeductionType, setReturnDeductionType] = useState<
@@ -112,19 +127,14 @@ export const QuickSaleModal: React.FC<Props> = ({
 
   const [justSavedToast, setJustSavedToast] = useState<string>('');
 
-  const getLocalDateStr = (d?: string | Date): string => {
-    if (!d) return '';
-    try {
-      const dt = typeof d === 'string' ? new Date(d) : d;
-      if (isNaN(dt.getTime())) return typeof d === 'string' ? d.slice(0, 10) : '';
-      const year = dt.getFullYear();
-      const month = String(dt.getMonth() + 1).padStart(2, '0');
-      const day = String(dt.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    } catch {
-      return typeof d === 'string' ? d.slice(0, 10) : '';
+  useEffect(() => {
+    if (isOpen) {
+      setActiveMode(initialMode);
+      const todayYmd = getLocalDateStr(new Date());
+      setSaleDate(todayYmd);
+      setReturnDate(todayYmd);
     }
-  };
+  }, [isOpen, initialMode]);
 
   const todayStr = getLocalDateStr(new Date());
 
@@ -157,32 +167,6 @@ export const QuickSaleModal: React.FC<Props> = ({
       }, 0)
     );
   }, [todaySales, defaultMargin]);
-
-  const capitalBreakdown = useMemo(
-    () =>
-      calculateRunningCapital({
-        initialStoreCapital,
-        sales,
-        bulkPurchases,
-        purchases,
-        expenses,
-        ownerTransactions,
-        customers,
-        bakiTransactions,
-        supplierTransactions,
-      }),
-    [
-      initialStoreCapital,
-      sales,
-      bulkPurchases,
-      purchases,
-      expenses,
-      ownerTransactions,
-      customers,
-      bakiTransactions,
-      supplierTransactions,
-    ]
-  );
 
   if (!isOpen) return null;
 
@@ -304,7 +288,7 @@ export const QuickSaleModal: React.FC<Props> = ({
     const newSale: Sale = {
       id: `sale_${Date.now()}`,
       invoiceNo: `${Math.floor(100000 + Math.random() * 900000)}`,
-      date: new Date().toISOString(),
+      date: buildIsoForSelectedDate(saleDate),
       items: [
         {
           productId: 'quick_sale_entry',
@@ -363,7 +347,7 @@ export const QuickSaleModal: React.FC<Props> = ({
     const returnSale: Sale = {
       id: `return_${Date.now()}`,
       invoiceNo: `RET-${Math.floor(100000 + Math.random() * 900000)}`,
-      date: new Date().toISOString(),
+      date: buildIsoForSelectedDate(returnDate),
       items: [
         {
           productId: selectedProd ? selectedProd.id : 'product_return_entry',
@@ -514,86 +498,27 @@ export const QuickSaleModal: React.FC<Props> = ({
           </button>
         </div>
 
-        {/* ২. আজকের হিসাব ও চলমান পুঁজি বার (Virtual Goods Capital + Drawer Cash + Profit + Total Capital) */}
-        <div className="px-2.5 py-1.5 bg-[#E0F2F1] border-b border-[#B2DFDB] shrink-0 space-y-1">
-          <div className="flex items-center justify-between gap-1.5 text-[11px] flex-wrap">
-            <div className="flex items-center gap-1 min-w-0">
-              <ShoppingBag className="w-3 h-3 text-[#0E6B6B] shrink-0" />
-              <span className="font-bold text-[#102A43] truncate">আজকের বিক্রি:</span>
-              <span className="font-black text-[#0E6B6B] tabular-nums">
-                ৳{todayTotalAmount.toLocaleString('bn-BD')}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-1 min-w-0">
-              <TrendingUp className="w-3 h-3 text-[#2E7D32] shrink-0" />
-              <span className="font-bold text-[#102A43] truncate">লাভ:</span>
-              <span
-                className={`font-black tabular-nums ${
-                  todayTotalProfit >= 0 ? 'text-[#2E7D32]' : 'text-[#D32F2F]'
-                }`}
-              >
-                ৳{todayTotalProfit.toLocaleString('bn-BD')}
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setCapitalInputVal(
-                  initialStoreCapital > 0 ? String(initialStoreCapital) : ''
-                );
-                setIsEditingCapital(!isEditingCapital);
-              }}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/80 hover:bg-white border border-[#80CBC4] cursor-pointer transition shrink-0"
-              title="শুরুর মালের পুঁজি সেট বা এডিট করতে ট্যাপ করুন"
-            >
-              <Landmark className="w-3 h-3 text-[#0E6B6B]" />
-              <span className="font-bold text-[#102A43]">শুরুর পুঁজি:</span>
-              <span className="font-black text-[#0E6B6B] tabular-nums">
-                ৳{capitalBreakdown.initialCapital.toLocaleString('bn-BD')}
-              </span>
-              <Edit3 className="w-2.5 h-2.5 text-[#0E6B6B]" />
-            </button>
+        {/* ২. এক লাইনে আজকের বিক্রি ও লাভ */}
+        <div className="px-3 py-1.5 bg-[#E0F2F1] border-b border-[#B2DFDB] shrink-0 flex items-center justify-between gap-2 text-[11px]">
+          <div className="flex items-center gap-1 min-w-0">
+            <ShoppingBag className="w-3.5 h-3.5 text-[#0E6B6B] shrink-0" />
+            <span className="font-bold text-[#102A43] truncate">আজকের বিক্রি:</span>
+            <span className="font-black text-[#0E6B6B] tabular-nums">
+              ৳{todayTotalAmount.toLocaleString('bn-BD')}
+            </span>
           </div>
 
-          <div className="px-2 py-1 rounded-lg bg-white/85 border border-[#B2DFDB] text-[10.5px] font-black text-[#102A43] flex items-center justify-between">
-            <span>দোকানের মোট পুঁজি ট্র্যাকার</span>
-            <span className="text-[#0E6B6B]">মোট পুঁজি: ৳{capitalBreakdown.currentRunningCapital.toLocaleString('bn-BD')}</span>
-          </div>
-
-          {isEditingCapital && onSaveInitialStoreCapital && (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const val = Math.max(0, Math.round(Number(capitalInputVal) || 0));
-                onSaveInitialStoreCapital(val);
-                playSuccessChime();
-                setIsEditingCapital(false);
-              }}
-              className="mt-1 pt-1 border-t border-[#B2DFDB] flex items-center justify-between gap-1.5"
+          <div className="flex items-center gap-1 min-w-0">
+            <TrendingUp className="w-3.5 h-3.5 text-[#2E7D32] shrink-0" />
+            <span className="font-bold text-[#102A43] truncate">লাভ:</span>
+            <span
+              className={`font-black tabular-nums ${
+                todayTotalProfit >= 0 ? 'text-[#2E7D32]' : 'text-[#D32F2F]'
+              }`}
             >
-              <span className="text-[10.5px] font-extrabold text-[#102A43] whitespace-nowrap">
-                শুরুর মালের পুঁজি (৳):
-              </span>
-              <input
-                type="number"
-                inputMode="numeric"
-                min="0"
-                value={capitalInputVal}
-                onChange={(e) => setCapitalInputVal(e.target.value)}
-                placeholder="যেমন: 10000"
-                className="flex-1 px-2 py-0.5 rounded-lg bg-white border border-[#0E6B6B] text-xs font-black text-[#102A43] focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="px-2 py-0.5 rounded-lg bg-[#0E6B6B] text-white text-[10.5px] font-extrabold flex items-center gap-0.5 cursor-pointer"
-              >
-                <Check className="w-3 h-3" />
-                <span>সেভ</span>
-              </button>
-            </form>
-          )}
+              ৳{todayTotalProfit.toLocaleString('bn-BD')}
+            </span>
+          </div>
         </div>
 
         {/* Compact Body */}
@@ -610,6 +535,31 @@ export const QuickSaleModal: React.FC<Props> = ({
           {activeMode === 'sale' ? (
             <>
               {/* ================= QUICK SALE FORM (COMPACT) ================= */}
+              {/* তারিখ সিলেক্ট (অটো আজকের তারিখ + ম্যানুয়াল পরিবর্তনযোগ্য) */}
+              <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+                <label className="text-[11px] font-extrabold text-[#102A43] flex items-center gap-1.5 shrink-0">
+                  <Calendar className="w-3.5 h-3.5 text-[#0E6B6B]" />
+                  <span>বিক্রির তারিখ</span>
+                </label>
+                <div className="flex items-center gap-1.5">
+                  {saleDate !== todayStr && (
+                    <button
+                      type="button"
+                      onClick={() => setSaleDate(todayStr)}
+                      className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] cursor-pointer"
+                    >
+                      আজ
+                    </button>
+                  )}
+                  <input
+                    type="date"
+                    value={saleDate}
+                    onChange={(e) => setSaleDate(e.target.value || todayStr)}
+                    className="px-2 py-1 rounded-lg border border-[#CBD5E1] bg-white text-xs font-bold text-[#102A43] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]"
+                  />
+                </div>
+              </div>
+
               {/* ৩. টাকার ইনপুট ও কুইক বাটন (Amount & Quick Chips) */}
               <div className="p-2.5 rounded-xl bg-[#F8FAFC] border border-[#0E6B6B]/30 space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -842,6 +792,31 @@ export const QuickSaleModal: React.FC<Props> = ({
           ) : (
             <>
               {/* ================= PRODUCT RETURN FORM (COMPACT পণ্য ফেরত) ================= */}
+              {/* তারিখ সিলেক্ট (অটো আজকের তারিখ + ম্যানুয়াল পরিবর্তনযোগ্য) */}
+              <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+                <label className="text-[11px] font-extrabold text-[#102A43] flex items-center gap-1.5 shrink-0">
+                  <Calendar className="w-3.5 h-3.5 text-[#D32F2F]" />
+                  <span>ফেরতের তারিখ</span>
+                </label>
+                <div className="flex items-center gap-1.5">
+                  {returnDate !== todayStr && (
+                    <button
+                      type="button"
+                      onClick={() => setReturnDate(todayStr)}
+                      className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-rose-50 text-[#D32F2F] hover:bg-rose-100 cursor-pointer"
+                    >
+                      আজ
+                    </button>
+                  )}
+                  <input
+                    type="date"
+                    value={returnDate}
+                    onChange={(e) => setReturnDate(e.target.value || todayStr)}
+                    className="px-2 py-1 rounded-lg border border-[#CBD5E1] bg-white text-xs font-bold text-[#102A43] focus:outline-none focus:ring-2 focus:ring-[#D32F2F]"
+                  />
+                </div>
+              </div>
+
               {/* ১. ফেরতের টাকার ইনপুট ও কুইক বাটন */}
               <div className="p-2.5 rounded-xl bg-[#FFF5F5] border border-[#D32F2F]/30 space-y-1.5">
                 <div className="flex items-center justify-between">
