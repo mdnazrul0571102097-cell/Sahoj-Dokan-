@@ -161,7 +161,8 @@ export const SettingsView: React.FC<Props> = ({
   const [address, setAddress] = useState(profile.address || '');
   const [pin, setPin] = useState(profile.pin || '1234');
 
-  // 3-field PIN change states
+  // App PIN Lock modal & form states
+  const [modalLockToggle, setModalLockToggle] = useState(false);
   const [oldPin, setOldPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -530,34 +531,101 @@ export const SettingsView: React.FC<Props> = ({
     showToast('দোকানের প্রোফাইল তথ্য সফলভাবে আপডেট হয়েছে!', 'success');
   };
 
-  const handleChangePinSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPinError('');
+  const isPinLockEnabled = Boolean(
+    profile.isPinLockEnabled && profile.appLockPin && profile.appLockPin.trim().length === 4
+  );
 
-    const currentSavedPin = profile.pin || '1234';
-    if (oldPin.trim() !== currentSavedPin) {
-      setPinError('বর্তমান পিনটি সঠিক নয়! সঠিক পিন দিয়ে আবার চেষ্টা করুন।');
-      return;
-    }
-    if (newPin.length !== 4) {
-      setPinError('নতুন পিন অবশ্যই ৪ সংখ্যার হতে হবে!');
-      return;
-    }
-    if (newPin !== confirmPin) {
-      setPinError('নতুন পিন এবং নিশ্চিতকরণ পিন মিলেনি!');
-      return;
-    }
-
-    const updated: ShopProfile = { ...profile, pin: newPin };
-    onSaveProfile(updated);
-    DB.saveProfile(updated);
-    setPin(newPin);
-    setShowPinModal(false);
+  const openPinModal = (initialToggleState: boolean) => {
     setOldPin('');
     setNewPin('');
     setConfirmPin('');
     setPinError('');
-    showToast('লগইন পিন সফলভাবে পরিবর্তন করা হয়েছে!', 'success');
+    setModalLockToggle(initialToggleState);
+    setShowPinModal(true);
+  };
+
+  const handlePinModalSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinError('');
+
+    // Case A: Lock is currently ON and user wants to turn it OFF -> verify current PIN first
+    if (isPinLockEnabled && !modalLockToggle) {
+      const currentAppPin = (profile.appLockPin || '').trim();
+      if (oldPin.trim() !== currentAppPin) {
+        setPinError('বর্তমান পিনটি সঠিক নয়! সঠিক পিন দিয়ে আবার চেষ্টা করুন।');
+        return;
+      }
+      const updated: ShopProfile = {
+        ...profile,
+        appLockPin: '',
+        isPinLockEnabled: false,
+      };
+      onSaveProfile(updated);
+      DB.saveProfile(updated);
+      setShowPinModal(false);
+      setOldPin('');
+      setNewPin('');
+      setConfirmPin('');
+      setPinError('');
+      showToast('অ্যাপ পিন লক বন্ধ করা হয়েছে। এখন পিন ছাড়াই অ্যাপ ওপেন হবে।', 'info');
+      return;
+    }
+
+    // Case B: Lock is currently ON and user wants to CHANGE PIN -> verify current PIN + validate new PIN
+    if (isPinLockEnabled && modalLockToggle) {
+      const currentAppPin = (profile.appLockPin || '').trim();
+      if (oldPin.trim() !== currentAppPin) {
+        setPinError('বর্তমান পিনটি সঠিক নয়! সঠিক পিন দিয়ে আবার চেষ্টা করুন।');
+        return;
+      }
+      if (newPin.length !== 4) {
+        setPinError('নতুন পিন অবশ্যই ৪ সংখ্যার হতে হবে!');
+        return;
+      }
+      if (newPin !== confirmPin) {
+        setPinError('নতুন পিন এবং নিশ্চিতকরণ পিন মিলেনি!');
+        return;
+      }
+      const updated: ShopProfile = {
+        ...profile,
+        appLockPin: newPin,
+        isPinLockEnabled: true,
+      };
+      onSaveProfile(updated);
+      DB.saveProfile(updated);
+      setShowPinModal(false);
+      setOldPin('');
+      setNewPin('');
+      setConfirmPin('');
+      setPinError('');
+      showToast('অ্যাপ পিন সফলভাবে পরিবর্তন করা হয়েছে!', 'success');
+      return;
+    }
+
+    // Case C: Lock is currently OFF and user turned ON -> set new 4-digit PIN (no current PIN needed)
+    if (!isPinLockEnabled && modalLockToggle) {
+      if (newPin.length !== 4) {
+        setPinError('নতুন পিন অবশ্যই ৪ সংখ্যার হতে হবে!');
+        return;
+      }
+      if (newPin !== confirmPin) {
+        setPinError('নতুন পিন এবং নিশ্চিতকরণ পিন মিলেনি!');
+        return;
+      }
+      const updated: ShopProfile = {
+        ...profile,
+        appLockPin: newPin,
+        isPinLockEnabled: true,
+      };
+      onSaveProfile(updated);
+      DB.saveProfile(updated);
+      setShowPinModal(false);
+      setOldPin('');
+      setNewPin('');
+      setConfirmPin('');
+      setPinError('');
+      showToast('নতুন ৪-সংখ্যার পিন সেট ও অ্যাপ পিন লক চালু করা হয়েছে!', 'success');
+    }
   };
 
   if (showDataBackupView) {
@@ -572,7 +640,7 @@ export const SettingsView: React.FC<Props> = ({
   }
 
   return (
-    <div className="h-[calc(100vh-112px)] flex flex-col px-2.5 py-1.5 max-w-2xl mx-auto overflow-hidden select-none">
+    <div className="h-[calc(100vh-112px)] lg:h-[calc(100dvh-76px)] flex flex-col px-2.5 py-1.5 max-w-2xl md:max-w-7xl md:mx-auto md:w-full mx-auto overflow-hidden select-none">
       {/* ১. ক্লিন সাব-হেডার (কোনো ব্যাক অ্যারো নেই, সুপার-এডমিন ছাড়া এডমিন বাটন লুকানো) */}
       <div className="bg-white rounded-xl px-3.5 py-2 mb-1.5 flex items-center justify-between border border-[#E2E8F0] shadow-2xs shrink-0">
         <div
@@ -627,7 +695,7 @@ export const SettingsView: React.FC<Props> = ({
       )}
 
       {/* মূল কন্টেন্ট: কোনো ক, খ, গ হেডার ছাড়া প্রত্যেকটি অপশন আলাদা ও আকর্ষণীয় কার্ড হিসেবে */}
-      <div className="flex-1 overflow-y-auto space-y-2 pr-0.5 pb-4">
+      <div className="flex-1 overflow-y-auto space-y-2 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-2.5 lg:content-start pr-0.5 pb-4">
         {/* ১. শপ প্রোফাইল কার্ড */}
         <div className="bg-gradient-to-r from-[#E0F2F1]/70 via-white to-[#E8F5E9]/60 rounded-2xl px-3.5 py-2.5 border border-[#80CBC4] shadow-2xs flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -834,33 +902,79 @@ export const SettingsView: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* ৫. অ্যাপ লক / পিন পরিবর্তন (স্বতন্ত্র কার্ড) */}
+        {/* ৫. অ্যাপ লক / পিন পরিবর্তন (স্বতন্ত্র কার্ড + পিন লক চালু/বন্ধ সুইচ) */}
         <div
-          onClick={() => {
-            setOldPin('');
-            setNewPin('');
-            setConfirmPin('');
-            setPinError('');
-            setShowPinModal(true);
-          }}
-          className="bg-white rounded-2xl px-3.5 py-2.5 border border-amber-200/90 shadow-2xs flex items-center justify-between cursor-pointer hover:border-amber-400 transition active:scale-[0.99]"
+          onClick={() => openPinModal(isPinLockEnabled)}
+          className="bg-white rounded-2xl px-3.5 py-2.5 border border-amber-200/90 shadow-2xs flex items-center justify-between gap-2 cursor-pointer hover:border-amber-400 transition active:scale-[0.99]"
         >
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0 border border-amber-200">
               <KeyRound className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <span className="font-extrabold text-xs sm:text-sm text-[#102A43] block leading-tight">
-                {language === 'bn' ? 'অ্যাপ লক / পিন পরিবর্তন' : 'App Lock / Change PIN'}
-              </span>
-              <span className="text-[10.5px] text-[#64748B] block truncate">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-extrabold text-xs sm:text-sm text-[#102A43] leading-tight">
+                  {language === 'bn' ? 'অ্যাপ লক / পিন পরিবর্তন' : 'App Lock / Change PIN'}
+                </span>
+                <span
+                  className={`text-[9.5px] font-extrabold px-1.5 py-0.5 rounded-md border ${
+                    isPinLockEnabled
+                      ? 'bg-[#E0F2F1] text-[#0E6B6B] border-[#B2DFDB]'
+                      : 'bg-slate-100 text-[#64748B] border-[#E2E8F0]'
+                  }`}
+                >
+                  {isPinLockEnabled
+                    ? language === 'bn'
+                      ? 'চালু (ON)'
+                      : 'ON'
+                    : language === 'bn'
+                    ? 'বন্ধ (OFF)'
+                    : 'OFF'}
+                </span>
+              </div>
+              <span className="text-[10.5px] text-[#64748B] block truncate mt-0.5">
                 {language === 'bn'
-                  ? 'বর্তমান পিন যাচাই করে নতুন ৪-সংখ্যার পিন সেট করুন'
-                  : 'Verify current PIN and set new 4-digit PIN'}
+                  ? isPinLockEnabled
+                    ? 'অ্যাপ খুলতে ৪-সংখ্যার পিন লাগবে • পিন পরিবর্তন করতে ট্যাপ করুন'
+                    : 'পিন লক বন্ধ আছে • চালু করতে ডানের সুইচ অন করুন'
+                  : isPinLockEnabled
+                  ? '4-digit PIN required on open • Tap to change PIN'
+                  : 'PIN lock is OFF • Switch ON to lock app on open'}
               </span>
             </div>
           </div>
-          <ChevronRight className="w-4 h-4 text-[#64748B] shrink-0" />
+
+          <div
+            className="flex items-center gap-2 shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isPinLockEnabled}
+              aria-label={language === 'bn' ? 'অ্যাপ পিন লক চালু/বন্ধ' : 'Toggle App PIN Lock'}
+              onClick={() => openPinModal(!isPinLockEnabled)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer border ${
+                isPinLockEnabled
+                  ? 'bg-[#0E6B6B] border-[#0E6B6B]'
+                  : 'bg-slate-200 border-slate-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition-transform ${
+                  isPinLockEnabled ? 'translate-x-5' : 'translate-x-1'
+                }`}
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => openPinModal(isPinLockEnabled)}
+              aria-label={language === 'bn' ? 'পিন সেটিংস খুলুন' : 'Open PIN settings'}
+              className="p-0.5 text-[#64748B] cursor-pointer"
+            >
+              <ChevronRight className="w-4 h-4 shrink-0" />
+            </button>
+          </div>
         </div>
 
         {/* ৬. ডাটা ব্যাকআপ ও রিসেট (স্বতন্ত্র কার্ড) */}
@@ -1003,7 +1117,7 @@ export const SettingsView: React.FC<Props> = ({
         <button
           type="button"
           onClick={() => setShowLogoutModal(true)}
-          className="w-full py-2.5 px-3.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-[#D32F2F] border border-rose-200 shadow-2xs flex items-center justify-center gap-2 text-xs font-extrabold transition active:scale-[0.99] cursor-pointer"
+          className="w-full lg:col-span-2 py-2.5 px-3.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-[#D32F2F] border border-rose-200 shadow-2xs flex items-center justify-center gap-2 text-xs font-extrabold transition active:scale-[0.99] cursor-pointer"
         >
           <LogOut className="w-4 h-4" />
           <span>{language === 'bn' ? 'লগ আউট করুন' : 'Log Out'}</span>
@@ -1013,7 +1127,7 @@ export const SettingsView: React.FC<Props> = ({
       {/* ================= MODAL: IN-APP UPDATE CONFIRMATION ================= */}
       {showUpdateConfirmModal && updateAvailableInfo && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl border border-[#E2E8F0] space-y-3.5">
+          <div className="w-full max-w-sm md:max-w-xl bg-white rounded-3xl p-5 shadow-2xl border border-[#E2E8F0] space-y-3.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-[#E0F2F1] text-[#0E6B6B] flex items-center justify-center">
@@ -1091,7 +1205,7 @@ export const SettingsView: React.FC<Props> = ({
       {/* ================= MODAL: SHARE APP LINK ================= */}
       {showShareModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl border border-[#E2E8F0] space-y-3.5">
+          <div className="w-full max-w-sm md:max-w-xl bg-white rounded-3xl p-5 shadow-2xl border border-[#E2E8F0] space-y-3.5">
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-2.5">
               <div className="flex items-center gap-2">
                 <div className="w-9 h-9 rounded-xl bg-[#E0F2F1] text-[#0E6B6B] flex items-center justify-center">
@@ -1159,7 +1273,7 @@ export const SettingsView: React.FC<Props> = ({
       {/* ================= MODAL: EDIT SHOP INFO ================= */}
       {showEditInfoModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-3xl p-4 sm:p-5 shadow-2xl border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-md md:max-w-xl bg-white rounded-3xl p-4 sm:p-5 shadow-2xl border border-[#E2E8F0] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-bold text-base text-[#102A43] flex items-center gap-2">
                 <Edit3 className="w-4 h-4 text-[#0E6B6B]" />
@@ -1304,14 +1418,14 @@ export const SettingsView: React.FC<Props> = ({
         </div>
       )}
 
-      {/* ================= MODAL: CHANGE PIN (3 INPUT FIELDS) ================= */}
+      {/* ================= MODAL: APP PIN LOCK & CHANGE PIN ================= */}
       {showPinModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl border border-[#E2E8F0]">
+          <div className="w-full max-w-sm md:max-w-xl bg-white rounded-3xl p-5 shadow-2xl border border-[#E2E8F0]">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-bold text-base text-[#102A43] flex items-center gap-2">
                 <KeyRound className="w-4 h-4 text-[#0E6B6B]" />
-                <span>লগইন পিন পরিবর্তন</span>
+                <span>অ্যাপ পিন লক ও পিন পরিবর্তন</span>
               </h3>
               <button
                 type="button"
@@ -1322,80 +1436,137 @@ export const SettingsView: React.FC<Props> = ({
               </button>
             </div>
 
-            <form onSubmit={handleChangePinSubmit} className="space-y-3">
-              {/* ১. বর্তমান পিন */}
-              <div>
-                <label className="block text-xs font-semibold text-[#102A43] mb-1">
-                  ১. বর্তমান পিন
-                </label>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={4}
-                  required
-                  value={oldPin}
-                  onChange={(e) => {
-                    setOldPin(e.target.value.replace(/\D/g, ''));
-                    setPinError('');
-                  }}
-                  placeholder="বর্তমান ৪-সংখ্যার পিন দিন"
-                  className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-sm text-center font-mono tracking-widest text-[#102A43] focus:outline-none focus:ring-1 focus:ring-[#0E6B6B]"
-                />
+            {/* অ্যাপ পিন লক চালু/বন্ধ (ON/OFF) সুইচ */}
+            <div className="p-3 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-extrabold text-[#102A43]">
+                  অ্যাপ পিন লক চালু/বন্ধ ({modalLockToggle ? 'ON' : 'OFF'})
+                </p>
+                <p className="text-[11px] text-[#64748B] mt-0.5">
+                  {!isPinLockEnabled && !modalLockToggle
+                    ? 'বন্ধ আছে — পিন ছাড়াই সরাসরি অ্যাপ ওপেন হবে'
+                    : !isPinLockEnabled && modalLockToggle
+                    ? 'চালু করতে নিচে নতুন ৪-সংখ্যার পিন সেট করুন'
+                    : isPinLockEnabled && modalLockToggle
+                    ? 'চালু আছে — অ্যাপ ওপেন করার সময় ৪-সংখ্যার পিন চাইবে'
+                    : 'লক বন্ধ করতে নিচে বর্তমান পিন যাচাই করুন'}
+                </p>
               </div>
-
-              {/* ২. নতুন পিন */}
-              <div>
-                <label className="block text-xs font-semibold text-[#102A43] mb-1">
-                  ২. নতুন পিন
-                </label>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={4}
-                  required
-                  value={newPin}
-                  onChange={(e) => {
-                    setNewPin(e.target.value.replace(/\D/g, ''));
-                    setPinError('');
-                  }}
-                  placeholder="নতুন ৪-সংখ্যার পিন (যেমন: ১২৩৪)"
-                  className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-sm text-center font-mono tracking-widest text-[#102A43] focus:outline-none focus:ring-1 focus:ring-[#0E6B6B]"
-                />
-              </div>
-
-              {/* ৩. নতুন পিন নিশ্চিত করুন */}
-              <div>
-                <label className="block text-xs font-semibold text-[#102A43] mb-1">
-                  ৩. নতুন পিন নিশ্চিত করুন
-                </label>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={4}
-                  required
-                  value={confirmPin}
-                  onChange={(e) => {
-                    setConfirmPin(e.target.value.replace(/\D/g, ''));
-                    setPinError('');
-                  }}
-                  placeholder="পুনরায় নতুন পিন লিখুন"
-                  className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-sm text-center font-mono tracking-widest text-[#102A43] focus:outline-none focus:ring-1 focus:ring-[#0E6B6B]"
-                />
-              </div>
-
-              {pinError && (
-                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold text-center">
-                  {pinError}
-                </div>
-              )}
-
               <button
-                type="submit"
-                className="w-full py-2.5 rounded-xl bg-[#0E6B6B] hover:bg-[#094747] text-white text-xs font-bold transition cursor-pointer"
+                type="button"
+                role="switch"
+                aria-checked={modalLockToggle}
+                onClick={() => {
+                  setModalLockToggle((prev) => !prev);
+                  setOldPin('');
+                  setNewPin('');
+                  setConfirmPin('');
+                  setPinError('');
+                }}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer border ${
+                  modalLockToggle
+                    ? 'bg-[#0E6B6B] border-[#0E6B6B]'
+                    : 'bg-slate-200 border-slate-300'
+                }`}
               >
-                পিন যাচাই ও পরিবর্তন নিশ্চিত করুন
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition-transform ${
+                    modalLockToggle ? 'translate-x-5' : 'translate-x-1'
+                  }`}
+                />
               </button>
-            </form>
+            </div>
+
+            {/* যখন OFF অবস্থায় আছে ও টগল OFF — তখন নিচে পিন সেট করার ঘরগুলো লুকানো থাকবে */}
+            {(modalLockToggle || isPinLockEnabled) && (
+              <form onSubmit={handlePinModalSubmit} className="space-y-3 mt-3.5">
+                {/* একবার পিন চালু থাকলে ভবিষ্যতে পিন পরিবর্তন বা বন্ধ করতে কেবল বর্তমান পিন চাইবে */}
+                {isPinLockEnabled && (
+                  <div>
+                    <label className="block text-xs font-semibold text-[#102A43] mb-1">
+                      {modalLockToggle ? '১. বর্তমান পিন' : 'বর্তমান পিন'}
+                    </label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      required
+                      value={oldPin}
+                      onChange={(e) => {
+                        setOldPin(e.target.value.replace(/\D/g, ''));
+                        setPinError('');
+                      }}
+                      placeholder="বর্তমান ৪-সংখ্যার পিন দিন"
+                      className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-sm text-center font-mono tracking-widest text-[#102A43] focus:outline-none focus:ring-1 focus:ring-[#0E6B6B]"
+                    />
+                  </div>
+                )}
+
+                {/* নতুন পিন + নতুন পিন নিশ্চিত করুন (যখন টগল ON থাকবে) */}
+                {modalLockToggle && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-semibold text-[#102A43] mb-1">
+                        {isPinLockEnabled ? '২. নতুন পিন' : '১) নতুন পিন'}
+                      </label>
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        required
+                        value={newPin}
+                        onChange={(e) => {
+                          setNewPin(e.target.value.replace(/\D/g, ''));
+                          setPinError('');
+                        }}
+                        placeholder="৪ সংখ্যার নতুন পিন দিন"
+                        className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-sm text-center font-mono tracking-widest text-[#102A43] focus:outline-none focus:ring-1 focus:ring-[#0E6B6B]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-[#102A43] mb-1">
+                        {isPinLockEnabled ? '৩. নতুন পিন নিশ্চিত করুন' : '২) নতুন পিন নিশ্চিত করুন'}
+                      </label>
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        required
+                        value={confirmPin}
+                        onChange={(e) => {
+                          setConfirmPin(e.target.value.replace(/\D/g, ''));
+                          setPinError('');
+                        }}
+                        placeholder="পুনরায় নতুন পিন লিখুন"
+                        className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] text-sm text-center font-mono tracking-widest text-[#102A43] focus:outline-none focus:ring-1 focus:ring-[#0E6B6B]"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {pinError && (
+                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold text-center">
+                    {pinError}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className={`w-full py-2.5 rounded-xl text-white text-xs font-bold transition cursor-pointer ${
+                    isPinLockEnabled && !modalLockToggle
+                      ? 'bg-[#D32F2F] hover:bg-rose-700'
+                      : 'bg-[#0E6B6B] hover:bg-[#094747]'
+                  }`}
+                >
+                  {!isPinLockEnabled && modalLockToggle
+                    ? 'নতুন পিন সেট ও চালু করুন'
+                    : isPinLockEnabled && modalLockToggle
+                    ? 'পিন যাচাই ও পরিবর্তন নিশ্চিত করুন'
+                    : 'যাচাই করে পিন লক বন্ধ করুন'}
+                </button>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -1403,7 +1574,7 @@ export const SettingsView: React.FC<Props> = ({
       {/* ================= MODAL: TERMS & DATA POLICY ================= */}
       {showTermsModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-3xl p-5 shadow-2xl border border-[#E2E8F0] max-h-[85vh] overflow-y-auto">
+          <div className="w-full max-w-md md:max-w-xl bg-white rounded-3xl p-5 shadow-2xl border border-[#E2E8F0] max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-bold text-base text-[#102A43] flex items-center gap-2">
                 <FileText className="w-4 h-4 text-[#0E6B6B]" />
@@ -1438,7 +1609,7 @@ export const SettingsView: React.FC<Props> = ({
       {/* ================= MODAL: PRINTER SETUP ================= */}
       {showPrinterModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-3xl p-5 shadow-2xl border border-[#E2E8F0] max-h-[88vh] overflow-y-auto">
+          <div className="w-full max-w-md md:max-w-xl bg-white rounded-3xl p-5 shadow-2xl border border-[#E2E8F0] max-h-[88vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-[#E2E8F0]">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-[#E0F2F1] text-[#0E6B6B] flex items-center justify-center">
@@ -1602,7 +1773,7 @@ export const SettingsView: React.FC<Props> = ({
       {/* ================= MODAL: APP REVIEW ================= */}
       {showReviewModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl border border-[#E2E8F0]">
+          <div className="w-full max-w-sm md:max-w-xl bg-white rounded-3xl p-5 shadow-2xl border border-[#E2E8F0]">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-bold text-base text-[#102A43] flex items-center gap-2">
                 <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
@@ -1671,7 +1842,7 @@ export const SettingsView: React.FC<Props> = ({
       {/* ================= MODAL: LOG OUT CONFIRMATION ================= */}
       {showLogoutModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl border border-rose-200 text-center space-y-3">
+          <div className="w-full max-w-sm md:max-w-xl bg-white rounded-3xl p-5 shadow-2xl border border-rose-200 text-center space-y-3">
             <div className="w-12 h-12 rounded-full bg-rose-50 text-[#D32F2F] mx-auto flex items-center justify-center">
               <LogOut className="w-6 h-6" />
             </div>
@@ -1706,7 +1877,7 @@ export const SettingsView: React.FC<Props> = ({
       {/* ================= MODAL: WIPE ALL DEMO & TEST DATA ================= */}
       {showWipeDemoModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl border border-rose-200 space-y-3.5">
+          <div className="w-full max-w-sm md:max-w-xl bg-white rounded-3xl p-5 shadow-2xl border border-rose-200 space-y-3.5">
             <div className="w-12 h-12 rounded-full bg-rose-50 text-[#D32F2F] mx-auto flex items-center justify-center border border-rose-200">
               <Trash2 className="w-6 h-6" />
             </div>
@@ -1762,7 +1933,7 @@ export const SettingsView: React.FC<Props> = ({
       {/* ================= MODAL: HOW TO USE THE APP (অ্যাপ যেভাবে ব্যবহার করবেন) ================= */}
       {showHowToUseModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-md max-h-[88vh] bg-white rounded-3xl shadow-2xl border border-[#E2E8F0] overflow-hidden flex flex-col">
+          <div className="w-full max-w-md md:max-w-xl max-h-[88vh] bg-white rounded-3xl shadow-2xl border border-[#E2E8F0] overflow-hidden flex flex-col">
             {/* Header */}
             <div className="px-4 py-3.5 bg-[#0E6B6B] text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">

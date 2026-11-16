@@ -231,7 +231,7 @@ export const DayCloseModal: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs overflow-y-auto">
-      <div className="w-full max-w-lg rounded-[28px] bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
+      <div className="w-full max-w-lg md:max-w-xl rounded-[28px] bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="bg-gradient-to-r from-[#0E6B6B] to-[#124E4E] p-4 sm:p-5 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">

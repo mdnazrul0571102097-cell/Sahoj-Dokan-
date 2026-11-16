@@ -160,7 +160,7 @@ export const CalculatorModal: React.FC<Props> = ({ isOpen, onClose }) => {
       </div>
 
       {/* Calculator Body */}
-      <div className="flex-1 flex flex-col justify-between max-w-md w-full mx-auto p-3 sm:p-4">
+      <div className="flex-1 flex flex-col justify-between max-w-md md:max-w-xl w-full mx-auto p-3 sm:p-4">
         {/* Display Panel */}
         <div className="bg-[#036368] text-white rounded-[24px] p-5 shadow-md flex flex-col justify-end min-h-[148px] mb-3 border border-[#024d51]">
           <div className="text-right text-sm font-semibold text-teal-100/80 min-h-[22px] break-all tabular-nums">

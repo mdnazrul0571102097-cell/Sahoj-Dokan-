@@ -20,7 +20,7 @@ export const LanguageSelectorModal: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl border border-emerald-100 dark:bg-slate-900 dark:border-emerald-900/40">
+      <div className="w-full max-w-md md:max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl border border-emerald-100 dark:bg-slate-900 dark:border-emerald-900/40">
         {/* Header with App Branding */}
         <div className="bg-gradient-to-br from-emerald-800 via-emerald-700 to-green-900 p-6 text-center text-white relative">
           <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-2xl bg-white/10 p-1.5 shadow-inner backdrop-blur-md border border-white/20">

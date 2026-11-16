@@ -422,8 +422,8 @@ export const QuickSaleModal: React.FC<Props> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
-      <div className="w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-2xl max-h-[94dvh] flex flex-col shadow-2xl border border-[#E2E8F0] overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center md:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
+      <div className="w-full sm:max-w-lg md:max-w-xl bg-white rounded-t-2xl sm:rounded-2xl md:rounded-2xl max-h-[94dvh] flex flex-col shadow-2xl border border-[#E2E8F0] overflow-hidden">
         {/* ১. স্লিম টপ বার (Compact Header) */}
         <div
           className={`px-3 py-2 text-white flex items-center justify-between gap-2 shrink-0 transition-colors ${

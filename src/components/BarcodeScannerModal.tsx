@@ -154,7 +154,7 @@ export const BarcodeScannerModal: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-md overflow-hidden rounded-3xl bg-slate-900 text-white shadow-2xl border border-slate-700 flex flex-col">
+      <div className="w-full max-w-md md:max-w-xl overflow-hidden rounded-3xl bg-slate-900 text-white shadow-2xl border border-slate-700 flex flex-col">
         {/* Top Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950">
           <div className="flex items-center gap-2.5">

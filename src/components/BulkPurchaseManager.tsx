@@ -888,7 +888,7 @@ export const BulkPurchaseManager: React.FC<Props> = ({
       {/* Modal: New / Edit Multi-Item Bulk Purchase */}
       {showNewPurchaseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2.5 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-          <div className="w-full max-w-md my-auto rounded-[28px] bg-white shadow-2xl border border-[#CBD5E1] overflow-hidden flex flex-col max-h-[95vh]">
+          <div className="w-full max-w-md md:max-w-xl my-auto rounded-[28px] bg-white shadow-2xl border border-[#CBD5E1] overflow-hidden flex flex-col max-h-[95vh]">
             {/* Top Dark Green Header */}
             <div className="px-5 py-4 bg-[#0D5238] text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
@@ -1151,7 +1151,7 @@ export const BulkPurchaseManager: React.FC<Props> = ({
       {/* Delete Cash Purchase Receipt Confirmation Modal */}
       {purchaseToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-[24px] bg-white p-5 shadow-2xl border border-[#E2E8F0] text-center space-y-4">
+          <div className="w-full max-w-sm md:max-w-xl rounded-[24px] bg-white p-5 shadow-2xl border border-[#E2E8F0] text-center space-y-4">
             <div className="w-12 h-12 rounded-full bg-[#FFEBEE] text-[#D32F2F] flex items-center justify-center mx-auto">
               <Trash2 className="w-6 h-6" />
             </div>

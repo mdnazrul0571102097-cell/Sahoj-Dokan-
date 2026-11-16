@@ -423,7 +423,7 @@ export const ReportsView: React.FC<Props> = ({
   };
 
   return (
-    <div className="min-h-[calc(100vh-110px)] flex flex-col p-2 sm:p-3 max-w-7xl mx-auto pb-20 overflow-y-auto">
+    <div className="min-h-[calc(100vh-110px)] flex flex-col p-2 sm:p-3 max-w-7xl md:max-w-7xl md:mx-auto md:w-full mx-auto pb-20 lg:pb-6 overflow-y-auto">
       {/* Clean Top Bar with prominent "← হিসাব / মেনু" back button (old horizontal scrollable sub-tabs removed) */}
       <div className="bg-white rounded-2xl px-3 py-2 mb-2.5 flex items-center justify-between gap-2 border border-[#E2E8F0] shadow-2xs shrink-0 flex-wrap">
         <div className="flex items-center gap-2 min-w-0">
@@ -650,10 +650,14 @@ export const ReportsView: React.FC<Props> = ({
                 </p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-2.5">
                 {filteredSales
                   .slice()
-                  .reverse()
+                  .sort(
+                    (a, b) =>
+                      (new Date(b.date).getTime() || 0) -
+                      (new Date(a.date).getTime() || 0)
+                  )
                   .map((sale) => {
                     const isReturnRecord =
                       sale.id.startsWith('return_') ||
@@ -1027,7 +1031,7 @@ export const ReportsView: React.FC<Props> = ({
       {/* Delete Cash Memo Confirmation Modal */}
       {saleToDelete && onDeleteSale && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-[24px] bg-white p-5 shadow-2xl border border-[#E2E8F0] text-center space-y-4">
+          <div className="w-full max-w-sm md:max-w-xl rounded-[24px] bg-white p-5 shadow-2xl border border-[#E2E8F0] text-center space-y-4">
             <div className="w-12 h-12 rounded-full bg-[#FFEBEE] text-[#D32F2F] flex items-center justify-center mx-auto">
               <Trash2 className="w-6 h-6" />
             </div>
@@ -1065,7 +1069,7 @@ export const ReportsView: React.FC<Props> = ({
       {/* Edit Sales Invoice Modal */}
       {saleToEdit && onUpdateSale && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-3xl bg-white p-4 sm:p-5 shadow-2xl border border-[#E2E8F0] max-h-[90vh] flex flex-col">
+          <div className="w-full max-w-md md:max-w-xl rounded-3xl bg-white p-4 sm:p-5 shadow-2xl border border-[#E2E8F0] max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between pb-3 border-b border-[#E2E8F0] shrink-0">
               <div>
                 <h3 className="text-sm sm:text-base font-extrabold text-[#102A43] flex items-center gap-1.5">

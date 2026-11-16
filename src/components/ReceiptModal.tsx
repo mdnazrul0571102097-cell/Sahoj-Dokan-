@@ -217,7 +217,7 @@ ${sale.dueAmount > 0 ? `*বাকি টাকা: ৳${sale.dueAmount}*` : `�
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 sm:p-4 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto">
-      <div className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl border border-slate-200 dark:bg-slate-900 dark:border-slate-800 my-auto">
+      <div className="w-full max-w-md md:max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl border border-slate-200 dark:bg-slate-900 dark:border-slate-800 my-auto">
         {/* Modal Controls Header */}
         <div className="p-4 bg-[#0E6B6B] text-white flex items-center justify-between no-print">
           <div className="flex items-center gap-2">

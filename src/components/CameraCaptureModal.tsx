@@ -178,7 +178,7 @@ export const CameraCaptureModal: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-4 backdrop-blur-md">
-      <div className="relative w-full max-w-md rounded-3xl bg-slate-900 text-white shadow-2xl border border-slate-700 overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-md md:max-w-xl rounded-3xl bg-slate-900 text-white shadow-2xl border border-slate-700 overflow-hidden flex flex-col">
         {/* Header */}
         <div className="shrink-0 px-4 py-3 bg-slate-800/90 border-b border-slate-700/80 flex items-center justify-between">
           <div className="flex items-center gap-2">

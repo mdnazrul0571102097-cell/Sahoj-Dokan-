@@ -494,7 +494,7 @@ export const AllReportsView: React.FC<Props> = ({
   ]);
 
   return (
-    <div className="min-h-[calc(100vh-110px)] flex flex-col p-2.5 sm:p-3 max-w-4xl mx-auto pb-20 overflow-y-auto space-y-3">
+    <div className="min-h-[calc(100vh-110px)] flex flex-col p-2.5 sm:p-3 max-w-4xl md:max-w-7xl md:mx-auto md:w-full mx-auto pb-20 lg:pb-6 overflow-y-auto space-y-3">
       {/* Top Back Bar */}
       <div className="bg-white rounded-2xl px-3 py-2.5 flex items-center justify-between gap-2 border border-[#E2E8F0] shadow-2xs shrink-0">
         <button
@@ -518,6 +518,7 @@ export const AllReportsView: React.FC<Props> = ({
         </button>
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
       {/* 1. Daily & Monthly Sales / Profit Report */}
       <div className="bg-white rounded-[22px] p-4 border border-[#E2E8F0] shadow-2xs space-y-3">
         <div className="flex items-center justify-between gap-2 flex-wrap border-b border-[#E2E8F0] pb-2.5">
@@ -709,6 +710,7 @@ export const AllReportsView: React.FC<Props> = ({
             ))}
           </div>
         )}
+      </div>
       </div>
 
       {/* Monthly PDF Report Modal */}

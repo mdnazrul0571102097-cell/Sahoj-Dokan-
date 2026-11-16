@@ -430,13 +430,23 @@ export const RunningCapitalCard: React.FC<Props> = ({
           </span>
         </div>
 
-        <div className="rounded-xl bg-white/10 border border-white/15 px-2.5 py-1.5">
-          <span className="block text-[10px] font-bold text-emerald-100/90 leading-tight">
+        <div
+          className={`rounded-xl border px-2.5 py-1.5 ${
+            stats.displayProfit < 0
+              ? 'bg-[#FFEBEE] border-rose-300'
+              : 'bg-white/10 border-white/15'
+          }`}
+        >
+          <span
+            className={`block text-[10px] font-bold leading-tight ${
+              stats.displayProfit < 0 ? 'text-[#B71C1C]' : 'text-emerald-100/90'
+            }`}
+          >
             লাভ (আজকের লাভ)
           </span>
           <span
             className={`text-sm sm:text-base font-black tabular-nums ${
-              stats.displayProfit >= 0 ? 'text-emerald-300' : 'text-rose-300'
+              stats.displayProfit >= 0 ? 'text-emerald-300' : 'text-[#D32F2F]'
             }`}
           >
             ৳{formatBnNumber(stats.displayProfit)}

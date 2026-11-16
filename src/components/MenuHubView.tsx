@@ -366,7 +366,7 @@ export const MenuHubView: React.FC<Props> = ({
   ];
 
   return (
-    <div className="flex flex-col px-2.5 pt-2 pb-16 max-w-md mx-auto">
+    <div className="flex flex-col px-2.5 pt-2 pb-16 lg:pb-6 max-w-md mx-auto md:max-w-7xl md:mx-auto md:w-full">
       {/* Compact Top Dark Teal Summary Card (~20% tighter vertical footprint) */}
       <div className="bg-[#036368] text-white rounded-[20px] px-3.5 py-2.5 shadow-md mb-2.5 border border-[#024F53]">
         {/* Date Row */}
@@ -412,7 +412,7 @@ export const MenuHubView: React.FC<Props> = ({
       </h2>
 
       {/* Compact 3-Column Grid (3 + 3 + 3 + 1) */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 lg:grid-cols-3 gap-2 lg:gap-3">
         {tiles.map((tile) => {
           const Icon = tile.icon;
           return (

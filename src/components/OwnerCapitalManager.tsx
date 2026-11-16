@@ -74,9 +74,8 @@ export const OwnerCapitalManager: React.FC<Props> = ({
 
   const todayStr = getLocalDateStr(new Date());
 
-  // Filter states: 'today' (আজ), 'month' (এই মাস), 'all' (সর্বমোট)
-  const [filterMode, setFilterMode] = useState<'today' | 'month' | 'all'>('all');
-  const [typeFilter, setTypeFilter] = useState<'all' | OwnerTransactionType>('all');
+  // Date filter state for owner transactions list (empty = show all dates)
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string>('');
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -106,38 +105,25 @@ export const OwnerCapitalManager: React.FC<Props> = ({
     return map;
   }, [ownerTransactions]);
 
-  // Period-filtered transactions (by আজ, এই মাস, সর্বমোট)
-  const periodTransactions = useMemo(() => {
-    const now = new Date();
-    const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-    return ownerTransactions.filter((tx) => {
-      const dStr = getLocalDateStr(tx.date);
-      const rawStr = (tx.date || '').slice(0, 10);
-      if (filterMode === 'today') {
-        return dStr === todayStr || rawStr === todayStr;
-      }
-      if (filterMode === 'month') {
-        return dStr.startsWith(currentYearMonth) || rawStr.startsWith(currentYearMonth);
-      }
-      return true;
-    });
-  }, [ownerTransactions, filterMode, todayStr]);
-
-  // Filtered list for display (including typeFilter)
+  // Filtered list for display (by selected date, or all dates when empty)
   const filteredTransactions = useMemo(() => {
-    return periodTransactions
-      .filter((tx) => (typeFilter === 'all' ? true : tx.type === typeFilter))
+    return ownerTransactions
+      .filter((tx) => {
+        if (!selectedDateFilter) return true;
+        const dStr = getLocalDateStr(tx.date);
+        const rawStr = (tx.date || '').slice(0, 10);
+        return dStr === selectedDateFilter || rawStr === selectedDateFilter;
+      })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [periodTransactions, typeFilter]);
+  }, [ownerTransactions, selectedDateFilter]);
 
-  // Summary Metrics synced automatically with selected filter (আজ, এই মাস, সর্বমোট)
+  // Summary Metrics across all owner transactions
   const summary = useMemo(() => {
     let totalWithdrawal = 0;
     let totalReturned = 0;
     let totalNewCapital = 0;
 
-    periodTransactions.forEach((tx) => {
+    ownerTransactions.forEach((tx) => {
       const amt = Number(tx.amount) || 0;
       if (tx.type === 'withdrawal') totalWithdrawal += amt;
       else if (tx.type === 'withdrawal_return') totalReturned += amt;
@@ -154,7 +140,7 @@ export const OwnerCapitalManager: React.FC<Props> = ({
       netWithdrawal: Math.round(netWithdrawal),
       netOwnerCashEffect: Math.round(netOwnerCashEffect),
     };
-  }, [periodTransactions]);
+  }, [ownerTransactions]);
 
   const handleOpenAddModal = (initialType: OwnerTransactionType) => {
     setEditingTx(null);
@@ -274,31 +260,9 @@ export const OwnerCapitalManager: React.FC<Props> = ({
           <UserCheck className="w-5 h-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <h3 className="font-extrabold text-sm sm:text-base text-[#102A43]">
-              মালিকের ব্যক্তিগত টাকা জমা, ফেরত ও উত্তোলন হিসাব
-            </h3>
-            <div className="inline-flex rounded-xl bg-[#EDF2F7] p-0.5 border border-[#E2E8F0]">
-              {[
-                { id: 'today', label: 'আজ' },
-                { id: 'month', label: 'এই মাস' },
-                { id: 'all', label: 'সর্বমোট' },
-              ].map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setFilterMode(m.id as any)}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    filterMode === m.id
-                      ? 'bg-[#0E6B6B] text-white shadow-2xs'
-                      : 'text-[#64748B] hover:text-[#102A43]'
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <h3 className="font-extrabold text-sm sm:text-base text-[#102A43]">
+            মালিকের ব্যক্তিগত টাকা জমা, ফেরত ও উত্তোলন হিসাব
+          </h3>
           <p className="text-xs text-[#486581] mt-1 flex items-center gap-1.5">
             <Info className="w-3.5 h-3.5 text-[#0E6B6B] shrink-0" />
             <span>
@@ -386,35 +350,40 @@ export const OwnerCapitalManager: React.FC<Props> = ({
 
       {/* Transactions History Card */}
       <div className="bg-white rounded-[24px] p-4 shadow-xs border border-[#E2E8F0] flex-1 min-h-[260px]">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-[#E2E8F0]">
-          <div>
-            <h4 className="font-extrabold text-sm sm:text-base text-[#102A43]">
-              মালিকের লেনদেনের তালিকা ({filteredTransactions.length}টি)
-            </h4>
-            <p className="text-xs text-[#64748B]">
-              তারিখ (DD-MM-YYYY), ধরন ও বিবরণসহ স্বয়ংক্রিয় হিসাব
-            </p>
-          </div>
+        <div className="flex flex-col gap-2.5 pb-3 mb-3 border-b border-[#E2E8F0]">
+          <h4 className="font-extrabold text-sm sm:text-base text-[#102A43]">
+            মালিকের লেনদেনের তালিকা ({filteredTransactions.length}টি)
+          </h4>
 
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {[
-              { id: 'all', label: 'সব ধরন' },
-              { id: 'withdrawal', label: 'মালিকের ব্যক্তিগত খরচ/নেওয়া' },
-              { id: 'withdrawal_return', label: 'নেওয়া টাকা ক্যাশে ফেরত' },
-            ].map((tf) => (
-              <button
-                key={tf.id}
-                type="button"
-                onClick={() => setTypeFilter(tf.id as any)}
-                className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                  typeFilter === tf.id
-                    ? 'bg-[#0E6B6B] text-white border-[#0E6B6B]'
-                    : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:text-[#102A43]'
-                }`}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-1 min-w-[190px]">
+              <label
+                htmlFor="owner-tx-date-filter"
+                className="text-xs font-bold text-[#64748B] whitespace-nowrap shrink-0"
               >
-                {tf.label}
-              </button>
-            ))}
+                তারিখ দিয়ে খুঁজুন:
+              </label>
+              <input
+                id="owner-tx-date-filter"
+                type="date"
+                value={selectedDateFilter}
+                onChange={(e) => setSelectedDateFilter(e.target.value)}
+                aria-label="তারিখ দিয়ে খুঁজুন"
+                className="flex-1 min-w-0 px-3 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-bold text-[#102A43] focus:outline-none focus:border-[#0E6B6B]"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSelectedDateFilter('')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer shrink-0 ${
+                !selectedDateFilter
+                  ? 'bg-[#0E6B6B] text-white border-[#0E6B6B]'
+                  : 'bg-[#F8FAFC] text-[#102A43] border-[#E2E8F0] hover:bg-[#EDF2F7]'
+              }`}
+            >
+              সব তারিখ
+            </button>
           </div>
         </div>
 
@@ -429,7 +398,7 @@ export const OwnerCapitalManager: React.FC<Props> = ({
             </p>
           </div>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-2.5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-2.5">
             {filteredTransactions.map((tx) => {
               const badge = getTypeBadge(tx.type);
               const linkedWithdrawal = tx.linkedWithdrawalId
@@ -517,7 +486,7 @@ export const OwnerCapitalManager: React.FC<Props> = ({
       {/* Add Owner Transaction Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-[#E2E8F0] overflow-hidden">
+          <div className="w-full max-w-md md:max-w-xl bg-white rounded-3xl shadow-2xl border border-[#E2E8F0] overflow-hidden">
             <div className="px-5 py-4 bg-[#0E6B6B] text-white flex items-center justify-between">
               <h3 className="font-extrabold text-base">
                 {editingTx
@@ -665,7 +634,7 @@ export const OwnerCapitalManager: React.FC<Props> = ({
       {/* Delete Confirmation Modal */}
       {txToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-[24px] bg-white p-5 shadow-2xl border border-[#E2E8F0] text-center space-y-4">
+          <div className="w-full max-w-sm md:max-w-xl rounded-[24px] bg-white p-5 shadow-2xl border border-[#E2E8F0] text-center space-y-4">
             <div className="w-12 h-12 rounded-full bg-[#FFEBEE] text-[#D32F2F] flex items-center justify-center mx-auto">
               <Trash2 className="w-6 h-6" />
             </div>

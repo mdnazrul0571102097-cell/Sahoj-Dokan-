@@ -148,7 +148,7 @@ export const Header: React.FC<Props> = ({
       {/* iOS Install Guide Modal */}
       {showIOSModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-sm md:max-w-xl rounded-3xl bg-white p-6 shadow-2xl">
             <h3 className="text-base font-bold text-[#102A43]">
               {language === 'bn' ? 'আইফোনে ইন্সটল করার নিয়ম' : 'Install on iPhone / iPad'}
             </h3>
@@ -170,7 +170,7 @@ export const Header: React.FC<Props> = ({
       {/* Support Modal (WhatsApp & Facebook) */}
       {showSupportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-sm rounded-[28px] bg-white p-5 shadow-2xl border border-[#E2E8F0]">
+          <div className="w-full max-w-sm md:max-w-xl rounded-[28px] bg-white p-5 shadow-2xl border border-[#E2E8F0]">
             <div className="flex items-center justify-between pb-3 border-b border-[#E2E8F0]">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-[#E8F5E9] text-[#2E7D32] flex items-center justify-center">

@@ -35,8 +35,8 @@ function notifyListeners() {
   });
 }
 
-// Fallback endpoints for local proxy server
-const CLOUD_ENDPOINTS = [
+// Fallback endpoints for local proxy server & Android APK standalone WebView
+export const CLOUD_ENDPOINTS = [
   'https://ais-pre-5gkalv7jknwtm4c27ipdpl-227798637835.europe-west2.run.app',
   'https://ais-dev-5gkalv7jknwtm4c27ipdpl-227798637835.europe-west2.run.app',
 ];

@@ -502,6 +502,8 @@ export const INITIAL_PROFILE: ShopProfile = {
   email: '',
   address: '',
   pin: '',
+  appLockPin: '',
+  isPinLockEnabled: false,
   currency: '৳',
   isRegistered: false,
   language: 'bn',
@@ -519,9 +521,16 @@ export const DB = {
         if (!parsed.phone) {
           parsed.isRegistered = false;
           parsed.pin = '';
+          parsed.appLockPin = '';
+          parsed.isPinLockEnabled = false;
           parsed.shopName = parsed.shopName || 'Sahoj Dokan - সহজ দোকান';
           parsed.logo = parsed.logo || '/assets/icon.png';
           return parsed;
+        }
+        // Reset legacy screen lock if no dedicated appLockPin has been set
+        if (parsed.isPinLockEnabled && (!parsed.appLockPin || parsed.appLockPin.trim().length !== 4)) {
+          parsed.isPinLockEnabled = false;
+          parsed.appLockPin = '';
         }
         if (!parsed.shopName || parsed.shopName === 'Sahoj Dokan POS' || parsed.shopName === 'সহজ দোকান POS' || parsed.shopName === 'বিসমিল্লাহ স্টোর') {
           parsed.shopName = 'Sahoj Dokan - সহজ দোকান';

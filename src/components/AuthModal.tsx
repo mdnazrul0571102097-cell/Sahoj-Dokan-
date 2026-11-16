@@ -47,7 +47,7 @@ export const AuthModal: React.FC<Props> = ({
 
   // Active view: 'phone_login' | 'register' | 'unlock' | 'forgot_pin'
   const [mode, setMode] = useState<'unlock' | 'phone_login' | 'register' | 'forgot_pin'>(
-    isRegistered && profile.pin ? 'unlock' : 'phone_login'
+    isRegistered && profile.isPinLockEnabled && profile.appLockPin ? 'unlock' : 'phone_login'
   );
 
   // Phone Login State (Direct Cloud Restore & Login)
@@ -106,7 +106,13 @@ export const AuthModal: React.FC<Props> = ({
       if (res.success) {
         if (cleanPin && cleanPin.length === 4) {
           const currentProf = DB.getProfile();
-          DB.saveProfile({ ...currentProf, pin: cleanPin, isRegistered: true });
+          DB.saveProfile({
+            ...currentProf,
+            pin: cleanPin,
+            isRegistered: true,
+            appLockPin: '',
+            isPinLockEnabled: false,
+          });
         }
         if (onDataRestored) {
           onDataRestored();
@@ -184,7 +190,8 @@ export const AuthModal: React.FC<Props> = ({
       setIsWrongPin(false);
 
       if (next.length === 4) {
-        if (next === profile.pin) {
+        const activeLockPin = profile.appLockPin || profile.pin;
+        if (next === activeLockPin) {
           onUnlock();
         } else {
           setIsWrongPin(true);
@@ -256,6 +263,8 @@ export const AuthModal: React.FC<Props> = ({
       address: address.trim(),
       pin: regPin.trim(),
       isRegistered: true,
+      appLockPin: '',
+      isPinLockEnabled: false,
       language: language,
     };
 
@@ -312,6 +321,7 @@ export const AuthModal: React.FC<Props> = ({
     const updatedProfile: ShopProfile = {
       ...profile,
       pin: newPin.trim(),
+      appLockPin: profile.isPinLockEnabled ? newPin.trim() : profile.appLockPin || '',
       isRegistered: true,
     };
 
@@ -325,7 +335,7 @@ export const AuthModal: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-3 sm:p-4 backdrop-blur-md overflow-y-auto">
-      <div className="w-full max-w-md my-auto overflow-hidden rounded-3xl bg-white shadow-2xl border border-emerald-100 dark:bg-slate-900 dark:border-emerald-900/40">
+      <div className="w-full max-w-md md:max-w-xl my-auto overflow-hidden rounded-3xl bg-white shadow-2xl border border-emerald-100 dark:bg-slate-900 dark:border-emerald-900/40">
         
         {/* Top Header with App Logo & Instant Language Switcher */}
         <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-green-900 p-5 sm:p-6 text-white text-center relative shadow-sm">

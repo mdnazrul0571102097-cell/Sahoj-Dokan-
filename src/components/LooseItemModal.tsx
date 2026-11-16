@@ -50,7 +50,7 @@ export const LooseItemModal: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+      <div className="w-full max-w-md md:max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
         {/* Product Summary Header */}
         <div className="p-4 bg-emerald-800 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">

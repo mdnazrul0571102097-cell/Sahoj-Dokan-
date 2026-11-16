@@ -58,7 +58,8 @@ interface Props {
     customerId: string,
     amount: number,
     note: string,
-    newBalance: number
+    newBalance: number,
+    date?: string
   ) => void;
   onAddDue: (
     customerId: string,
@@ -80,7 +81,8 @@ interface Props {
     supplierId: string,
     amount: number,
     note: string,
-    newBalance: number
+    newBalance: number,
+    date?: string
   ) => void;
   onAddSupplierDue?: (
     supplierId: string,
@@ -186,8 +188,15 @@ export const BakiKhataView: React.FC<Props> = ({
     if (!ymd || ymd === todayYmd) return new Date().toISOString();
     const parts = ymd.split('-').map(Number);
     if (parts.length === 3 && !parts.some(isNaN)) {
-      const dt = new Date();
-      dt.setFullYear(parts[0], parts[1] - 1, parts[2]);
+      const now = new Date();
+      const dt = new Date(
+        parts[0],
+        parts[1] - 1,
+        parts[2],
+        now.getHours(),
+        now.getMinutes(),
+        now.getSeconds()
+      );
       if (!isNaN(dt.getTime())) return dt.toISOString();
     }
     return new Date().toISOString();
@@ -292,6 +301,7 @@ export const BakiKhataView: React.FC<Props> = ({
   // Payment form
   const [paymentAmount, setPaymentAmount] = useState<number | ''>('');
   const [paymentNote, setPaymentNote] = useState('');
+  const [paymentDate, setPaymentDate] = useState<string>(() => getLocalDateStr(new Date()));
 
   // Calculations
   const totalOutstandingDue = useMemo(() => {
@@ -351,12 +361,14 @@ export const BakiKhataView: React.FC<Props> = ({
 
     const amt = Number(paymentAmount);
     const newBalance = Math.max(0, (customerForPayment.totalDue || 0) - amt);
+    const selectedDateIso = buildIsoForSelectedDate(paymentDate);
 
     onReceivePayment(
       customerForPayment.id,
       amt,
       paymentNote.trim() || 'নগদ জমা পরিশোধ',
-      newBalance
+      newBalance,
+      selectedDateIso
     );
 
     if (selectedCustomer && selectedCustomer.id === customerForPayment.id) {
@@ -369,6 +381,7 @@ export const BakiKhataView: React.FC<Props> = ({
     playSuccessChime();
     setPaymentAmount('');
     setPaymentNote('');
+    setPaymentDate(getLocalDateStr(new Date()));
     setShowPaymentModal(false);
     setCustomerForPayment(null);
   };
@@ -544,7 +557,7 @@ export const BakiKhataView: React.FC<Props> = ({
   }, [bakiTransactions]);
 
   return (
-    <div className="h-[calc(100dvh-110px)] flex flex-col p-1.5 sm:p-2.5 max-w-7xl mx-auto overflow-hidden">
+    <div className="h-[calc(100dvh-110px)] lg:h-[calc(100dvh-76px)] flex flex-col p-1.5 sm:p-2.5 max-w-7xl md:max-w-7xl md:mx-auto md:w-full mx-auto overflow-hidden">
       {/* Top Header Bar */}
       <div className="bg-white rounded-2xl px-3 sm:px-4 py-2 mb-2 flex items-center justify-between gap-2 border border-[#E2E8F0] shadow-xs shrink-0">
         <div className="flex items-center gap-2 min-w-0">
@@ -774,9 +787,9 @@ export const BakiKhataView: React.FC<Props> = ({
           <div className="flex-1 flex flex-col md:flex-row gap-3 overflow-hidden">
             {/* Customer Directory List */}
             <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="flex-1 overflow-y-auto space-y-2.5 pr-0.5 pb-16">
+              <div className="flex-1 overflow-y-auto space-y-2.5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-2.5 lg:content-start pr-0.5 pb-16 lg:pb-6">
                 {filteredCustomers.length === 0 ? (
-                  <div className="bg-white rounded-[24px] p-8 text-center border border-[#E2E8F0] shadow-xs">
+                  <div className="lg:col-span-2 bg-white rounded-[24px] p-8 text-center border border-[#E2E8F0] shadow-xs">
                     <BookOpen className="w-10 h-10 text-[#9AA5B1] mx-auto mb-2 stroke-1" />
                     <p className="text-xs font-semibold text-[#64748B]">
                       কোন ক্রেতা পাওয়া যায়নি
@@ -852,6 +865,7 @@ export const BakiKhataView: React.FC<Props> = ({
                                 setCustomerForPayment(cust);
                                 setPaymentAmount(cust.totalDue || '');
                                 setPaymentNote('');
+                                setPaymentDate(getLocalDateStr(new Date()));
                                 setShowPaymentModal(true);
                               }}
                               className="flex-1 py-2 px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[#2E7D32] text-xs font-extrabold transition active:scale-95 cursor-pointer whitespace-nowrap"
@@ -910,8 +924,8 @@ export const BakiKhataView: React.FC<Props> = ({
 
         {/* Customer Detail Ledger Modal / Drawer when a customer is selected (No empty dark box blocking the list!) */}
         {selectedCustomer && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="w-full sm:max-w-md max-h-[88vh] flex flex-col bg-white rounded-t-3xl sm:rounded-3xl p-4 shadow-2xl border border-[#E2E8F0] overflow-hidden">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center md:items-center justify-center bg-black/50 p-0 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="w-full sm:max-w-md md:max-w-xl max-h-[88vh] flex flex-col bg-white rounded-t-3xl sm:rounded-3xl md:rounded-3xl p-4 shadow-2xl border border-[#E2E8F0] overflow-hidden">
               {/* Customer Header */}
               <div className="pb-3 border-b border-[#E2E8F0] shrink-0">
                 <div className="flex items-center justify-between">
@@ -998,6 +1012,8 @@ export const BakiKhataView: React.FC<Props> = ({
                     onClick={() => {
                       setCustomerForPayment(selectedCustomer);
                       setPaymentAmount(selectedCustomer.totalDue || '');
+                      setPaymentNote('');
+                      setPaymentDate(getLocalDateStr(new Date()));
                       setShowPaymentModal(true);
                     }}
                     className="py-2.5 px-2 rounded-xl bg-[#2E7D32] hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-xs transition active:scale-95"
@@ -1125,7 +1141,7 @@ export const BakiKhataView: React.FC<Props> = ({
         <button
           type="button"
           onClick={() => openCustomerDueModal(null)}
-          className="fixed bottom-20 right-4 sm:right-6 z-30 btn-teal-fab px-5 py-3 rounded-2xl font-bold text-sm sm:text-base flex items-center gap-2 shadow-xl cursor-pointer active:scale-95 transition"
+          className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-30 btn-teal-fab px-5 py-3 rounded-2xl font-bold text-sm sm:text-base flex items-center gap-2 shadow-xl cursor-pointer active:scale-95 transition"
         >
           <UserPlus className="w-5 h-5 stroke-[2.5]" />
           <span>+ নতুন গ্রাহক</span>
@@ -1137,7 +1153,7 @@ export const BakiKhataView: React.FC<Props> = ({
       {/* Unified Compact Customer Due / New Customer Modal */}
       {showDueFormModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-          <div className="w-full max-w-md my-auto rounded-[28px] bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden flex flex-col max-h-[94vh]">
+          <div className="w-full max-w-md md:max-w-xl my-auto rounded-[28px] bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden flex flex-col max-h-[94vh]">
             <div className="p-4 bg-[#0E6B6B] text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-emerald-200" />
@@ -1437,7 +1453,7 @@ export const BakiKhataView: React.FC<Props> = ({
       {/* Receive Payment Modal */}
       {showPaymentModal && customerForPayment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 p-5 shadow-2xl border border-slate-200 dark:border-slate-800">
+          <div className="w-full max-w-sm md:max-w-xl rounded-3xl bg-white dark:bg-slate-900 p-5 shadow-2xl border border-slate-200 dark:border-slate-800">
             <h4 className="font-bold text-base text-slate-800 dark:text-white mb-1">
               {t.receivePayment}
             </h4>
@@ -1464,6 +1480,23 @@ export const BakiKhataView: React.FC<Props> = ({
                     onChange={(e) => setPaymentAmount(e.target.value === '' ? '' : Number(e.target.value))}
                     placeholder={`${customerForPayment.totalDue}`}
                     className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 font-bold text-base text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-sm"
+                  />
+                </div>
+              </div>
+
+              {/* জমা দেওয়ার তারিখ */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 dark:text-slate-100 mb-1">
+                  জমা দেওয়ার তারিখ
+                </label>
+                <div className="relative">
+                  <Calendar className="w-4 h-4 text-[#0E6B6B] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="date"
+                    required
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs sm:text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-sm"
                   />
                 </div>
               </div>
@@ -1513,7 +1546,7 @@ export const BakiKhataView: React.FC<Props> = ({
       {/* Edit Customer Modal */}
       {customerToEdit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-          <div className="w-full max-w-sm rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
+          <div className="w-full max-w-sm md:max-w-xl rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
             <div className="p-4 bg-[#0E6B6B] text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Edit2 className="w-5 h-5 text-emerald-200" />

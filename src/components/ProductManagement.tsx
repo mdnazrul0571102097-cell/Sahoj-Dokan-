@@ -462,7 +462,7 @@ export const ProductManagement: React.FC<Props> = ({
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
 
   return (
-    <div className="h-[calc(100vh-125px)] flex flex-col p-2 sm:p-3 max-w-7xl mx-auto overflow-hidden">
+    <div className="h-[calc(100vh-125px)] lg:h-[calc(100dvh-76px)] flex flex-col p-2 sm:p-3 max-w-7xl md:max-w-7xl md:mx-auto md:w-full mx-auto overflow-hidden">
       {/* Top Header Bar */}
       <div className="bg-white rounded-2xl px-3 sm:px-4 py-2.5 mb-2.5 flex items-center justify-between gap-2 border border-[#E2E8F0] shadow-xs shrink-0">
         <div className="flex items-center gap-2 min-w-0">
@@ -636,9 +636,9 @@ export const ProductManagement: React.FC<Props> = ({
       </div>
 
       {/* Product List Cards */}
-      <div className="flex-1 overflow-y-auto space-y-2.5 pr-0.5 pb-20">
+      <div className="flex-1 overflow-y-auto space-y-2.5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-2.5 lg:content-start pr-0.5 pb-20 lg:pb-6">
         {filteredProducts.length === 0 ? (
-          <div className="bg-white rounded-[24px] p-8 text-center border border-[#E2E8F0] shadow-xs">
+          <div className="lg:col-span-2 bg-white rounded-[24px] p-8 text-center border border-[#E2E8F0] shadow-xs">
             <Package className="w-10 h-10 text-[#9AA5B1] mx-auto mb-2 stroke-1" />
             <p className="text-xs font-semibold text-[#64748B]">
               কোন পণ্য পাওয়া যায়নি
@@ -764,7 +764,7 @@ export const ProductManagement: React.FC<Props> = ({
       {/* Delete Product Confirmation Modal */}
       {productToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-[24px] bg-white p-5 shadow-2xl border border-[#E2E8F0] text-center space-y-4">
+          <div className="w-full max-w-sm md:max-w-xl rounded-[24px] bg-white p-5 shadow-2xl border border-[#E2E8F0] text-center space-y-4">
             <div className="w-12 h-12 rounded-full bg-[#FFEBEE] text-[#D32F2F] flex items-center justify-center mx-auto">
               <Trash2 className="w-6 h-6" />
             </div>
@@ -808,7 +808,7 @@ export const ProductManagement: React.FC<Props> = ({
       <button
         type="button"
         onClick={handleOpenCreateModal}
-        className="fixed bottom-20 right-4 sm:right-6 z-30 btn-teal-fab px-5 py-3 rounded-2xl font-bold text-sm sm:text-base flex items-center gap-2 shadow-xl cursor-pointer active:scale-95 transition"
+        className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-30 btn-teal-fab px-5 py-3 rounded-2xl font-bold text-sm sm:text-base flex items-center gap-2 shadow-xl cursor-pointer active:scale-95 transition"
       >
         <Plus className="w-5 h-5 stroke-[2.5]" />
         <span>নতুন পণ্য</span>
@@ -817,7 +817,7 @@ export const ProductManagement: React.FC<Props> = ({
       {/* Add / Edit Product Modal */}
       {isProductModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-2 sm:p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg max-h-[92vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
+          <div className="w-full max-w-lg md:max-w-xl max-h-[92vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
             {/* 1. Modal Header (Clean & Compact) */}
             <div className="shrink-0 px-4 py-3 bg-[#0E6B6B] text-white flex items-center justify-between shadow-sm">
               <h3 className="font-black text-base sm:text-lg text-white">
@@ -1246,7 +1246,7 @@ export const ProductManagement: React.FC<Props> = ({
       {/* Restock / Stock Purchase Modal */}
       {isRestockModalOpen && productToRestock && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 p-5">
+          <div className="w-full max-w-sm md:max-w-xl rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 p-5">
             <h4 className="font-bold text-base text-slate-800 dark:text-white mb-1">
               {t.purchaseRecordTitle}
             </h4>

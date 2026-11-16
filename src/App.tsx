@@ -27,7 +27,7 @@ import {
 import { DB } from './storage/db';
 import { getSubscriptionDetails } from './utils/license';
 import { Header } from './components/Header';
-import { Navigation, NavTab } from './components/Navigation';
+import { Navigation, DesktopSidebar, NavTab } from './components/Navigation';
 import { PosView } from './components/PosView';
 import { ProductManagement } from './components/ProductManagement';
 import { BakiKhataView } from './components/BakiKhataView';
@@ -85,8 +85,11 @@ export default function App() {
   const [isCalculatorOpen, setIsCalculatorOpen] = useState<boolean>(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isLocked, setIsLocked] = useState<boolean>(() => {
-    // If not registered yet, open auth directly; if registered, require 4-digit PIN unlock
-    return true;
+    // If not registered yet, open auth (phone login / registration);
+    // If registered, only require 4-digit App Lock PIN when explicitly turned ON in Settings with a saved appLockPin
+    const p = DB.getProfile();
+    if (!p.isRegistered || !p.phone) return true;
+    return Boolean(p.isPinLockEnabled && p.appLockPin && p.appLockPin.trim().length === 4);
   });
   const [showLanguageModal, setShowLanguageModal] = useState<boolean>(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState<boolean>(false);
@@ -334,7 +337,14 @@ export default function App() {
 
   // Handle Lock
   const handleLock = () => {
-    setIsLocked(true);
+    const p = DB.getProfile();
+    if (
+      !p.isRegistered ||
+      !p.phone ||
+      (p.isPinLockEnabled && p.appLockPin && p.appLockPin.trim().length === 4)
+    ) {
+      setIsLocked(true);
+    }
   };
 
   // Handle Complete Sale from POS
@@ -698,7 +708,8 @@ export default function App() {
     customerId: string,
     amount: number,
     note: string,
-    newBalance: number
+    newBalance: number,
+    date?: string
   ) => {
     setCustomers((prev) => {
       const nextCustomers = prev.map((c) => {
@@ -714,7 +725,7 @@ export default function App() {
     const newTx: BakiTransaction = {
       id: `btx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       customerId,
-      date: new Date().toISOString(),
+      date: date || new Date().toISOString(),
       type: 'payment_received',
       amount,
       note,
@@ -942,7 +953,8 @@ export default function App() {
     supplierId: string,
     amount: number,
     note?: string,
-    newBalance?: number
+    newBalance?: number,
+    date?: string
   ) => {
     let computedNewDue = newBalance ?? 0;
     setSuppliers((prev) => {
@@ -965,7 +977,7 @@ export default function App() {
     const newTx: SupplierTransaction = {
       id: `stx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       supplierId,
-      date: new Date().toISOString(),
+      date: date || new Date().toISOString(),
       type: 'payment_made',
       amount,
       note: note || 'মহাজনকে টাকা পরিশোধ / জমা',
@@ -1553,7 +1565,7 @@ export default function App() {
   const lowStockCount = products.filter((p) => p.stock <= p.minStockAlert).length;
 
   return (
-    <div className="min-h-screen bg-[#EDF2F7] text-[#102A43] flex flex-col font-sans select-none pb-13 sm:pb-14">
+    <div className="min-h-screen bg-[#EDF2F7] text-[#102A43] flex flex-col font-sans select-none pb-13 sm:pb-14 lg:pb-0">
       {/* Top Header */}
       <Header
         profile={profile}
@@ -1573,8 +1585,18 @@ export default function App() {
         onOpenSubscriptionModal={handleOpenSubscriptionModal}
       />
 
-      {/* Main Active Tab Screen */}
-      <main className="flex-1 overflow-hidden">
+      {/* Main Active Tab Screen + Desktop Left Sidebar */}
+      <div className="flex-1 flex min-h-0 w-full md:max-w-7xl md:mx-auto">
+        <DesktopSidebar
+          activeTab={activeTab}
+          onTabChange={(tab) => {
+            setActiveTab(tab);
+            setActiveMenuPage(null);
+          }}
+          language={language}
+          cartItemCount={cart.length}
+        />
+        <main className="flex-1 min-w-0 overflow-hidden">
         {activeTab === 'pos' && (
           <PosView
             products={products}
@@ -1766,7 +1788,8 @@ export default function App() {
             onToggleTheme={() => setTheme((t) => (t === 'light' ? 'dark' : 'light'))}
           />
         )}
-      </main>
+        </main>
+      </div>
 
       {/* Calculator Pop-up / Full-Screen Modal */}
       <CalculatorModal
@@ -1839,7 +1862,7 @@ export default function App() {
       {/* Remote Admin Block Lock Screen */}
       {blockStatus.isBlocked && !isAdminPanelOpen && (
         <div className="fixed inset-0 z-50 bg-[#102A43]/95 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border-2 border-[#D32F2F] text-center space-y-4">
+          <div className="w-full max-w-md md:max-w-xl bg-white rounded-3xl p-6 shadow-2xl border-2 border-[#D32F2F] text-center space-y-4">
             <div className="w-16 h-16 rounded-full bg-rose-100 text-[#D32F2F] mx-auto flex items-center justify-center text-3xl font-black shadow-inner">
               🚫
             </div>

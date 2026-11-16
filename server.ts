@@ -593,7 +593,7 @@ function normalizeMemoUnit(rawUnit: string): (typeof VALID_PRODUCT_UNITS)[number
 
 app.post('/api/ai/scan-memo', async (req, res) => {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = (process.env.GEMINI_API_KEY || process.env.API_KEY || '').trim();
     if (!apiKey) {
       return res.status(500).json({
         success: false,
@@ -628,7 +628,7 @@ app.post('/api/ai/scan-memo', async (req, res) => {
     });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-4-hydrogen',
       contents: {
         parts: [
           {

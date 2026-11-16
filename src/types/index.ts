@@ -95,7 +95,9 @@ export interface ShopProfile {
   phone: string;
   email?: string;
   address: string;
-  pin: string;          // 4-digit PIN
+  pin: string;          // 4-digit PIN (Phone Login & Firebase Sync)
+  appLockPin?: string;  // ঐচ্ছিক ৪-সংখ্যার অ্যাপ স্ক্রিন লক পিন (সেটিংস থেকে সেট করা হলে তবেই থাকবে)
+  isPinLockEnabled?: boolean; // অ্যাপ ওপেন করার সময় ৪-সংখ্যার পিন লক চালু/বন্ধ (ডিফল্ট OFF)
   currency: string;     // '৳'
   isRegistered: boolean;
   language: Language;
@@ -256,6 +258,8 @@ export interface BulkPurchase {
   dueAmount: number;     // বাকি টাকা (সাপ্লায়ারের পাওনা)
   paymentType: 'cash' | 'due' | 'partial' | 'bkash' | 'nagad' | 'bank';
   note?: string;         // মেমো বা ভাউচার বিবরণ
+  memoAttachment?: string;     // সংযুক্ত মেমোর ছবি / PDF (Base64 Data URL)
+  memoAttachmentName?: string; // সংযুক্ত ফাইলের নাম
   returnedAmount?: number; // মোট ফেরত আসা টাকার পরিমাণ (legacy)
   returns?: PurchaseReturnItem[]; // ফেরত সংক্রান্ত হিস্ট্রি (legacy)
   createdAt: string;

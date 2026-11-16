@@ -370,9 +370,9 @@ export const ExpenseManager: React.FC<Props> = ({
         </div>
 
         {/* Expenses List */}
-        <div className="space-y-2.5">
+        <div className="space-y-2.5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-2.5">
           {filteredExpenses.length === 0 ? (
-            <div className="py-12 flex flex-col items-center justify-center text-center p-6 text-[#64748B]">
+            <div className="lg:col-span-2 py-12 flex flex-col items-center justify-center text-center p-6 text-[#64748B]">
               <Wallet className="w-12 h-12 text-[#9AA5B1] mb-2 stroke-1" />
               <p className="text-xs sm:text-sm font-bold text-[#102A43]">
                 এই তারিখে কোনো দোকান খরচের রেকর্ড নেই
@@ -459,7 +459,7 @@ export const ExpenseManager: React.FC<Props> = ({
       {/* Delete Expense Confirmation Modal */}
       {expenseToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-[24px] bg-white p-5 shadow-2xl border border-[#E2E8F0] text-center space-y-4">
+          <div className="w-full max-w-sm md:max-w-xl rounded-[24px] bg-white p-5 shadow-2xl border border-[#E2E8F0] text-center space-y-4">
             <div className="w-12 h-12 rounded-full bg-[#FFEBEE] text-[#D32F2F] flex items-center justify-center mx-auto">
               <Trash2 className="w-6 h-6" />
             </div>
@@ -497,7 +497,7 @@ export const ExpenseManager: React.FC<Props> = ({
       {/* Modal: Add / Edit Expense */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
+          <div className="w-full max-w-md md:max-w-xl rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
             <div className="p-4 bg-[#0E6B6B] text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Wallet className="w-5 h-5 text-emerald-200" />

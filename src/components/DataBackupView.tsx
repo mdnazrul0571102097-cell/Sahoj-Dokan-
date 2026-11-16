@@ -145,7 +145,7 @@ export const DataBackupView: React.FC<Props> = ({
       </div>
 
       {/* Main Body - Matches user's uploaded reference screenshot */}
-      <div className="flex-1 max-w-md w-full mx-auto p-5 sm:p-6 flex flex-col justify-center space-y-6">
+      <div className="flex-1 max-w-md md:max-w-7xl md:mx-auto md:w-full w-full mx-auto p-5 sm:p-6 flex flex-col justify-center space-y-6">
         
         {/* Toast Feedback */}
         {syncToast && (
@@ -260,7 +260,7 @@ export const DataBackupView: React.FC<Props> = ({
       </div>
 
       {/* Bottom Status Card (As shown in screenshot) */}
-      <div className="p-4 sm:p-5 max-w-md w-full mx-auto">
+      <div className="p-4 sm:p-5 max-w-md md:max-w-7xl md:mx-auto md:w-full w-full mx-auto">
         <div className="w-full py-3.5 px-4 rounded-2xl bg-[#e3eaee] dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-xs border border-slate-300/50 dark:border-slate-700">
           <Cloud className="w-5 h-5 text-slate-600 dark:text-slate-300" />
           <span>সমস্ত ডাটা আপ-টু-ডেট আছে</span>
@@ -270,7 +270,7 @@ export const DataBackupView: React.FC<Props> = ({
       {/* Cloud Restore Modal */}
       {showRestoreModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 sm:p-4 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto">
-          <div className="w-full max-w-md my-auto rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+          <div className="w-full max-w-md md:max-w-xl my-auto rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
             <div className="p-5 bg-gradient-to-r from-blue-800 via-indigo-800 to-emerald-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl bg-white/10 text-cyan-300">

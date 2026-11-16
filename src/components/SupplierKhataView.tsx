@@ -3,7 +3,7 @@ import { Supplier, SupplierTransaction, ShopProfile, Language, AppMode, BulkPurc
 import { translations } from '../i18n/translations';
 import { playSuccessChime } from '../utils/audio';
 import { DB } from '../storage/db';
-import { MemoScannerCard } from './MemoScannerCard';
+import { MemoScannerCard, MemoAttachment } from './MemoScannerCard';
 import { ScannedMemoResult } from '../utils/memoScanner';
 import {
   Building2,
@@ -31,6 +31,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Calendar,
+  Paperclip,
 } from 'lucide-react';
 
 const WALK_IN_CASH_SUPPLIER = 'সাধারণ মহাজন (নগদ)';
@@ -48,7 +49,8 @@ interface Props {
     supplierId: string,
     amount: number,
     note: string,
-    newBalance: number
+    newBalance: number,
+    date?: string
   ) => void;
   onAddSupplierDue: (
     supplierId: string,
@@ -129,8 +131,15 @@ export const SupplierKhataView: React.FC<Props> = ({
     if (!ymd || ymd === todayYmd) return new Date().toISOString();
     const parts = ymd.split('-').map(Number);
     if (parts.length === 3 && !parts.some(isNaN)) {
-      const dt = new Date();
-      dt.setFullYear(parts[0], parts[1] - 1, parts[2]);
+      const now = new Date();
+      const dt = new Date(
+        parts[0],
+        parts[1] - 1,
+        parts[2],
+        now.getHours(),
+        now.getMinutes(),
+        now.getSeconds()
+      );
       if (!isNaN(dt.getTime())) return dt.toISOString();
     }
     return new Date().toISOString();
@@ -179,6 +188,7 @@ export const SupplierKhataView: React.FC<Props> = ({
   const [paymentAmount, setPaymentAmount] = useState<number | ''>('');
   const [paymentNote, setPaymentNote] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'bkash' | 'nagad' | 'bank'>('cash');
+  const [paymentDate, setPaymentDate] = useState<string>(() => getLocalDateStr(new Date()));
 
   // Form states: Unified Supplier Purchase (New, Edit, Existing & Walk-in Cash Supplier + Cash/Due/Damage + Date)
   const [editingPurchase, setEditingPurchase] = useState<BulkPurchase | null>(null);
@@ -190,6 +200,8 @@ export const SupplierKhataView: React.FC<Props> = ({
   const [dueDamageDeduction, setDueDamageDeduction] = useState<string>('');
   const [dueCashPaid, setDueCashPaid] = useState<string>('');
   const [dueItems, setDueItems] = useState<BulkPurchaseItem[]>([]);
+  const [dueMemoAttachment, setDueMemoAttachment] = useState<MemoAttachment | null>(null);
+  const [viewingMemoImage, setViewingMemoImage] = useState<string | null>(null);
   const [dueFormError, setDueFormError] = useState('');
   const [showSupplierSuggestions, setShowSupplierSuggestions] = useState(false);
 
@@ -396,11 +408,13 @@ export const SupplierKhataView: React.FC<Props> = ({
     const fullNote = paymentNote.trim()
       ? `${paymentNote.trim()} (${paymentMethod})`
       : `টাকা পরিশোধ (${paymentMethod})`;
+    const selectedDateIso = buildIsoForSelectedDate(paymentDate);
 
-    onPaySupplier(target.id, amount, fullNote, newBalance);
+    onPaySupplier(target.id, amount, fullNote, newBalance, selectedDateIso);
 
     setPaymentAmount('');
     setPaymentNote('');
+    setPaymentDate(getLocalDateStr(new Date()));
     setShowPaymentModal(false);
     playSuccessChime();
   };
@@ -426,6 +440,7 @@ export const SupplierKhataView: React.FC<Props> = ({
     setDueDamageDeduction('');
     setDueCashPaid('');
     setDueItems([]);
+    setDueMemoAttachment(null);
     setDueFormError('');
     setShowSupplierSuggestions(false);
     setShowAddDueModal(true);
@@ -470,6 +485,11 @@ export const SupplierKhataView: React.FC<Props> = ({
     const rawNote = bp.note || '';
     const cleanedNote = rawNote.split(' | মোট মাল:')[0].split(' | নগদ জমা:')[0].trim();
     setDueNote(cleanedNote);
+    setDueMemoAttachment(
+      bp.memoAttachment
+        ? { dataUrl: bp.memoAttachment, name: bp.memoAttachmentName }
+        : null
+    );
     setDueFormError('');
     setShowSupplierSuggestions(false);
     setShowAddDueModal(true);
@@ -741,6 +761,8 @@ export const SupplierKhataView: React.FC<Props> = ({
         dueAmount: remainingDue,
         paymentType: remainingDue === 0 ? 'cash' : cashPaid > 0 ? 'partial' : 'due',
         note: finalNote,
+        memoAttachment: dueMemoAttachment?.dataUrl || undefined,
+        memoAttachmentName: dueMemoAttachment?.name || undefined,
       };
 
       if (onUpdateBulkPurchase) {
@@ -765,6 +787,7 @@ export const SupplierKhataView: React.FC<Props> = ({
       setDueDamageDeduction('');
       setDueCashPaid('');
       setDueItems([]);
+      setDueMemoAttachment(null);
       setDueFormError('');
       setShowAddDueModal(false);
       playSuccessChime();
@@ -788,6 +811,8 @@ export const SupplierKhataView: React.FC<Props> = ({
       dueAmount: remainingDue,
       paymentType: remainingDue === 0 ? 'cash' : cashPaid > 0 ? 'partial' : 'due',
       note: finalNote,
+      memoAttachment: dueMemoAttachment?.dataUrl || undefined,
+      memoAttachmentName: dueMemoAttachment?.name || undefined,
       createdAt: nowIso,
     };
 
@@ -830,6 +855,7 @@ export const SupplierKhataView: React.FC<Props> = ({
     setDueDamageDeduction('');
     setDueCashPaid('');
     setDueItems([]);
+    setDueMemoAttachment(null);
     setDueFormError('');
     setShowAddDueModal(false);
     playSuccessChime();
@@ -1227,7 +1253,8 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                 </p>
               </div>
             ) : (
-              visibleSuppliers.map((supp) => {
+              <div className="space-y-1.5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-2.5">
+              {visibleSuppliers.map((supp) => {
                 const due = supp.totalDue ?? supp.totalPayableDue ?? 0;
                 const hasDue = due > 0;
 
@@ -1312,6 +1339,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                             setSelectedSupplierId(supp.id);
                             setPaymentAmount(due > 0 ? due : '');
                             setPaymentNote('');
+                            setPaymentDate(getLocalDateStr(new Date()));
                             setShowPaymentModal(true);
                           }}
                           className="px-2.5 py-1.5 rounded-xl bg-[#E8F5E9] hover:bg-emerald-200 text-[#2E7D32] border border-emerald-200 text-xs font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer"
@@ -1391,7 +1419,8 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                     </div>
                   </div>
                 );
-              })
+              })}
+              </div>
             )}
           </div>
         )}
@@ -1418,7 +1447,8 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
               </p>
             </div>
           ) : (
-            visiblePurchases.map((bp) => {
+            <div className="space-y-2 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-2.5">
+            {visiblePurchases.map((bp) => {
               const dueAmt = Math.max(0, Number(bp.dueAmount) || 0);
               const paidAmt = Math.max(
                 0,
@@ -1501,6 +1531,17 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
+                      {bp.memoAttachment && (
+                        <button
+                          type="button"
+                          onClick={() => setViewingMemoImage(bp.memoAttachment || null)}
+                          className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-[#0E6B6B] border border-emerald-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                          title="সংযুক্ত মেমোর ছবি দেখুন"
+                        >
+                          <Paperclip className="w-3 h-3" />
+                          <span>মেমো</span>
+                        </button>
+                      )}
                       {bp.items && bp.items.length > 0 && (
                         <button
                           type="button"
@@ -1580,7 +1621,8 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                   )}
                 </div>
               );
-            })
+            })}
+            </div>
           )}
         </div>
         )}
@@ -1589,7 +1631,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
       {/* Supplier Ledger & Details Modal */}
       {showDetailModal && (selectedSupplier || currentActiveSupplier) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-          <div className="w-full max-w-lg my-auto rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden flex flex-col max-h-[92vh]">
+          <div className="w-full max-w-lg md:max-w-xl my-auto rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden flex flex-col max-h-[92vh]">
             {/* Modal Header */}
             <div className="p-4 bg-[#0E6B6B] text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
@@ -1703,6 +1745,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                       const due = target.totalDue ?? target.totalPayableDue ?? 0;
                       setPaymentAmount(due > 0 ? due : '');
                       setPaymentNote('');
+                      setPaymentDate(getLocalDateStr(new Date()));
                       setShowPaymentModal(true);
                     }
                   }}
@@ -1773,53 +1816,53 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                       return (
                         <div
                           key={tx.id}
-                          className={`p-3 rounded-xl border flex items-center justify-between gap-2.5 text-xs ${
+                          className={`p-3 rounded-2xl border space-y-2 text-xs ${
                             isReturn
                               ? 'border-amber-200 bg-amber-50/50'
                               : 'border-[#E2E8F0] bg-[#F8FAFC]'
                           }`}
                         >
-                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <div
-                              className={`p-2 rounded-xl shrink-0 ${
-                                isReturn
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : isPayment
-                                  ? 'bg-[#E8F5E9] text-[#2E7D32]'
-                                  : 'bg-[#FFEBEE] text-[#D32F2F]'
-                              }`}
-                            >
-                              {isReturn ? (
-                                <RotateCcw className="w-3.5 h-3.5" />
-                              ) : isPayment ? (
-                                <TrendingDown className="w-3.5 h-3.5" />
-                              ) : (
-                                <TrendingUp className="w-3.5 h-3.5" />
-                              )}
+                          {/* Top Row: Icon + Title + Date on left | Amount + Remaining on right */}
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                              <div
+                                className={`p-2 rounded-xl shrink-0 mt-0.5 ${
+                                  isReturn
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : isPayment
+                                    ? 'bg-[#E8F5E9] text-[#2E7D32]'
+                                    : 'bg-[#FFEBEE] text-[#D32F2F]'
+                                }`}
+                              >
+                                {isReturn ? (
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                ) : isPayment ? (
+                                  <TrendingDown className="w-3.5 h-3.5" />
+                                ) : (
+                                  <TrendingUp className="w-3.5 h-3.5" />
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-extrabold text-[#102A43] text-xs sm:text-sm leading-snug">
+                                  {isReturn
+                                    ? 'মাল ফেরত / ড্যামেজ বাবদ কর্তন'
+                                    : isPayment
+                                    ? 'টাকা পরিশোধ / জমা'
+                                    : 'মাল ক্রয় বাকি'}
+                                </p>
+                                <p className="text-[11px] font-semibold text-[#64748B] mt-0.5">
+                                  {new Date(tx.date).toLocaleDateString('bn-BD', {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })}
+                                </p>
+                              </div>
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="font-bold text-[#102A43]">
-                                {isReturn
-                                  ? 'মাল ফেরত / ড্যামেজ বাবদ কর্তন'
-                                  : isPayment
-                                  ? 'টাকা পরিশোধ / জমা'
-                                  : 'মাল ক্রয় বাকি'}
-                              </p>
-                              <p className="text-[11px] text-[#64748B] break-words">
-                                {new Date(tx.date).toLocaleDateString('bn-BD', {
-                                  day: 'numeric',
-                                  month: 'short',
-                                  year: 'numeric',
-                                })}
-                                {tx.note ? ` • ${tx.note}` : ''}
-                              </p>
-                            </div>
-                          </div>
 
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <div className="text-right">
+                            <div className="text-right shrink-0">
                               <p
-                                className={`font-mono font-black ${
+                                className={`font-mono font-black text-sm whitespace-nowrap ${
                                   isReturn
                                     ? 'text-amber-700'
                                     : isPayment
@@ -1829,15 +1872,39 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                               >
                                 {isReturn ? '-' : isPayment ? '-' : '+'}৳{tx.amount.toLocaleString()}
                               </p>
-                              <p className="text-[10px] text-[#64748B] font-mono">
+                              <p className="text-[11px] text-[#64748B] font-mono whitespace-nowrap">
                                 অবশিষ্ট: ৳{tx.balanceAfter.toLocaleString()}
                               </p>
                             </div>
+                          </div>
+
+                          {/* Middle Row: Full-width clean Note / Receipt Description */}
+                          {tx.note && (
+                            <p className="text-[11px] text-[#475569] bg-white/80 border border-[#E2E8F0]/80 rounded-xl px-2.5 py-1.5 leading-relaxed break-words">
+                              {tx.note}
+                            </p>
+                          )}
+
+                          {/* Bottom Row: Clean Action Buttons */}
+                          <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-[#E2E8F0]/70">
+                            {matchedPurchase?.memoAttachment && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setViewingMemoImage(matchedPurchase.memoAttachment || null)
+                                }
+                                className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-[#0E6B6B] text-[11px] font-extrabold border border-emerald-200 flex items-center gap-1 transition active:scale-95 cursor-pointer"
+                                title="সংযুক্ত মেমোর ছবি দেখুন"
+                              >
+                                <Paperclip className="w-3 h-3" />
+                                <span>মেমো</span>
+                              </button>
+                            )}
                             {matchedPurchase && (
                               <button
                                 type="button"
                                 onClick={() => openEditPurchaseModal(matchedPurchase)}
-                                className="px-2 py-1 rounded-lg bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] text-[10px] font-extrabold border border-[#B2DFDB] transition active:scale-95 cursor-pointer"
+                                className="px-2.5 py-1 rounded-lg bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] text-[11px] font-extrabold border border-[#B2DFDB] transition active:scale-95 cursor-pointer"
                                 title="পুরো ক্রয় রসিদ ও তারিখ এডিট করুন"
                               >
                                 রসিদ এডিট
@@ -1846,10 +1913,11 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                             <button
                               type="button"
                               onClick={() => openEditTxModal(tx)}
-                              className="p-1.5 rounded-lg bg-white hover:bg-[#E0F2F1] text-[#0E6B6B] border border-[#E2E8F0] transition active:scale-95 cursor-pointer"
+                              className="px-2 py-1 rounded-lg bg-white hover:bg-[#E0F2F1] text-[#0E6B6B] border border-[#E2E8F0] text-[11px] font-bold flex items-center gap-1 transition active:scale-95 cursor-pointer"
                               title="লেনদেন এডিট করুন"
                             >
-                              <Edit2 className="w-3.5 h-3.5" />
+                              <Edit2 className="w-3 h-3" />
+                              <span>এডিট</span>
                             </button>
                           </div>
                         </div>
@@ -1866,7 +1934,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
       {/* Add New Supplier Modal */}
       {showAddSupplierModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-          <div className="w-full max-w-md my-auto rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
+          <div className="w-full max-w-md md:max-w-xl my-auto rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
             <div className="p-4 bg-[#0E6B6B] text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-emerald-200" />
@@ -1987,7 +2055,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
       {/* Edit Supplier Modal */}
       {showEditSupplierModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-          <div className="w-full max-w-md my-auto rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
+          <div className="w-full max-w-md md:max-w-xl my-auto rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
             <div className="p-4 bg-[#0E6B6B] text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Edit2 className="w-5 h-5 text-emerald-200" />
@@ -2104,7 +2172,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
       {/* Pay Supplier Modal */}
       {showPaymentModal && (currentActiveSupplier || selectedSupplier) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-          <div className="w-full max-w-md my-auto rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
+          <div className="w-full max-w-md md:max-w-xl my-auto rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
             <div className="p-4 bg-[#2E7D32] text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ArrowDownLeft className="w-5 h-5 text-emerald-200" />
@@ -2184,6 +2252,23 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                 </div>
               </div>
 
+              {/* পরিশোধের তারিখ */}
+              <div>
+                <label className="block text-xs font-bold text-[#102A43] mb-1">
+                  পরিশোধের তারিখ
+                </label>
+                <div className="relative">
+                  <Calendar className="w-4 h-4 text-[#2E7D32] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="date"
+                    required
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs sm:text-sm font-bold text-[#102A43] focus:outline-none focus:ring-2 focus:ring-[#2E7D32]"
+                  />
+                </div>
+              </div>
+
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-[#102A43]">
@@ -2244,7 +2329,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
       {/* Unified Supplier Purchase Modal (New & Existing Supplier + Cash, Due & Damage) */}
       {showAddDueModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2.5 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-          <div className="w-full max-w-md my-auto rounded-[28px] bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden flex flex-col max-h-[95vh]">
+          <div className="w-full max-w-md md:max-w-xl my-auto rounded-[28px] bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden flex flex-col max-h-[95vh]">
             <div className="p-4 bg-[#0E6B6B] text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-emerald-200" />
@@ -2258,6 +2343,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                 type="button"
                 onClick={() => {
                   setEditingPurchase(null);
+                  setDueMemoAttachment(null);
                   setShowAddDueModal(false);
                 }}
                 className="p-1 rounded-full hover:bg-white/20 text-white cursor-pointer"
@@ -2267,10 +2353,15 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
             </div>
 
             <form onSubmit={handleAddDueSubmit} className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-3">
-              {/* Compact AI Memo Scanner Card (OCR preserved 100%) */}
-              {!editingPurchase && (
-                <MemoScannerCard onMemoExtracted={handleDueMemoExtracted} compact />
-              )}
+              {/* Compact AI Memo Scanner Card (Compressed 1024px JPEG + Non-blocking Receipt Attachment + 60-day Trial/Pro AI Gate) */}
+              <MemoScannerCard
+                onMemoExtracted={handleDueMemoExtracted}
+                attachment={dueMemoAttachment}
+                onAttachmentChange={setDueMemoAttachment}
+                appMode={appMode}
+                onOpenSubscriptionModal={onOpenSubscriptionModal}
+                compact
+              />
 
               {/* Smart Supplier Name + Phone Side-by-Side */}
               <div className="p-2.5 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-2 relative">
@@ -2732,6 +2823,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                   type="button"
                   onClick={() => {
                     setEditingPurchase(null);
+                    setDueMemoAttachment(null);
                     setShowAddDueModal(false);
                   }}
                   className="flex-1 py-3 rounded-xl border border-[#E2E8F0] bg-[#EDF2F7] text-[#102A43] text-xs font-bold cursor-pointer"
@@ -2753,7 +2845,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
       {/* Return Goods (Purchase Return / Damage) Modal */}
       {showReturnModal && (currentActiveSupplier || selectedSupplier) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-          <div className="w-full max-w-md my-auto rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
+          <div className="w-full max-w-md md:max-w-xl my-auto rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
             <div className="p-4 bg-[#D97706] text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <RotateCcw className="w-5 h-5 text-amber-200" />
@@ -2862,7 +2954,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
       {/* Delete Supplier Confirmation Modal */}
       {showDeleteConfirmModal && (currentActiveSupplier || selectedSupplier) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl border border-[#E2E8F0] text-center space-y-4">
+          <div className="w-full max-w-sm md:max-w-xl rounded-3xl bg-white p-5 shadow-2xl border border-[#E2E8F0] text-center space-y-4">
             <div className="w-12 h-12 rounded-full bg-[#FFEBEE] text-[#D32F2F] flex items-center justify-center mx-auto">
               <Trash2 className="w-6 h-6" />
             </div>
@@ -2897,7 +2989,7 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
       {/* Edit Individual Supplier Transaction Modal */}
       {editingTx && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-sm rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
+          <div className="w-full max-w-sm md:max-w-xl rounded-3xl bg-white shadow-2xl border border-[#E2E8F0] overflow-hidden">
             <div className="p-4 bg-[#0E6B6B] text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Edit2 className="w-4 h-4 text-emerald-200" />
@@ -2976,6 +3068,37 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen Saved Memo Attachment Preview Modal */}
+      {viewingMemoImage && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/85 p-3 sm:p-6 flex flex-col items-center justify-center backdrop-blur-xs"
+          onClick={() => setViewingMemoImage(null)}
+        >
+          <div
+            className="w-full max-w-lg md:max-w-xl bg-white rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-2.5 bg-[#0F172A] text-white flex items-center justify-between">
+              <span className="text-xs font-bold truncate">সংযুক্ত মেমো / রসিদের ছবি</span>
+              <button
+                type="button"
+                onClick={() => setViewingMemoImage(null)}
+                className="p-1 rounded-full hover:bg-white/20 text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto bg-slate-900 p-2 flex items-center justify-center">
+              <img
+                src={viewingMemoImage}
+                alt="সংযুক্ত মেমোর ছবি"
+                className="max-w-full max-h-[75vh] object-contain rounded-lg"
+              />
+            </div>
           </div>
         </div>
       )}
