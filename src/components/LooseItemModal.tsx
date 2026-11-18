@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Product, Language } from '../types';
 import { translations } from '../i18n/translations';
 import { Scale, Banknote, X, Check, Plus, Minus } from 'lucide-react';
+import { CalculatorInput } from './CalculatorKeypad';
 
 interface Props {
   product: Product;
@@ -146,12 +147,11 @@ export const LooseItemModal: React.FC<Props> = ({
                     <Minus className="w-5 h-5" />
                   </button>
                   <div className="relative flex-1">
-                    <input
-                      type="number"
-                      step="0.05"
+                    <CalculatorInput
                       min="0.01"
                       value={weightKg || ''}
-                      onChange={(e) => calculateFromWeight(parseFloat(e.target.value) || 0)}
+                      onValueChange={(val) => calculateFromWeight(parseFloat(val) || 0)}
+                      calcLabel="ওজন (কেজি)"
                       className="w-full text-center text-2xl font-bold py-2 bg-transparent border-b-2 border-emerald-500 text-slate-900 dark:text-white focus:outline-none"
                     />
                     <span className="absolute right-2 top-3 text-xs font-semibold text-slate-400">
@@ -200,12 +200,11 @@ export const LooseItemModal: React.FC<Props> = ({
                   <span className="absolute left-3 top-2.5 text-xl font-bold text-emerald-600">
                     ৳
                   </span>
-                  <input
-                    type="number"
-                    step="5"
+                  <CalculatorInput
                     min="1"
                     value={takaAmount || ''}
-                    onChange={(e) => calculateFromTaka(parseFloat(e.target.value) || 0)}
+                    onValueChange={(val) => calculateFromTaka(parseFloat(val) || 0)}
+                    calcLabel="টাকার পরিমাণ (৳)"
                     className="w-full text-center text-2xl font-bold py-2 bg-transparent border-b-2 border-emerald-500 text-slate-900 dark:text-white focus:outline-none"
                   />
                 </div>

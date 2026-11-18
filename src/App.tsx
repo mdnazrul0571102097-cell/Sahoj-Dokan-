@@ -41,6 +41,7 @@ import { TrialBanner } from './components/TrialBanner';
 import { MenuHubView, MenuTileTarget } from './components/MenuHubView';
 import { AllReportsView } from './components/AllReportsView';
 import { CalculatorModal } from './components/CalculatorModal';
+import { CalculatorKeypadProvider } from './components/CalculatorKeypad';
 import { CloudSync } from './services/cloudSync';
 
 export default function App() {
@@ -181,6 +182,14 @@ export default function App() {
         return 'DEBOUNCED';
       }
       lastBackEventHandledRef.current = now;
+
+      // 0. Dismiss In-Built Calculator Keypad first if open
+      if (
+        typeof (window as any).__sdDismissCalculatorKeypad === 'function' &&
+        (window as any).__sdDismissCalculatorKeypad()
+      ) {
+        return 'KEYPAD_CLOSED';
+      }
 
       // 1. Check top-level App modals first
       if (isAdminPanelOpen) {
@@ -1565,6 +1574,7 @@ export default function App() {
   const lowStockCount = products.filter((p) => p.stock <= p.minStockAlert).length;
 
   return (
+    <CalculatorKeypadProvider>
     <div className="min-h-screen bg-[#EDF2F7] text-[#102A43] flex flex-col font-sans select-none pb-13 sm:pb-14 lg:pb-0">
       {/* Top Header */}
       <Header
@@ -1936,5 +1946,6 @@ export default function App() {
         </div>
       )}
     </div>
+    </CalculatorKeypadProvider>
   );
 }

@@ -963,7 +963,18 @@ export const DB = {
       const data = localStorage.getItem(STORAGE_KEYS.DAILY_RECONCILIATIONS);
       if (data) {
         const parsed = JSON.parse(data);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          const cutoffDt = new Date();
+          cutoffDt.setDate(cutoffDt.getDate() - 90);
+          const cutoffStr = `${cutoffDt.getFullYear()}-${String(cutoffDt.getMonth() + 1).padStart(2, '0')}-${String(cutoffDt.getDate()).padStart(2, '0')}`;
+          const retained = parsed.filter(
+            (r) => r && r.date && r.date >= cutoffStr
+          );
+          if (retained.length < parsed.length) {
+            localStorage.setItem(STORAGE_KEYS.DAILY_RECONCILIATIONS, JSON.stringify(retained));
+          }
+          return retained;
+        }
       }
     } catch (e) {
       console.error(e);
@@ -972,9 +983,12 @@ export const DB = {
   },
 
   saveDailyReconciliations(recons: DailyCashReconciliation[]) {
+    const cutoffDt = new Date();
+    cutoffDt.setDate(cutoffDt.getDate() - 90);
+    const cutoffStr = `${cutoffDt.getFullYear()}-${String(cutoffDt.getMonth() + 1).padStart(2, '0')}-${String(cutoffDt.getDate()).padStart(2, '0')}`;
     const byDate = new Map<string, DailyCashReconciliation>();
     recons.forEach((r) => {
-      if (r && r.date) {
+      if (r && r.date && r.date >= cutoffStr) {
         byDate.set(r.date, r);
       }
     });

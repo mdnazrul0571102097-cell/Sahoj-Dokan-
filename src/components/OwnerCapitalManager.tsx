@@ -11,12 +11,12 @@ import {
 import { DB } from '../storage/db';
 import { playSuccessChime } from '../utils/audio';
 import { RunningCapitalCard } from './RunningCapitalCard';
+import { CalculatorInput } from './CalculatorKeypad';
 import {
   UserCheck,
   ArrowUpRight,
   ArrowDownLeft,
   Landmark,
-  Plus,
   Trash2,
   Edit2,
   X,
@@ -337,7 +337,7 @@ export const OwnerCapitalManager: React.FC<Props> = ({
           <span>মালিকের ব্যক্তিগত খরচ/নেওয়া (−)</span>
         </button>
 
-        {/* ৩য় (নিচে): নেওয়া টাকা ক্যাশে ফেরত (+) (সবুজ বাটন) */}
+        {/* ৩য়: নেওয়া টাকা ক্যাশে ফেরত (+) (সবুজ বাটন) */}
         <button
           type="button"
           onClick={() => handleOpenAddModal('withdrawal_return')}
@@ -345,6 +345,16 @@ export const OwnerCapitalManager: React.FC<Props> = ({
         >
           <ArrowDownLeft className="w-4 h-4 stroke-[2.5]" />
           <span>নেওয়া টাকা ক্যাশে ফেরত (+)</span>
+        </button>
+
+        {/* ৪র্থ: মালিকের নতুন পুঁজি জমা (পকেট থেকে পুঁজি যোগ) (সবুজ বাটন) */}
+        <button
+          type="button"
+          onClick={() => handleOpenAddModal('capital_deposit')}
+          className="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
+        >
+          <Landmark className="w-4 h-4 stroke-[2.2]" />
+          <span>+ মালিকের নতুন পুঁজি জমা (পকেট থেকে পুঁজি যোগ)</span>
         </button>
       </div>
 
@@ -511,18 +521,21 @@ export const OwnerCapitalManager: React.FC<Props> = ({
 
             <form onSubmit={handleSubmit} className="p-5 space-y-4">
               {/* Transaction Type Selector */}
-              <div className="grid grid-cols-2 gap-1.5 bg-[#EDF2F7] p-1 rounded-2xl border border-[#E2E8F0]">
+              <div className="grid grid-cols-3 gap-1.5 bg-[#EDF2F7] p-1 rounded-2xl border border-[#E2E8F0]">
                 {[
-                  { id: 'withdrawal', label: 'ব্যক্তিগত খরচ/নেওয়া' },
-                  { id: 'withdrawal_return', label: 'নেওয়া টাকা ফেরত' },
+                  { id: 'withdrawal', label: 'খরচ / নেওয়া (−)' },
+                  { id: 'withdrawal_return', label: 'নেওয়া ফেরত (+)' },
+                  { id: 'capital_deposit', label: 'নতুন পুঁজি জমা (+)' },
                 ].map((opt) => (
                   <button
                     key={opt.id}
                     type="button"
                     onClick={() => setTxType(opt.id as OwnerTransactionType)}
-                    className={`py-2 px-2 rounded-xl text-xs font-extrabold transition cursor-pointer ${
+                    className={`py-2 px-1.5 rounded-xl text-[11px] sm:text-xs font-extrabold transition cursor-pointer ${
                       txType === opt.id
-                        ? 'bg-[#0E6B6B] text-white shadow-2xs'
+                        ? opt.id === 'capital_deposit'
+                          ? 'bg-emerald-600 text-white shadow-2xs'
+                          : 'bg-[#0E6B6B] text-white shadow-2xs'
                         : 'text-[#64748B] hover:text-[#102A43]'
                     }`}
                   >
@@ -536,13 +549,12 @@ export const OwnerCapitalManager: React.FC<Props> = ({
                 <label className="block text-xs font-extrabold text-[#102A43] mb-1">
                   টাকার পরিমাণ (৳) *
                 </label>
-                <input
-                  type="number"
+                <CalculatorInput
                   required
                   min="1"
-                  step="any"
                   value={amountInput}
-                  onChange={(e) => setAmountInput(e.target.value)}
+                  onValueChange={(val) => setAmountInput(val)}
+                  calcLabel="টাকার পরিমাণ (৳)"
                   placeholder="যেমন: 2000"
                   className="w-full px-4 py-3 rounded-2xl bg-[#F8FAFC] border-2 border-[#0E6B6B]/40 text-lg font-black text-[#102A43] focus:outline-none focus:border-[#0E6B6B]"
                 />

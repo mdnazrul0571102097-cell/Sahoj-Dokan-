@@ -13,6 +13,7 @@ import {
 } from '../types';
 import { playSuccessChime } from '../utils/audio';
 import { DB } from '../storage/db';
+import { CalculatorInput } from './CalculatorKeypad';
 import {
   Zap,
   X,
@@ -582,12 +583,11 @@ export const QuickSaleModal: React.FC<Props> = ({
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg font-black text-[#0E6B6B]">
                     ৳
                   </span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
+                  <CalculatorInput
                     autoFocus
                     value={amountInput}
-                    onChange={(e) => setAmountInput(e.target.value)}
+                    onValueChange={(val) => setAmountInput(val)}
+                    calcLabel="বিক্রির পরিমাণ (৳)"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -727,11 +727,11 @@ export const QuickSaleModal: React.FC<Props> = ({
 
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="font-bold text-[#102A43]">নগদ জমা দিয়েছে (থাকলে):</span>
-                      <input
-                        type="number"
+                      <CalculatorInput
                         min="0"
                         value={paidAmountForDue}
-                        onChange={(e) => setPaidAmountForDue(e.target.value)}
+                        onValueChange={(val) => setPaidAmountForDue(val)}
+                        calcLabel="নগদ জমা (৳)"
                         placeholder="০"
                         className="w-24 px-2 py-1 rounded-lg bg-white border border-rose-200 text-right font-bold text-xs text-[#102A43]"
                       />
@@ -777,11 +777,11 @@ export const QuickSaleModal: React.FC<Props> = ({
                 </div>
                 {profitMode === 'custom' && (
                   <div className="pt-0.5">
-                    <input
-                      type="number"
+                    <CalculatorInput
                       min="0"
                       value={customProfitInput}
-                      onChange={(e) => setCustomProfitInput(e.target.value)}
+                      onValueChange={(val) => setCustomProfitInput(val)}
+                      calcLabel="লাভের পরিমাণ (৳)"
                       placeholder="এই বিক্রিতে কত টাকা লাভ হয়েছে লিখুন (৳)"
                       className="w-full px-2.5 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-bold text-[#102A43]"
                     />
@@ -839,12 +839,11 @@ export const QuickSaleModal: React.FC<Props> = ({
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg font-black text-[#D32F2F]">
                     ৳
                   </span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
+                  <CalculatorInput
                     autoFocus
                     value={returnAmountInput}
-                    onChange={(e) => setReturnAmountInput(e.target.value)}
+                    onValueChange={(val) => setReturnAmountInput(val)}
+                    calcLabel="ফেরতের পরিমাণ (৳)"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -948,11 +947,11 @@ export const QuickSaleModal: React.FC<Props> = ({
                     </div>
                     {returnProfitMode === 'custom' && (
                       <div className="pt-0.5">
-                        <input
-                          type="number"
+                        <CalculatorInput
                           min="0"
                           value={returnCustomProfitInput}
-                          onChange={(e) => setReturnCustomProfitInput(e.target.value)}
+                          onValueChange={(val) => setReturnCustomProfitInput(val)}
+                          calcLabel="লাভ কর্তন (৳)"
                           placeholder="লাভ থেকে কত টাকা কাটবে লিখুন (৳)"
                           className="w-full px-2.5 py-1.5 rounded-xl bg-white border border-rose-300 text-xs font-bold text-[#102A43]"
                         />
@@ -997,12 +996,11 @@ export const QuickSaleModal: React.FC<Props> = ({
                       ))}
                     </select>
                     {selectedReturnProductId && (
-                      <input
-                        type="number"
+                      <CalculatorInput
                         min="0.1"
-                        step="any"
                         value={returnQuantityInput}
-                        onChange={(e) => handleReturnQuantityChange(e.target.value)}
+                        onValueChange={(val) => handleReturnQuantityChange(val)}
+                        calcLabel="ফেরত পণ্যের পরিমাণ"
                         placeholder="পরিমাণ"
                         className="w-16 px-2 py-1.5 rounded-xl bg-white border border-[#0E6B6B] text-xs font-black text-center text-[#102A43]"
                         title="ফেরত পণ্যের পরিমাণ"

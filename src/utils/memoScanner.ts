@@ -73,8 +73,86 @@ async function fetchWithTimeout(
   }
 }
 
+const MAX_MEMO_DIMENSION = 1024;
+const DEFAULT_MEMO_JPEG_QUALITY = 0.65;
+const TARGET_MAX_MEMO_BYTES = 130 * 1024; // Strict <= 130 KB target per image
+
+function estimateDataUrlBytes(dataUrl: string): number {
+  if (!dataUrl) return 0;
+  const commaIdx = dataUrl.indexOf(',');
+  const base64 = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl;
+  return Math.round((base64.length * 3) / 4);
+}
+
 /**
- * Resizes & compresses camera/gallery images via Canvas (max 1024px width, 0.7 JPEG quality)
+ * Compresses an uploaded memo image strictly via HTML5 Canvas:
+ * - Max width/height: 1024px (aspect ratio preserved)
+ * - Format: image/jpeg, default quality 0.65
+ * - Target binary payload <= 80KB - 130KB so localStorage & Firebase stay fast.
+ */
+export async function compressMemoFile(file: File): Promise<{
+  dataUrl: string;
+  mimeType: string;
+  name: string;
+}> {
+  const isPdf =
+    file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+  if (isPdf) {
+    const pdfDataUrl = await readFileAsDataUrl(file);
+    const safePdfUrl = pdfDataUrl.length > 2_000_000 ? '' : pdfDataUrl;
+    if (!pdfDataUrl) {
+      throw new Error('ফাইল লোড করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।');
+    }
+    return {
+      dataUrl: safePdfUrl,
+      mimeType: 'application/pdf',
+      name: file.name || 'memo.pdf',
+    };
+  }
+
+  let dataUrl = await compressImage(
+    file,
+    MAX_MEMO_DIMENSION,
+    MAX_MEMO_DIMENSION,
+    DEFAULT_MEMO_JPEG_QUALITY
+  );
+
+  if (!dataUrl) {
+    dataUrl = await readFileAsDataUrl(file);
+  }
+
+  if (!dataUrl) {
+    throw new Error('ফাইল লোড করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।');
+  }
+
+  // Adaptive step-down only if an ultra-dense photo still exceeds ~130KB at 1024px / 0.65
+  if (dataUrl.startsWith('data:image/') && estimateDataUrlBytes(dataUrl) > TARGET_MAX_MEMO_BYTES) {
+    const passes: Array<[number, number]> = [
+      [1024, 0.55],
+      [900, 0.5],
+      [800, 0.45],
+    ];
+    for (const [dim, q] of passes) {
+      const nextUrl = await compressImage(dataUrl, dim, dim, q);
+      if (nextUrl && estimateDataUrlBytes(nextUrl) < estimateDataUrlBytes(dataUrl)) {
+        dataUrl = nextUrl;
+      }
+      if (estimateDataUrlBytes(dataUrl) <= TARGET_MAX_MEMO_BYTES) {
+        break;
+      }
+    }
+  }
+
+  return {
+    dataUrl,
+    mimeType: dataUrl.startsWith('data:image/jpeg') ? 'image/jpeg' : file.type || 'image/jpeg',
+    name: file.name || 'memo.jpg',
+  };
+}
+
+/**
+ * Resizes & compresses camera/gallery images via Canvas (max 1024x1024, 0.65 JPEG quality, <=130KB)
  * so Android APK WebView never runs out of memory or hits mobile network timeouts.
  * Always resolves with the prepared attachment even if AI cannot read blurry handwriting, internet is slow/offline, or AI auto-scan is Pro-locked after the 60-day trial.
  */
@@ -82,38 +160,16 @@ export async function prepareAndScanMemoWithAI(
   file: File,
   options?: { skipAiScan?: boolean }
 ): Promise<MemoScanOutcome> {
-  const isPdf =
-    file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-
-  let base64Data = '';
-  let mimeType = file.type || (isPdf ? 'application/pdf' : 'image/jpeg');
-
-  if (isPdf) {
-    base64Data = await readFileAsDataUrl(file);
-    mimeType = 'application/pdf';
-  } else {
-    // Resize via browser Canvas to max 1024px width & compress to 0.7 JPEG quality
-    base64Data = await compressImage(file, 1024, 1600, 0.7);
-    if (!base64Data) {
-      base64Data = await readFileAsDataUrl(file);
-    } else {
-      mimeType = 'image/jpeg';
-    }
-  }
-
-  if (!base64Data) {
-    throw new Error('ফাইল লোড করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।');
-  }
-
-  // Keep localStorage/CloudSync safe if a huge raw PDF was chosen (images are already ~80-130KB JPEG)
-  const safeAttachmentDataUrl =
-    isPdf && base64Data.length > 2_000_000 ? '' : base64Data;
+  const prepared = await compressMemoFile(file);
+  const base64Data = prepared.dataUrl;
+  const mimeType = prepared.mimeType;
+  const safeAttachmentDataUrl = prepared.dataUrl;
 
   if (options?.skipAiScan) {
     return {
       attachmentDataUrl: safeAttachmentDataUrl,
       attachmentMimeType: mimeType,
-      attachmentName: file.name || (isPdf ? 'memo.pdf' : 'memo.jpg'),
+      attachmentName: prepared.name,
       aiSuccess: false,
       aiStatus: 'pro_locked',
     };
@@ -123,7 +179,7 @@ export async function prepareAndScanMemoWithAI(
     return {
       attachmentDataUrl: safeAttachmentDataUrl,
       attachmentMimeType: mimeType,
-      attachmentName: file.name || (isPdf ? 'memo.pdf' : 'memo.jpg'),
+      attachmentName: prepared.name,
       aiSuccess: false,
       aiStatus: 'offline_or_slow',
     };
@@ -173,7 +229,7 @@ export async function prepareAndScanMemoWithAI(
         return {
           attachmentDataUrl: safeAttachmentDataUrl,
           attachmentMimeType: mimeType,
-          attachmentName: file.name || (isPdf ? 'memo.pdf' : 'memo.jpg'),
+          attachmentName: prepared.name,
           aiSuccess: hasUsefulData,
           aiStatus: hasUsefulData ? 'extracted' : 'partial_or_unreadable',
           result: parsedResult,
@@ -187,7 +243,7 @@ export async function prepareAndScanMemoWithAI(
   return {
     attachmentDataUrl: safeAttachmentDataUrl,
     attachmentMimeType: mimeType,
-    attachmentName: file.name || (isPdf ? 'memo.pdf' : 'memo.jpg'),
+    attachmentName: prepared.name,
     aiSuccess: false,
     aiStatus: hadAnyHttpResponse ? 'partial_or_unreadable' : 'offline_or_slow',
   };

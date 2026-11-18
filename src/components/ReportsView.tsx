@@ -23,6 +23,7 @@ import { ExpenseManager } from './ExpenseManager';
 import { BulkPurchaseManager } from './BulkPurchaseManager';
 import { QuickSaleModal } from './QuickSaleModal';
 import { CashReconciliationManager } from './CashReconciliationManager';
+import { CalculatorInput } from './CalculatorKeypad';
 import { OwnerCapitalManager } from './OwnerCapitalManager';
 import { RunningCapitalCard } from './RunningCapitalCard';
 import { DB } from '../storage/db';
@@ -1108,13 +1109,11 @@ export const ReportsView: React.FC<Props> = ({
                       <label className="block text-[10px] font-bold text-[#64748B] mb-0.5">
                         পরিমাণ ({item.unit})
                       </label>
-                      <input
-                        type="number"
-                        step="any"
+                      <CalculatorInput
                         min="0.01"
                         value={item.quantity}
-                        onChange={(e) => {
-                          const qty = Math.max(0.01, Number(e.target.value) || 0);
+                        onValueChange={(val) => {
+                          const qty = Math.max(0.01, Number(val) || 0);
                           setEditItems((prev) =>
                             prev.map((it, i) =>
                               i === idx
@@ -1127,6 +1126,7 @@ export const ReportsView: React.FC<Props> = ({
                             )
                           );
                         }}
+                        calcLabel="পরিমাণ"
                         className="w-full px-2.5 py-1 rounded-lg bg-white border border-[#E2E8F0] text-xs font-bold text-[#102A43]"
                       />
                     </div>
@@ -1134,13 +1134,11 @@ export const ReportsView: React.FC<Props> = ({
                       <label className="block text-[10px] font-bold text-[#64748B] mb-0.5">
                         একক দর (৳)
                       </label>
-                      <input
-                        type="number"
-                        step="any"
+                      <CalculatorInput
                         min="0"
                         value={item.unitPrice}
-                        onChange={(e) => {
-                          const price = Math.max(0, Number(e.target.value) || 0);
+                        onValueChange={(val) => {
+                          const price = Math.max(0, Number(val) || 0);
                           setEditItems((prev) =>
                             prev.map((it, i) =>
                               i === idx
@@ -1153,6 +1151,7 @@ export const ReportsView: React.FC<Props> = ({
                             )
                           );
                         }}
+                        calcLabel="একক দর (৳)"
                         className="w-full px-2.5 py-1 rounded-lg bg-white border border-[#E2E8F0] text-xs font-bold text-[#102A43]"
                       />
                     </div>
@@ -1165,11 +1164,11 @@ export const ReportsView: React.FC<Props> = ({
                   <label className="block text-[11px] font-bold text-[#102A43] mb-1">
                     ছাড় / ডিসকাউন্ট (৳)
                   </label>
-                  <input
-                    type="number"
+                  <CalculatorInput
                     min="0"
                     value={editDiscount}
-                    onChange={(e) => setEditDiscount(Math.max(0, Number(e.target.value) || 0))}
+                    onValueChange={(val) => setEditDiscount(Math.max(0, Number(val) || 0))}
+                    calcLabel="ডিসকাউন্ট (৳)"
                     className="w-full px-2.5 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-bold text-[#102A43]"
                   />
                 </div>
@@ -1177,11 +1176,11 @@ export const ReportsView: React.FC<Props> = ({
                   <label className="block text-[11px] font-bold text-[#102A43] mb-1">
                     নগদ জমা (৳)
                   </label>
-                  <input
-                    type="number"
+                  <CalculatorInput
                     min="0"
                     value={editPaidAmount}
-                    onChange={(e) => setEditPaidAmount(e.target.value)}
+                    onValueChange={(val) => setEditPaidAmount(val)}
+                    calcLabel="নগদ জমা (৳)"
                     className="w-full px-2.5 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-bold text-[#102A43]"
                   />
                 </div>

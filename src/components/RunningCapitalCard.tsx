@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { DB } from '../storage/db';
 import { playSuccessChime } from '../utils/audio';
+import { CalculatorInput } from './CalculatorKeypad';
 import {
   Landmark,
   Edit3,
@@ -254,12 +255,18 @@ export function calculateRunningCapital({
       .filter((tx) => tx.type === 'withdrawal')
       .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
   );
+  const totalOwnerNewCapital = Math.round(
+    manualOwnerTxs
+      .filter((tx) => tx.type === 'capital_deposit')
+      .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
+  );
   const totalOwnerAdded = Math.round(
     manualOwnerTxs
       .filter((tx) => tx.type === 'withdrawal_return' || tx.type === 'capital_deposit')
       .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
   );
   const netOwnerWithdrawal = Math.max(0, totalWithdrawals - totalOwnerAdded);
+  const displayInitialCapital = initialCapital + totalOwnerNewCapital;
 
   // ৬. পুঁজি ও নগদ ক্যাশ ট্র্যাকার (Stock Value + Cash in Hand + Customer Due):
   // - বর্তমান স্টক মালের ক্রয়মূল্য (Remaining Goods Capital / Stock Value) = শুরুর মালের পুঁজি - বিক্রিত মালের কেনা দাম + নতুন মাল ক্রয়
@@ -293,6 +300,8 @@ export function calculateRunningCapital({
 
   return {
     initialCapital,
+    totalOwnerNewCapital,
+    displayInitialCapital,
     remainingGoodsCapital,
     drawerCash,
     customerDue,
@@ -387,7 +396,7 @@ export const RunningCapitalCard: React.FC<Props> = ({
               )}
             </div>
             <p className="text-[11px] font-semibold text-emerald-200/90 leading-tight mt-0.5">
-              শুরুর পুঁজি: ৳{formatBnNumber(stats.initialCapital)}
+              শুরুর পুঁজি: ৳{formatBnNumber(stats.displayInitialCapital)}
             </p>
           </div>
         </div>
@@ -405,7 +414,7 @@ export const RunningCapitalCard: React.FC<Props> = ({
         >
           <Edit3 className="w-3 h-3 text-amber-300" />
           <span>
-            {stats.initialCapital > 0 ? 'শুরুর পুঁজি এডিট' : '+ শুরুর পুঁজি দিন'}
+            {stats.displayInitialCapital > 0 ? 'শুরুর পুঁজি এডিট' : '+ শুরুর পুঁজি দিন'}
           </span>
         </button>
       </div>
@@ -474,7 +483,10 @@ export const RunningCapitalCard: React.FC<Props> = ({
               দোকানের শুরুর মালের পুঁজি লিখুন (৳)
             </label>
             <p className="text-[10px] text-emerald-100/80 leading-tight mt-0.5">
-              বিক্রি হলে কেনা দাম মালের পুঁজি থেকে কমবে এবং নগদ টাকা ক্যাশ বাক্সে জমা হবে (শুরুর ক্যাশ বাক্স ৳০)।
+              বিক্রি হলে কেনা দাম মালের পুঁজি থেকে কমবে এবং নগদ টাকা ক্যাশ বাক্সে জমা হবে
+              {stats.totalOwnerNewCapital > 0
+                ? ` (+ নতুন পুঁজি জমা ৳${formatBnNumber(stats.totalOwnerNewCapital)} স্বয়ংক্রিয়ভাবে যোগ রয়েছে)`
+                : ' (শুরুর ক্যাশ বাক্স ৳০)'}।
             </p>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -482,13 +494,12 @@ export const RunningCapitalCard: React.FC<Props> = ({
               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-amber-300">
                 ৳
               </span>
-              <input
-                type="number"
-                inputMode="numeric"
+              <CalculatorInput
                 min="0"
                 autoFocus
                 value={capitalInput}
-                onChange={(e) => setCapitalInput(e.target.value)}
+                onValueChange={(val) => setCapitalInput(val)}
+                calcLabel="শুরুর মালের পুঁজি (৳)"
                 placeholder="যেমন: 10000"
                 className="w-32 sm:w-36 pl-6 pr-2 py-1 rounded-lg bg-white text-[#102A43] font-black text-xs focus:outline-none"
               />

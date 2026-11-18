@@ -198,6 +198,7 @@ export interface SupplierTransaction {
   purchaseId?: string;
   balanceAfter: number;
   damageDeduction?: number; // ড্যামেজ মাল ফেরত বাদ (৳)
+  damageNote?: string;      // ড্যামেজ মালের বিবরণ
   stockValue?: number;      // নতুন কেনা মালের নিট স্টক মূল্য (Items Total - Damage Amount)
 }
 
@@ -242,6 +243,12 @@ export interface PurchaseReturnItem {
   createdAt: string;
 }
 
+export interface MemoAttachmentItem {
+  dataUrl: string;
+  mimeType?: string;
+  name?: string;
+}
+
 export interface BulkPurchase {
   id: string;
   purchaseNo: string;    // যেমন: #PO-1001
@@ -253,13 +260,15 @@ export interface BulkPurchase {
   items: BulkPurchaseItem[];
   grossTotalAmount?: number; // ড্যামেজ বাদ দেওয়ার আগে মোট নতুন মালের মূল্য
   damageDeduction?: number;  // ড্যামেজ মাল ফেরত বাদ (৳)
+  damageNote?: string;       // ড্যামেজ বা নষ্ট মালের বিবরণ
   totalAmount: number;   // নিট ক্রয় মূল্য (Items Total - Damage Deduction)
   paidAmount: number;    // পরিশোধিত টাকা (নিট নগদ বিল)
   dueAmount: number;     // বাকি টাকা (সাপ্লায়ারের পাওনা)
   paymentType: 'cash' | 'due' | 'partial' | 'bkash' | 'nagad' | 'bank';
   note?: string;         // মেমো বা ভাউচার বিবরণ
-  memoAttachment?: string;     // সংযুক্ত মেমোর ছবি / PDF (Base64 Data URL)
+  memoAttachment?: string;     // সংযুক্ত মেমোর ছবি / PDF (Base64 Data URL - legacy/primary)
   memoAttachmentName?: string; // সংযুক্ত ফাইলের নাম
+  memoAttachments?: MemoAttachmentItem[]; // একাধিক সংযুক্ত মেমোর ছবি / PDF (সর্বোচ্চ ৪টি)
   returnedAmount?: number; // মোট ফেরত আসা টাকার পরিমাণ (legacy)
   returns?: PurchaseReturnItem[]; // ফেরত সংক্রান্ত হিস্ট্রি (legacy)
   createdAt: string;

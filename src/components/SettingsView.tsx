@@ -5,6 +5,7 @@ import { compressImage } from '../utils/image';
 import { DataBackupView } from './DataBackupView';
 import { firestore } from '../services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { CalculatorInput } from './CalculatorKeypad';
 import {
   ChevronRight,
   Edit3,
@@ -882,17 +883,17 @@ export const SettingsView: React.FC<Props> = ({
               </button>
             ))}
             <div className="relative w-14 shrink-0">
-              <input
-                type="number"
+              <CalculatorInput
                 min="0"
                 max="100"
                 value={quickSaleMargin}
-                onChange={(e) => {
-                  const val = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                onValueChange={(v) => {
+                  const val = Math.max(0, Math.min(100, Number(v) || 0));
                   setQuickSaleMargin(val);
                   DB.saveQuickSaleProfitMargin(val);
                   onDataRestored();
                 }}
+                calcLabel="ডিফল্ট লাভের হার (%)"
                 className="w-full pl-1.5 pr-4 py-1 rounded-lg border border-[#CBD5E1] text-xs font-black text-[#102A43] text-center focus:outline-none focus:border-[#0E6B6B] h-6"
               />
               <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-black text-[#64748B]">

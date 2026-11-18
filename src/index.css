@@ -65,6 +65,25 @@ div[class*="rounded-2xl"] {
   scrollbar-width: none;
 }
 
+/* In-Built Calculator Keypad viewport awareness */
+body.calc-keypad-open [data-calc-input="true"] {
+  scroll-margin-bottom: 330px;
+}
+
+body.calc-keypad-open div.fixed.inset-0:not([data-calc-keypad="true"]):not([data-non-dismissible="true"]) {
+  padding-bottom: 300px !important;
+  overflow-y: auto !important;
+}
+
+body.calc-keypad-open div.fixed.inset-0:not([data-calc-keypad="true"]):not([data-non-dismissible="true"]) > div {
+  max-height: calc(100dvh - 316px) !important;
+  overflow-y: auto !important;
+}
+
+body.calc-keypad-open main {
+  padding-bottom: 300px !important;
+}
+
 @media print {
   @page {
     size: 58mm auto;

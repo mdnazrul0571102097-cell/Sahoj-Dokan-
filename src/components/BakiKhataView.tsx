@@ -5,6 +5,7 @@ import { DB } from '../storage/db';
 import { playSuccessChime } from '../utils/audio';
 import { SupplierKhataView } from './SupplierKhataView';
 import { ReceiptModal } from './ReceiptModal';
+import { CalculatorInput } from './CalculatorKeypad';
 import {
   BookOpen,
   Search,
@@ -1323,16 +1324,15 @@ export const BakiKhataView: React.FC<Props> = ({
                 <label className="block text-xs font-bold text-[#102A43] mb-1">
                   {dueFormMode === 'sale' ? '*মোট বিক্রির টাকা (৳)' : '*পুরোনো বাকির টাকা (৳)'}
                 </label>
-                <input
-                  type="number"
+                <CalculatorInput
                   min={matchedDueCustomer ? '1' : '0'}
-                  step="any"
                   required={Boolean(matchedDueCustomer)}
                   value={dueFormTotalAmount}
-                  onChange={(e) => {
+                  onValueChange={(val) => {
                     setDueFormError('');
-                    setDueFormTotalAmount(e.target.value === '' ? '' : Number(e.target.value));
+                    setDueFormTotalAmount(val === '' ? '' : Number(val));
                   }}
+                  calcLabel={dueFormMode === 'sale' ? 'মোট বিক্রির টাকা (৳)' : 'পুরোনো বাকির টাকা (৳)'}
                   placeholder="যেমন: 1000"
                   className="w-full p-2.5 rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] text-base font-black font-mono text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B] focus:bg-white"
                 />
@@ -1354,12 +1354,11 @@ export const BakiKhataView: React.FC<Props> = ({
                         সব বাকি (৳০)
                       </button>
                     </div>
-                    <input
-                      type="number"
+                    <CalculatorInput
                       min="0"
-                      step="any"
                       value={dueFormCashPaid}
-                      onChange={(e) => setDueFormCashPaid(e.target.value)}
+                      onValueChange={(val) => setDueFormCashPaid(val)}
+                      calcLabel="নগদ জমা / পরিশোধ (৳)"
                       placeholder="0"
                       className="w-full p-2.5 rounded-xl border border-emerald-300 bg-emerald-50/30 text-sm font-black font-mono text-[#2E7D32] placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-[#2E7D32] focus:bg-white"
                     />
@@ -1470,14 +1469,14 @@ export const BakiKhataView: React.FC<Props> = ({
                   <span className="absolute left-3 top-2.5 text-base font-bold text-emerald-600">
                     ৳
                   </span>
-                  <input
-                    type="number"
+                  <CalculatorInput
                     min="1"
                     max={customerForPayment.totalDue}
                     required
                     autoFocus
                     value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                    onValueChange={(val) => setPaymentAmount(val === '' ? '' : Number(val))}
+                    calcLabel="বকেয়া জমা / আদায় (৳)"
                     placeholder={`${customerForPayment.totalDue}`}
                     className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 font-bold text-base text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-sm"
                   />

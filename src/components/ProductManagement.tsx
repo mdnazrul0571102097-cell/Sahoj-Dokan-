@@ -6,6 +6,7 @@ import { CameraCaptureModal } from './CameraCaptureModal';
 import { compressImage } from '../utils/image';
 import { parseBanglaNumber } from '../utils/number';
 import { playSuccessChime } from '../utils/audio';
+import { CalculatorInput } from './CalculatorKeypad';
 import {
   Package,
   Plus,
@@ -972,11 +973,10 @@ export const ProductManagement: React.FC<Props> = ({
                   <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1">
                     {t.costPrice}
                   </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
+                  <CalculatorInput
                     value={formCostPrice}
-                    onChange={(e) => setFormCostPrice(e.target.value)}
+                    onValueChange={(val) => setFormCostPrice(val)}
+                    calcLabel="ক্রয়মূল্য (৳)"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -992,15 +992,14 @@ export const ProductManagement: React.FC<Props> = ({
                   <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1">
                     {t.sellPrice} *
                   </label>
-                  <input
+                  <CalculatorInput
                     ref={sellPriceInputRef}
-                    type="text"
-                    inputMode="decimal"
                     value={formSellPrice}
-                    onChange={(e) => {
-                      setFormSellPrice(e.target.value);
+                    onValueChange={(val) => {
+                      setFormSellPrice(val);
                       if (errorMessage) setErrorMessage(null);
                     }}
+                    calcLabel="বিক্রয়মূল্য (৳)"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -1016,11 +1015,10 @@ export const ProductManagement: React.FC<Props> = ({
                   <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1">
                     {t.stock}
                   </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
+                  <CalculatorInput
                     value={formStock}
-                    onChange={(e) => setFormStock(e.target.value)}
+                    onValueChange={(val) => setFormStock(val)}
+                    calcLabel="বর্তমান স্টক"
                     placeholder="১০"
                     className="w-full px-2.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-xs sm:text-sm font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
@@ -1055,11 +1053,11 @@ export const ProductManagement: React.FC<Props> = ({
                   <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1">
                     কম স্টক সতর্কতা
                   </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
+                  <CalculatorInput
+                    allowDecimal={false}
                     value={formMinAlert}
-                    onChange={(e) => setFormMinAlert(parseBanglaNumber(e.target.value) || 5)}
+                    onValueChange={(val) => setFormMinAlert(parseBanglaNumber(val) || 5)}
+                    calcLabel="কম স্টক সতর্কতা"
                     className="w-full px-2.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm font-bold text-center focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
@@ -1259,13 +1257,12 @@ export const ProductManagement: React.FC<Props> = ({
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
                   নতুন কেনা পরিমাণ ({productToRestock.unit}) *
                 </label>
-                <input
-                  type="number"
+                <CalculatorInput
                   min="0.1"
-                  step="any"
                   required
                   value={restockQty}
-                  onChange={(e) => setRestockQty(Number(e.target.value) || 0)}
+                  onValueChange={(val) => setRestockQty(Number(val) || 0)}
+                  calcLabel="নতুন কেনা পরিমাণ"
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold text-base focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
@@ -1274,12 +1271,11 @@ export const ProductManagement: React.FC<Props> = ({
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
                   প্রতি ইউনিটের ক্রয়মূল্য (৳)
                 </label>
-                <input
-                  type="number"
+                <CalculatorInput
                   min="0"
-                  step="any"
                   value={restockCostPrice}
-                  onChange={(e) => setRestockCostPrice(Number(e.target.value) || 0)}
+                  onValueChange={(val) => setRestockCostPrice(Number(val) || 0)}
+                  calcLabel="প্রতি ইউনিটের ক্রয়মূল্য (৳)"
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>

@@ -54,6 +54,8 @@ function universalAndroidWebviewPlugin(): Plugin {
             format: 'iife',
             target: ['chrome68'],
             minify: true,
+            sourcemap: false,
+            treeShaking: true,
             write: false,
           });
           if (iifeRes.outputFiles && iifeRes.outputFiles[0]) {
@@ -141,7 +143,10 @@ export default defineConfig({
   build: {
     target: 'es2019',
     cssTarget: 'chrome80',
+    sourcemap: false,
+    minify: 'esbuild',
     rollupOptions: {
+      treeshake: true,
       output: {
         entryFileNames: 'assets/index.js',
         chunkFileNames: 'assets/[name].js',

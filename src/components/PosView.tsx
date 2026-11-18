@@ -20,6 +20,7 @@ import { BarcodeScannerModal } from './BarcodeScannerModal';
 import { LooseItemModal } from './LooseItemModal';
 import { ReceiptModal } from './ReceiptModal';
 import { QuickSaleModal } from './QuickSaleModal';
+import { CalculatorInput } from './CalculatorKeypad';
 import {
   Search,
   Camera,
@@ -569,11 +570,11 @@ export const PosView: React.FC<Props> = ({
           <span>ছাড় (ডিসকাউন্ট)</span>
           <div className="flex items-center gap-1">
             <span>৳</span>
-            <input
-              type="number"
+            <CalculatorInput
               min="0"
               value={discount || ''}
-              onChange={(e) => setDiscount(Math.max(0, Number(e.target.value) || 0))}
+              onValueChange={(val) => setDiscount(Math.max(0, Number(val) || 0))}
+              calcLabel="ছাড় / ডিসকাউন্ট (৳)"
               placeholder="০"
               className="w-16 py-0.5 px-1.5 rounded-lg border border-[#E2E8F0] bg-white text-right text-xs font-bold text-[#0F172A]"
             />
@@ -590,11 +591,11 @@ export const PosView: React.FC<Props> = ({
             <label className="font-semibold text-[#0F172A]">কাস্টমার জমা দিয়েছে</label>
             <div className="flex items-center gap-1">
               <span>৳</span>
-              <input
-                type="number"
+              <CalculatorInput
                 min="0"
                 value={paidAmountInput}
-                onChange={(e) => setPaidAmountInput(e.target.value)}
+                onValueChange={(val) => setPaidAmountInput(val)}
+                calcLabel="কাস্টমার জমা দিয়েছে (৳)"
                 placeholder={`${grandTotal}`}
                 className="w-24 py-1 px-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] text-right text-sm font-bold text-[#0F172A]"
               />

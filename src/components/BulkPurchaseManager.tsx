@@ -12,6 +12,7 @@ import { playSuccessChime } from '../utils/audio';
 import { DB } from '../storage/db';
 import { MemoScannerCard } from './MemoScannerCard';
 import { ScannedMemoResult } from '../utils/memoScanner';
+import { CalculatorInput } from './CalculatorKeypad';
 import {
   PackagePlus,
   Plus,
@@ -1005,15 +1006,14 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                       {/* Quantity, Unit, and Unit Cost Price */}
                       <div className="grid grid-cols-12 gap-2">
                         <div className="col-span-4">
-                          <input
-                            type="number"
+                          <CalculatorInput
                             required
                             min="0.1"
-                            step="any"
                             value={item.quantity || ''}
-                            onChange={(e) =>
-                              handleItemChange(idx, 'quantity', e.target.value)
+                            onValueChange={(val) =>
+                              handleItemChange(idx, 'quantity', val)
                             }
+                            calcLabel="পরিমাণ"
                             placeholder="পরিমাণ"
                             className="w-full px-2.5 py-2.5 rounded-2xl border border-[#8A949E] bg-white text-xs sm:text-sm font-medium text-center text-[#111827] focus:ring-2 focus:ring-[#0D5238] focus:outline-none"
                           />
@@ -1037,15 +1037,14 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                         </div>
 
                         <div className="col-span-4">
-                          <input
-                            type="number"
+                          <CalculatorInput
                             required
                             min="0"
-                            step="any"
                             value={item.unitCostPrice || ''}
-                            onChange={(e) =>
-                              handleItemChange(idx, 'unitCostPrice', e.target.value)
+                            onValueChange={(val) =>
+                              handleItemChange(idx, 'unitCostPrice', val)
                             }
+                            calcLabel="একক দর (৳)"
                             placeholder="৳ দর"
                             className="w-full px-2.5 py-2.5 rounded-2xl border border-[#8A949E] bg-white text-xs sm:text-sm font-medium text-center text-[#111827] placeholder-[#1F2937] focus:ring-2 focus:ring-[#0D5238] focus:outline-none"
                           />
@@ -1089,12 +1088,11 @@ export const BulkPurchaseManager: React.FC<Props> = ({
                 <label className="block text-xs sm:text-sm font-extrabold text-[#111827] mb-1.5">
                   ড্যামেজ মাল ফেরত বাদ (৳) (ঐচ্ছিক)
                 </label>
-                <input
-                  type="number"
+                <CalculatorInput
                   min="0"
-                  step="any"
                   value={damageDeductionInput}
-                  onChange={(e) => setDamageDeductionInput(e.target.value)}
+                  onValueChange={(val) => setDamageDeductionInput(val)}
+                  calcLabel="ড্যামেজ মাল ফেরত বাদ (৳)"
                   placeholder="যেমন: 200"
                   className="w-full px-3.5 py-2.5 rounded-2xl border border-amber-400 bg-amber-50/40 text-xs sm:text-sm font-bold text-[#111827] placeholder-[#64748B] focus:ring-2 focus:ring-amber-500 focus:bg-white focus:outline-none"
                 />

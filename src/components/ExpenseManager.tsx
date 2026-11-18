@@ -3,6 +3,7 @@ import { Expense, ExpenseCategory, ShopProfile, Language } from '../types';
 import { translations } from '../i18n/translations';
 import { playSuccessChime } from '../utils/audio';
 import { DB } from '../storage/db';
+import { CalculatorInput } from './CalculatorKeypad';
 import {
   Wallet,
   Plus,
@@ -556,13 +557,13 @@ export const ExpenseManager: React.FC<Props> = ({
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-2.5 text-[#D32F2F] font-bold text-sm">৳</span>
-                  <input
-                    type="number"
+                  <CalculatorInput
                     required
                     min="1"
                     autoFocus
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value ? Number(e.target.value) : '')}
+                    onValueChange={(val) => setAmount(val ? Number(val) : '')}
+                    calcLabel="খরচের পরিমাণ (৳)"
                     placeholder="কত টাকা খরচ হয়েছে"
                     className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-sm font-black text-[#102A43] font-mono focus:ring-2 focus:ring-[#0E6B6B] focus:outline-none"
                   />

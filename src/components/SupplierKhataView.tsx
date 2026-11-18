@@ -5,6 +5,7 @@ import { playSuccessChime } from '../utils/audio';
 import { DB } from '../storage/db';
 import { MemoScannerCard, MemoAttachment } from './MemoScannerCard';
 import { ScannedMemoResult } from '../utils/memoScanner';
+import { CalculatorInput } from './CalculatorKeypad';
 import {
   Building2,
   Search,
@@ -32,6 +33,8 @@ import {
   CheckCircle2,
   Calendar,
   Paperclip,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 const WALK_IN_CASH_SUPPLIER = 'সাধারণ মহাজন (নগদ)';
@@ -198,12 +201,41 @@ export const SupplierKhataView: React.FC<Props> = ({
   const [dueAmount, setDueAmount] = useState<number | ''>('');
   const [dueNote, setDueNote] = useState('');
   const [dueDamageDeduction, setDueDamageDeduction] = useState<string>('');
+  const [dueDamageNote, setDueDamageNote] = useState<string>('');
+  const [showDamageNoteInput, setShowDamageNoteInput] = useState<boolean>(false);
   const [dueCashPaid, setDueCashPaid] = useState<string>('');
   const [dueItems, setDueItems] = useState<BulkPurchaseItem[]>([]);
-  const [dueMemoAttachment, setDueMemoAttachment] = useState<MemoAttachment | null>(null);
-  const [viewingMemoImage, setViewingMemoImage] = useState<string | null>(null);
+  const [dueMemoAttachments, setDueMemoAttachments] = useState<MemoAttachment[]>([]);
+  const [viewingMemoImages, setViewingMemoImages] = useState<string[]>([]);
+  const [viewingMemoIndex, setViewingMemoIndex] = useState<number>(0);
   const [dueFormError, setDueFormError] = useState('');
   const [showSupplierSuggestions, setShowSupplierSuggestions] = useState(false);
+
+  const getPurchaseMemoAttachments = (bp: BulkPurchase): MemoAttachment[] => {
+    if (bp.memoAttachments && bp.memoAttachments.length > 0) {
+      return bp.memoAttachments.filter((att) => Boolean(att?.dataUrl));
+    }
+    if (bp.memoAttachment) {
+      return [{ dataUrl: bp.memoAttachment, name: bp.memoAttachmentName }];
+    }
+    return [];
+  };
+
+  const openViewingMemoModal = (bp: BulkPurchase) => {
+    const atts = getPurchaseMemoAttachments(bp);
+    const images = atts
+      .filter(
+        (att) =>
+          att.dataUrl &&
+          !att.mimeType?.includes('pdf') &&
+          !att.dataUrl.startsWith('data:application/pdf')
+      )
+      .map((att) => att.dataUrl);
+    if (images.length > 0) {
+      setViewingMemoImages(images);
+      setViewingMemoIndex(0);
+    }
+  };
 
   // Unified list filter tabs & receipt expand/delete states
   const [purchaseFilterTab, setPurchaseFilterTab] = useState<'all' | 'cash' | 'due'>('all');
@@ -438,9 +470,11 @@ export const SupplierKhataView: React.FC<Props> = ({
     setDueAmount('');
     setDueNote('');
     setDueDamageDeduction('');
+    setDueDamageNote('');
+    setShowDamageNoteInput(false);
     setDueCashPaid('');
     setDueItems([]);
-    setDueMemoAttachment(null);
+    setDueMemoAttachments([]);
     setDueFormError('');
     setShowSupplierSuggestions(false);
     setShowAddDueModal(true);
@@ -476,6 +510,9 @@ export const SupplierKhataView: React.FC<Props> = ({
         : (Number(bp.totalAmount) || 0) + (Number(bp.damageDeduction) || 0);
     setDueAmount(copiedItems.length > 0 ? '' : grossAmt > 0 ? grossAmt : '');
     setDueDamageDeduction(bp.damageDeduction ? String(bp.damageDeduction) : '');
+    const savedDmgNote = (bp.damageNote || '').trim();
+    setDueDamageNote(savedDmgNote);
+    setShowDamageNoteInput(Boolean(savedDmgNote));
     const paidVal =
       bp.paidAmount !== undefined
         ? Number(bp.paidAmount) || 0
@@ -483,13 +520,13 @@ export const SupplierKhataView: React.FC<Props> = ({
     setDueCashPaid(String(paidVal));
     // Clean any auto-generated suffix parts so repeated edits stay tidy
     const rawNote = bp.note || '';
-    const cleanedNote = rawNote.split(' | মোট মাল:')[0].split(' | নগদ জমা:')[0].trim();
+    const cleanedNote = rawNote
+      .split(' | মোট মাল:')[0]
+      .split(' | নগদ জমা:')[0]
+      .split(' | ড্যামেজ বিবরণ:')[0]
+      .trim();
     setDueNote(cleanedNote);
-    setDueMemoAttachment(
-      bp.memoAttachment
-        ? { dataUrl: bp.memoAttachment, name: bp.memoAttachmentName }
-        : null
-    );
+    setDueMemoAttachments(getPurchaseMemoAttachments(bp));
     setDueFormError('');
     setShowSupplierSuggestions(false);
     setShowAddDueModal(true);
@@ -685,11 +722,20 @@ export const SupplierKhataView: React.FC<Props> = ({
         ? 'মাল ক্রয় (নগদ ও বাকি)'
         : 'নতুন মাল ক্রয় বাবদ বাকি');
 
+    const cleanedDamageNote = dueDamageNote.trim();
+    const cleanedAttachments = dueMemoAttachments
+      .filter((att) => Boolean(att?.dataUrl))
+      .slice(0, 4);
+
     const noteParts: string[] = [baseNote];
     if (dueDamageAmount > 0) {
       noteParts.push(
-        `মোট মাল: ৳${dueGrossTotal.toLocaleString()}, ড্যামেজ বাদ: -৳${dueDamageAmount.toLocaleString()}, নিট: ৳${dueNetAmount.toLocaleString()}`
+        `মোট মাল: ৳${dueGrossTotal.toLocaleString()}, ড্যামেজ বাদ: -৳${dueDamageAmount.toLocaleString()}${
+          cleanedDamageNote ? ` (${cleanedDamageNote})` : ''
+        }, নিট: ৳${dueNetAmount.toLocaleString()}`
       );
+    } else if (cleanedDamageNote) {
+      noteParts.push(`ড্যামেজ বিবরণ: ${cleanedDamageNote}`);
     }
     if (cashPaid > 0 && remainingDue > 0) {
       noteParts.push(
@@ -756,13 +802,15 @@ export const SupplierKhataView: React.FC<Props> = ({
         items: validItems,
         grossTotalAmount: dueGrossTotal,
         damageDeduction: dueDamageAmount,
+        damageNote: cleanedDamageNote || undefined,
         totalAmount: dueNetAmount,
         paidAmount: cashPaid,
         dueAmount: remainingDue,
         paymentType: remainingDue === 0 ? 'cash' : cashPaid > 0 ? 'partial' : 'due',
         note: finalNote,
-        memoAttachment: dueMemoAttachment?.dataUrl || undefined,
-        memoAttachmentName: dueMemoAttachment?.name || undefined,
+        memoAttachment: cleanedAttachments[0]?.dataUrl || undefined,
+        memoAttachmentName: cleanedAttachments[0]?.name || undefined,
+        memoAttachments: cleanedAttachments.length > 0 ? cleanedAttachments : undefined,
       };
 
       if (onUpdateBulkPurchase) {
@@ -785,9 +833,11 @@ export const SupplierKhataView: React.FC<Props> = ({
       setDueAmount('');
       setDueNote('');
       setDueDamageDeduction('');
+      setDueDamageNote('');
+      setShowDamageNoteInput(false);
       setDueCashPaid('');
       setDueItems([]);
-      setDueMemoAttachment(null);
+      setDueMemoAttachments([]);
       setDueFormError('');
       setShowAddDueModal(false);
       playSuccessChime();
@@ -806,13 +856,15 @@ export const SupplierKhataView: React.FC<Props> = ({
       items: validItems,
       grossTotalAmount: dueGrossTotal,
       damageDeduction: dueDamageAmount,
+      damageNote: cleanedDamageNote || undefined,
       totalAmount: dueNetAmount,
       paidAmount: cashPaid,
       dueAmount: remainingDue,
       paymentType: remainingDue === 0 ? 'cash' : cashPaid > 0 ? 'partial' : 'due',
       note: finalNote,
-      memoAttachment: dueMemoAttachment?.dataUrl || undefined,
-      memoAttachmentName: dueMemoAttachment?.name || undefined,
+      memoAttachment: cleanedAttachments[0]?.dataUrl || undefined,
+      memoAttachmentName: cleanedAttachments[0]?.name || undefined,
+      memoAttachments: cleanedAttachments.length > 0 ? cleanedAttachments : undefined,
       createdAt: nowIso,
     };
 
@@ -853,9 +905,11 @@ export const SupplierKhataView: React.FC<Props> = ({
     setDueAmount('');
     setDueNote('');
     setDueDamageDeduction('');
+    setDueDamageNote('');
+    setShowDamageNoteInput(false);
     setDueCashPaid('');
     setDueItems([]);
-    setDueMemoAttachment(null);
+    setDueMemoAttachments([]);
     setDueFormError('');
     setShowAddDueModal(false);
     playSuccessChime();
@@ -1461,6 +1515,13 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
               const isExpanded = expandedPurchaseId === bp.id;
               const isCashOnly = dueAmt === 0;
               const isPartial = dueAmt > 0 && paidAmt > 0;
+              const bpMemoAtts = getPurchaseMemoAttachments(bp);
+              const bpMemoImages = bpMemoAtts.filter(
+                (att) =>
+                  att.dataUrl &&
+                  !att.mimeType?.includes('pdf') &&
+                  !att.dataUrl.startsWith('data:application/pdf')
+              );
 
               return (
                 <div
@@ -1498,6 +1559,11 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                           {bp.note}
                         </p>
                       )}
+                      {bp.damageNote && (
+                        <p className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/80 rounded-lg px-2 py-0.5 mt-1 inline-block max-w-full truncate">
+                          ড্যামেজ বিবরণ: {bp.damageNote}
+                        </p>
+                      )}
                     </div>
 
                     <div className="text-right shrink-0">
@@ -1531,15 +1597,17 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {bp.memoAttachment && (
+                      {bpMemoImages.length > 0 && (
                         <button
                           type="button"
-                          onClick={() => setViewingMemoImage(bp.memoAttachment || null)}
+                          onClick={() => openViewingMemoModal(bp)}
                           className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-[#0E6B6B] border border-emerald-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                           title="সংযুক্ত মেমোর ছবি দেখুন"
                         >
                           <Paperclip className="w-3 h-3" />
-                          <span>মেমো</span>
+                          <span>
+                            মেমো{bpMemoImages.length > 1 ? ` (${bpMemoImages.length})` : ''}
+                          </span>
                         </button>
                       )}
                       {bp.items && bp.items.length > 0 && (
@@ -1884,22 +1952,37 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                               {tx.note}
                             </p>
                           )}
+                          {matchedPurchase?.damageNote &&
+                            (!tx.note || !tx.note.includes(matchedPurchase.damageNote)) && (
+                              <p className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/80 rounded-xl px-2.5 py-1 leading-snug break-words">
+                                ড্যামেজ বিবরণ: {matchedPurchase.damageNote}
+                              </p>
+                            )}
 
                           {/* Bottom Row: Clean Action Buttons */}
                           <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-[#E2E8F0]/70">
-                            {matchedPurchase?.memoAttachment && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setViewingMemoImage(matchedPurchase.memoAttachment || null)
-                                }
-                                className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-[#0E6B6B] text-[11px] font-extrabold border border-emerald-200 flex items-center gap-1 transition active:scale-95 cursor-pointer"
-                                title="সংযুক্ত মেমোর ছবি দেখুন"
-                              >
-                                <Paperclip className="w-3 h-3" />
-                                <span>মেমো</span>
-                              </button>
-                            )}
+                            {(() => {
+                              const imgCount = matchedPurchase
+                                ? getPurchaseMemoAttachments(matchedPurchase).filter(
+                                    (att) =>
+                                      att.dataUrl &&
+                                      !att.mimeType?.includes('pdf') &&
+                                      !att.dataUrl.startsWith('data:application/pdf')
+                                  ).length
+                                : 0;
+                              if (!matchedPurchase || imgCount === 0) return null;
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => openViewingMemoModal(matchedPurchase)}
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-[#0E6B6B] text-[11px] font-extrabold border border-emerald-200 flex items-center gap-1 transition active:scale-95 cursor-pointer"
+                                  title="সংযুক্ত মেমোর ছবি দেখুন"
+                                >
+                                  <Paperclip className="w-3 h-3" />
+                                  <span>মেমো{imgCount > 1 ? ` (${imgCount})` : ''}</span>
+                                </button>
+                              );
+                            })()}
                             {matchedPurchase && (
                               <button
                                 type="button"
@@ -2022,11 +2105,11 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                 <label className="block text-xs font-bold text-[#102A43] mb-1">
                   পূর্বের বাকি / দেনা (৳)
                 </label>
-                <input
-                  type="number"
+                <CalculatorInput
                   min="0"
                   value={initialDue}
-                  onChange={(e) => setInitialDue(e.target.value === '' ? '' : Number(e.target.value))}
+                  onValueChange={(val) => setInitialDue(val === '' ? '' : Number(val))}
+                  calcLabel="পূর্বের বাকি / দেনা (৳)"
                   placeholder="0"
                   className="w-full p-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-[#102A43] placeholder-[#9AA5B1] text-sm font-bold font-mono focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]"
                 />
@@ -2138,12 +2221,11 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                 <label className="block text-xs font-bold text-[#102A43] mb-1">
                   মোট বাকি / দেনার পরিমাণ (৳)
                 </label>
-                <input
-                  type="number"
+                <CalculatorInput
                   min="0"
-                  step="any"
                   value={initialDue}
-                  onChange={(e) => setInitialDue(e.target.value === '' ? '' : Number(e.target.value))}
+                  onValueChange={(val) => setInitialDue(val === '' ? '' : Number(val))}
+                  calcLabel="মোট বাকি / দেনার পরিমাণ (৳)"
                   placeholder="0"
                   className="w-full p-2.5 rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] text-[#102A43] text-sm font-black font-mono focus:outline-none focus:ring-2 focus:ring-[#0E6B6B] focus:bg-white"
                 />
@@ -2213,12 +2295,12 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                 <label className="block text-xs font-bold text-[#102A43] mb-1">
                   পরিশোধকৃত টাকার পরিমাণ (৳) *
                 </label>
-                <input
-                  type="number"
+                <CalculatorInput
                   required
                   min="1"
                   value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                  onValueChange={(val) => setPaymentAmount(val === '' ? '' : Number(val))}
+                  calcLabel="মহাজনকে পরিশোধ (৳)"
                   placeholder="যেমন: 5000"
                   className="w-full p-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] text-base font-black font-mono text-[#102A43] focus:outline-none focus:ring-2 focus:ring-[#2E7D32]"
                 />
@@ -2343,7 +2425,9 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                 type="button"
                 onClick={() => {
                   setEditingPurchase(null);
-                  setDueMemoAttachment(null);
+                  setDueMemoAttachments([]);
+                  setDueDamageNote('');
+                  setShowDamageNoteInput(false);
                   setShowAddDueModal(false);
                 }}
                 className="p-1 rounded-full hover:bg-white/20 text-white cursor-pointer"
@@ -2353,11 +2437,13 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
             </div>
 
             <form onSubmit={handleAddDueSubmit} className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-3">
-              {/* Compact AI Memo Scanner Card (Compressed 1024px JPEG + Non-blocking Receipt Attachment + 60-day Trial/Pro AI Gate) */}
+              {/* Compact Multi-Photo AI Memo Scanner Card (Max 4 photos, 1024px 0.65 JPEG <=130KB, Smart 1-Photo OCR) */}
               <MemoScannerCard
                 onMemoExtracted={handleDueMemoExtracted}
-                attachment={dueMemoAttachment}
-                onAttachmentChange={setDueMemoAttachment}
+                attachments={dueMemoAttachments}
+                onAttachmentsChange={setDueMemoAttachments}
+                allowMultiple
+                maxAttachments={4}
                 appMode={appMode}
                 onOpenSubscriptionModal={onOpenSubscriptionModal}
                 compact
@@ -2590,13 +2676,12 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
 
                         <div className="grid grid-cols-12 gap-1.5">
                           <div className="col-span-4">
-                            <input
-                              type="number"
+                            <CalculatorInput
                               required
                               min="0.1"
-                              step="any"
                               value={item.quantity || ''}
-                              onChange={(e) => handleDueItemChange(idx, 'quantity', e.target.value)}
+                              onValueChange={(val) => handleDueItemChange(idx, 'quantity', val)}
+                              calcLabel="পরিমাণ"
                               placeholder="পরিমাণ"
                               className="w-full px-2 py-2 rounded-xl border border-[#CBD5E1] bg-white text-xs font-bold text-center text-[#102A43] focus:outline-none"
                             />
@@ -2616,13 +2701,12 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                             </select>
                           </div>
                           <div className="col-span-4">
-                            <input
-                              type="number"
+                            <CalculatorInput
                               required
                               min="0"
-                              step="any"
                               value={item.unitCostPrice || ''}
-                              onChange={(e) => handleDueItemChange(idx, 'unitCostPrice', e.target.value)}
+                              onValueChange={(val) => handleDueItemChange(idx, 'unitCostPrice', val)}
+                              calcLabel="একক দর (৳)"
                               placeholder="৳ দর"
                               className="w-full px-2 py-2 rounded-xl border border-[#CBD5E1] bg-white text-xs font-bold text-center text-[#102A43] focus:outline-none"
                             />
@@ -2655,12 +2739,12 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                       + পণ্যের তালিকা লিখুন
                     </button>
                   </div>
-                  <input
-                    type="number"
+                  <CalculatorInput
                     required
                     min="1"
                     value={dueAmount}
-                    onChange={(e) => setDueAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                    onValueChange={(val) => setDueAmount(val === '' ? '' : Number(val))}
+                    calcLabel="মোট নতুন মাল (৳)"
                     placeholder="যেমন: 1000"
                     className="w-full p-3 rounded-2xl border border-[#CBD5E1] bg-[#F8FAFC] text-base font-black font-mono text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B] focus:bg-white"
                   />
@@ -2669,18 +2753,35 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
 
               {/* 2. ড্যামেজ মাল ফেরত বাদ (৳) (ঐচ্ছিক) */}
               <div>
-                <label className="block text-xs font-bold text-[#102A43] mb-1">
-                  ড্যামেজ মাল ফেরত বাদ (৳) (ঐচ্ছিক)
-                </label>
-                <input
-                  type="number"
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-[#102A43]">
+                    ড্যামেজ মাল ফেরত বাদ (৳) (ঐচ্ছিক)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowDamageNoteInput((prev) => !prev)}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] cursor-pointer"
+                  >
+                    + বিবরণ লিখুন
+                  </button>
+                </div>
+                <CalculatorInput
                   min="0"
-                  step="any"
                   value={dueDamageDeduction}
-                  onChange={(e) => setDueDamageDeduction(e.target.value)}
+                  onValueChange={(val) => setDueDamageDeduction(val)}
+                  calcLabel="ড্যামেজ বাদ (৳)"
                   placeholder="যেমন: 100"
                   className="w-full p-2.5 rounded-xl border border-amber-400 bg-amber-50/40 text-xs sm:text-sm font-bold text-[#102A43] placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white"
                 />
+                {showDamageNoteInput && (
+                  <input
+                    type="text"
+                    value={dueDamageNote}
+                    onChange={(e) => setDueDamageNote(e.target.value)}
+                    placeholder="যেমন: ২ পিস মেয়াদোত্তীর্ণ বা নষ্ট ফেরত"
+                    className="mt-1.5 w-full px-3 py-2 rounded-xl border border-amber-300 bg-white text-xs text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-amber-500 animate-in fade-in duration-150"
+                  />
+                )}
               </div>
 
               {/* 3. নগদ পরিশোধ / জমা (৳) */}
@@ -2714,15 +2815,14 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                     </button>
                   </div>
                 </div>
-                <input
-                  type="number"
+                <CalculatorInput
                   min="0"
-                  step="any"
                   value={dueCashPaid}
-                  onChange={(e) => {
+                  onValueChange={(val) => {
                     setDueFormError('');
-                    setDueCashPaid(e.target.value);
+                    setDueCashPaid(val);
                   }}
+                  calcLabel="নগদ পরিশোধ / জমা (৳)"
                   placeholder="0"
                   className="w-full p-2.5 rounded-xl border border-emerald-300 bg-emerald-50/30 text-xs sm:text-sm font-black font-mono text-[#2E7D32] placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-[#2E7D32] focus:bg-white"
                 />
@@ -2823,7 +2923,9 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                   type="button"
                   onClick={() => {
                     setEditingPurchase(null);
-                    setDueMemoAttachment(null);
+                    setDueMemoAttachments([]);
+                    setDueDamageNote('');
+                    setShowDamageNoteInput(false);
                     setShowAddDueModal(false);
                   }}
                   className="flex-1 py-3 rounded-xl border border-[#E2E8F0] bg-[#EDF2F7] text-[#102A43] text-xs font-bold cursor-pointer"
@@ -2886,13 +2988,13 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                 <label className="block text-xs font-bold text-[#102A43] mb-1">
                   ফেরত দেওয়া মালের টাকার অঙ্ক (৳) *
                 </label>
-                <input
-                  type="number"
+                <CalculatorInput
                   required
                   min="1"
                   max={Math.max(1, (currentActiveSupplier || selectedSupplier)?.totalDue ?? (currentActiveSupplier || selectedSupplier)?.totalPayableDue ?? 0)}
                   value={returnAmount}
-                  onChange={(e) => setReturnAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                  onValueChange={(val) => setReturnAmount(val === '' ? '' : Number(val))}
+                  calcLabel="ফেরত মালের মূল্য (৳)"
                   placeholder="যেমন: 3500"
                   className="w-full p-3 rounded-2xl border border-amber-300 bg-[#F8FAFC] text-base font-black font-mono text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#D97706]"
                 />
@@ -3027,14 +3129,13 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
                 <label className="block text-xs font-bold text-[#102A43] mb-1">
                   টাকার পরিমাণ (৳) *
                 </label>
-                <input
-                  type="number"
+                <CalculatorInput
                   required
                   min="0"
-                  step="any"
                   autoFocus
                   value={editTxAmount}
-                  onChange={(e) => setEditTxAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                  onValueChange={(val) => setEditTxAmount(val === '' ? '' : Number(val))}
+                  calcLabel="টাকার পরিমাণ (৳)"
                   className="w-full p-3 rounded-2xl border border-[#CBD5E1] bg-[#F8FAFC] text-base font-black font-mono text-[#102A43] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B] focus:bg-white"
                 />
               </div>
@@ -3072,30 +3173,69 @@ ${supplier.contactPerson ? `প্রতিনিধি: ${supplier.contactPerso
         </div>
       )}
 
-      {/* Fullscreen Saved Memo Attachment Preview Modal */}
-      {viewingMemoImage && (
+      {/* Fullscreen Saved Memo Attachment Preview Modal (Supports Multi-Photo Navigation) */}
+      {viewingMemoImages.length > 0 && viewingMemoImages[viewingMemoIndex] && (
         <div
           className="fixed inset-0 z-[70] bg-black/85 p-3 sm:p-6 flex flex-col items-center justify-center backdrop-blur-xs"
-          onClick={() => setViewingMemoImage(null)}
+          onClick={() => {
+            setViewingMemoImages([]);
+            setViewingMemoIndex(0);
+          }}
         >
           <div
             className="w-full max-w-lg md:max-w-xl bg-white rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-4 py-2.5 bg-[#0F172A] text-white flex items-center justify-between">
-              <span className="text-xs font-bold truncate">সংযুক্ত মেমো / রসিদের ছবি</span>
-              <button
-                type="button"
-                onClick={() => setViewingMemoImage(null)}
-                className="p-1 rounded-full hover:bg-white/20 text-white cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
+            <div className="px-4 py-2.5 bg-[#0F172A] text-white flex items-center justify-between gap-2">
+              <span className="text-xs font-bold truncate">
+                সংযুক্ত মেমো / রসিদের ছবি
+                {viewingMemoImages.length > 1
+                  ? ` (${viewingMemoIndex + 1}/${viewingMemoImages.length})`
+                  : ''}
+              </span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {viewingMemoImages.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setViewingMemoIndex(
+                          (prev) => (prev - 1 + viewingMemoImages.length) % viewingMemoImages.length
+                        )
+                      }
+                      className="p-1 rounded-full bg-white/15 hover:bg-white/25 text-white cursor-pointer"
+                      title="আগের ছবি"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setViewingMemoIndex((prev) => (prev + 1) % viewingMemoImages.length)
+                      }
+                      className="p-1 rounded-full bg-white/15 hover:bg-white/25 text-white cursor-pointer"
+                      title="পরের ছবি"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewingMemoImages([]);
+                    setViewingMemoIndex(0);
+                  }}
+                  className="p-1 rounded-full hover:bg-white/20 text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             <div className="flex-1 overflow-auto bg-slate-900 p-2 flex items-center justify-center">
               <img
-                src={viewingMemoImage}
-                alt="সংযুক্ত মেমোর ছবি"
+                src={viewingMemoImages[viewingMemoIndex]}
+                alt={`সংযুক্ত মেমোর ছবি ${viewingMemoIndex + 1}`}
                 className="max-w-full max-h-[75vh] object-contain rounded-lg"
               />
             </div>

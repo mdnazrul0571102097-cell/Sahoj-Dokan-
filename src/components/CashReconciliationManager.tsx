@@ -95,6 +95,7 @@ export const CashReconciliationManager: React.FC<Props> = ({
 }) => {
   const [isDayCloseOpen, setIsDayCloseOpen] = useState(false);
   const [isMonthlyReportOpen, setIsMonthlyReportOpen] = useState(false);
+  const [showClosedHistory, setShowClosedHistory] = useState(false);
   const getLocalDateStr = (d?: string | Date): string => {
     if (!d) return '';
     try {
@@ -434,7 +435,15 @@ export const CashReconciliationManager: React.FC<Props> = ({
     otherCashEntries,
   ]);
 
-  // Automated recent daily history:
+  // 90-day auto-retention cutoff (YYYY-MM-DD) for lightweight closed-day history list
+  const ninetyDayCutoffStr = useMemo(() => {
+    const [y, m, d] = todayStr.split('-').map(Number);
+    const dt = new Date(y || new Date().getFullYear(), (m || 1) - 1, d || 1);
+    dt.setDate(dt.getDate() - 90);
+    return getLocalDateStr(dt);
+  }, [todayStr]);
+
+  // Automated recent daily history (retained up to 90 days):
   // Only include completed days (after 12:00 AM midnight: d < todayStr) OR days where the user
   // explicitly clicked "ডে অফ / দোকান ক্লোজ (Day Close)" before midnight.
   const automatedDailyHistory = useMemo(() => {
@@ -458,14 +467,15 @@ export const CashReconciliationManager: React.FC<Props> = ({
       };
     });
     return rows
-      .filter((r) => r.isCompletedOrClosed)
+      .filter((r) => r.isCompletedOrClosed && r.date >= ninetyDayCutoffStr)
       .reverse()
-      .slice(0, 15);
+      .slice(0, 90);
   }, [
     allRecordedDates,
     initialOpeningCash,
     dailyReconciliations,
     todayStr,
+    ninetyDayCutoffStr,
     sales,
     bakiTransactions,
     ownerTransactions,
@@ -1034,39 +1044,59 @@ export const CashReconciliationManager: React.FC<Props> = ({
                 </span>
               </div>
 
-              {/* ক্লোজ করা দিনের হিসাব কার্ডসমূহ (Circled in user's screenshot) */}
+              {/* ক্লোজ করা দিনের হিসাব কার্ডসমূহ (ডিফল্টভাবে লুকানো — টগল বাটনে ক্লিক করলে খুলবে) */}
               {automatedDailyHistory.length > 0 && (
                 <div className="space-y-2 pt-1">
-                  {automatedDailyHistory.map((row) => (
-                    <div
-                      key={row.date}
-                      className="rounded-2xl p-3 sm:p-3.5 border-2 border-[#80CBC4] bg-[#F0FDF4] space-y-1 shadow-2xs"
-                    >
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-black text-xs sm:text-sm text-[#102A43] flex items-center gap-1">
-                            <Calendar className="w-4 h-4 text-[#0E6B6B]" />
-                            {formatDateDDMMYYYY(row.date)}
-                          </span>
-                          <span className="text-xs text-[#486581]">
-                            সকালের ক্যাশ: <strong className="text-[#102A43]">৳{row.openingCash.toLocaleString()}</strong>
-                          </span>
-                          <span className="text-xs font-bold text-[#2E7D32]">
-                            + জমা: ৳{row.totalCashIn.toLocaleString()}
-                          </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowClosedHistory((prev) => !prev)}
+                    aria-expanded={showClosedHistory}
+                    className="w-full py-2.5 px-4 rounded-2xl bg-[#F8FAFC] hover:bg-[#E0F2F1]/60 border border-[#CBD5E1] hover:border-[#80CBC4] text-[#0E6B6B] text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition-all active:scale-[0.99] cursor-pointer shadow-2xs"
+                  >
+                    <span>
+                      {showClosedHistory
+                        ? '📅 বিগত দিনের ক্যাশ ক্লোজিং রেকর্ড লুকান ▲'
+                        : `📅 বিগত দিনের ক্যাশ ক্লোজিং রেকর্ড দেখুন (${automatedDailyHistory.length}টি) ▼`}
+                    </span>
+                  </button>
+
+                  {showClosedHistory && (
+                    <div className="space-y-2 pt-1 animate-in fade-in duration-150">
+                      {automatedDailyHistory.map((row) => (
+                        <div
+                          key={row.date}
+                          className="rounded-2xl p-3 sm:p-3.5 border-2 border-[#80CBC4] bg-[#F0FDF4] space-y-1 shadow-2xs"
+                        >
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-black text-xs sm:text-sm text-[#102A43] flex items-center gap-1">
+                                <Calendar className="w-4 h-4 text-[#0E6B6B]" />
+                                {formatDateDDMMYYYY(row.date)}
+                              </span>
+                              <span className="text-xs text-[#486581]">
+                                সকালের ক্যাশ:{' '}
+                                <strong className="text-[#102A43]">
+                                  ৳{row.openingCash.toLocaleString()}
+                                </strong>
+                              </span>
+                              <span className="text-xs font-bold text-[#2E7D32]">
+                                + জমা: ৳{row.totalCashIn.toLocaleString()}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-[#2E7D32] border border-emerald-300">
+                              ✓ ক্লোজড
+                            </span>
+                          </div>
+                          <div className="text-xs font-bold text-[#D32F2F]">
+                            − খরচ ও পরিশোধ: ৳{row.totalCashOut.toLocaleString()}
+                          </div>
+                          <div className="text-xs sm:text-sm font-black text-[#0E6B6B]">
+                            ক্যাশ বাক্সে থাকার কথা: ৳{row.closingCash.toLocaleString()}
+                          </div>
                         </div>
-                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-[#2E7D32] border border-emerald-300">
-                          ✓ ক্লোজড
-                        </span>
-                      </div>
-                      <div className="text-xs font-bold text-[#D32F2F]">
-                        − খরচ ও পরিশোধ: ৳{row.totalCashOut.toLocaleString()}
-                      </div>
-                      <div className="text-xs sm:text-sm font-black text-[#0E6B6B]">
-                        ক্যাশ বাক্সে থাকার কথা: ৳{row.closingCash.toLocaleString()}
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </div>

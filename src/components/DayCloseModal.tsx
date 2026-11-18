@@ -21,6 +21,7 @@ import {
   printDirectWebBluetooth,
 } from '../utils/escpos';
 import { exportElementToPdf } from '../utils/pdfGenerator';
+import { CalculatorInput } from './CalculatorKeypad';
 
 export interface DayCloseData {
   dateStr: string; // YYYY-MM-DD
@@ -343,11 +344,10 @@ export const DayCloseModal: React.FC<Props> = ({
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-black text-[#64748B]">
                 ৳
               </span>
-              <input
-                type="number"
-                inputMode="numeric"
+              <CalculatorInput
                 value={drawerInput}
-                onChange={(e) => setDrawerInput(e.target.value)}
+                onValueChange={(val) => setDrawerInput(val)}
+                calcLabel="হাতের নগদ ক্যাশ (৳)"
                 placeholder="যেমন: ১৫০০০ (হাতের নগদ কত টাকা গুনলেন)"
                 className="w-full pl-9 pr-4 py-3 rounded-2xl bg-white border-2 border-[#80CBC4] text-[#102A43] font-black text-base sm:text-lg focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]"
               />
