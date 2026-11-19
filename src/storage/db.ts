@@ -503,7 +503,8 @@ export const INITIAL_PROFILE: ShopProfile = {
   phone: '',
   email: '',
   address: '',
-  pin: '',
+  pin: '1234',
+  pinEnabled: false,
   appLockPin: '',
   isPinLockEnabled: false,
   currency: '৳',
@@ -522,17 +523,33 @@ export const DB = {
         // Profile validation
         if (!parsed.phone) {
           parsed.isRegistered = false;
-          parsed.pin = '';
+          parsed.pin = '1234';
+          parsed.pinEnabled = false;
           parsed.appLockPin = '';
           parsed.isPinLockEnabled = false;
           parsed.shopName = parsed.shopName || 'Sahoj Dokan - সহজ দোকান';
           parsed.logo = parsed.logo || '/assets/icon.png';
           return parsed;
         }
-        // Reset legacy screen lock if no dedicated appLockPin has been set
-        if (parsed.isPinLockEnabled && (!parsed.appLockPin || parsed.appLockPin.trim().length !== 4)) {
+        // Harmonize pinEnabled & isPinLockEnabled with stored 4-digit PIN
+        const lockActive = Boolean(parsed.pinEnabled === true || parsed.isPinLockEnabled === true);
+        const validPin =
+          parsed.appLockPin && parsed.appLockPin.trim().length === 4
+            ? parsed.appLockPin.trim()
+            : parsed.pin && parsed.pin.trim().length === 4
+            ? parsed.pin.trim()
+            : '';
+
+        if (lockActive && validPin) {
+          parsed.pinEnabled = true;
+          parsed.isPinLockEnabled = true;
+          parsed.appLockPin = validPin;
+          parsed.pin = validPin;
+        } else {
+          parsed.pinEnabled = false;
           parsed.isPinLockEnabled = false;
           parsed.appLockPin = '';
+          if (!parsed.pin) parsed.pin = '1234';
         }
         if (!parsed.shopName || parsed.shopName === 'Sahoj Dokan POS' || parsed.shopName === 'সহজ দোকান POS' || parsed.shopName === 'বিসমিল্লাহ স্টোর') {
           parsed.shopName = 'Sahoj Dokan - সহজ দোকান';

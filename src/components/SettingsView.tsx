@@ -4,6 +4,7 @@ import { DB } from '../storage/db';
 import { compressImage } from '../utils/image';
 import { DataBackupView } from './DataBackupView';
 import { firestore } from '../services/firebase';
+import { CloudSync } from '../services/cloudSync';
 import { doc, getDoc } from 'firebase/firestore';
 import { CalculatorInput } from './CalculatorKeypad';
 import {
@@ -533,7 +534,9 @@ export const SettingsView: React.FC<Props> = ({
   };
 
   const isPinLockEnabled = Boolean(
-    profile.isPinLockEnabled && profile.appLockPin && profile.appLockPin.trim().length === 4
+    (profile.pinEnabled || profile.isPinLockEnabled) &&
+      ((profile.appLockPin && profile.appLockPin.trim().length === 4) ||
+        (profile.pin && profile.pin.trim().length === 4))
   );
 
   const openPinModal = (initialToggleState: boolean) => {
@@ -549,20 +552,27 @@ export const SettingsView: React.FC<Props> = ({
     e.preventDefault();
     setPinError('');
 
+    const currentAppPin = (profile.appLockPin || profile.pin || '').trim();
+
     // Case A: Lock is currently ON and user wants to turn it OFF -> verify current PIN first
     if (isPinLockEnabled && !modalLockToggle) {
-      const currentAppPin = (profile.appLockPin || '').trim();
       if (oldPin.trim() !== currentAppPin) {
         setPinError('বর্তমান পিনটি সঠিক নয়! সঠিক পিন দিয়ে আবার চেষ্টা করুন।');
         return;
       }
       const updated: ShopProfile = {
         ...profile,
+        pin: profile.pin || '1234',
+        pinEnabled: false,
         appLockPin: '',
         isPinLockEnabled: false,
       };
       onSaveProfile(updated);
       DB.saveProfile(updated);
+      if (updated.phone) {
+        CloudSync.updateCloudPinSettings(updated.phone, false, updated.pin).catch(() => {});
+        CloudSync.syncNow().catch(() => {});
+      }
       setShowPinModal(false);
       setOldPin('');
       setNewPin('');
@@ -574,7 +584,6 @@ export const SettingsView: React.FC<Props> = ({
 
     // Case B: Lock is currently ON and user wants to CHANGE PIN -> verify current PIN + validate new PIN
     if (isPinLockEnabled && modalLockToggle) {
-      const currentAppPin = (profile.appLockPin || '').trim();
       if (oldPin.trim() !== currentAppPin) {
         setPinError('বর্তমান পিনটি সঠিক নয়! সঠিক পিন দিয়ে আবার চেষ্টা করুন।');
         return;
@@ -589,17 +598,23 @@ export const SettingsView: React.FC<Props> = ({
       }
       const updated: ShopProfile = {
         ...profile,
+        pin: newPin,
+        pinEnabled: true,
         appLockPin: newPin,
         isPinLockEnabled: true,
       };
       onSaveProfile(updated);
       DB.saveProfile(updated);
+      if (updated.phone) {
+        CloudSync.updateCloudPinSettings(updated.phone, true, newPin).catch(() => {});
+        CloudSync.syncNow().catch(() => {});
+      }
       setShowPinModal(false);
       setOldPin('');
       setNewPin('');
       setConfirmPin('');
       setPinError('');
-      showToast('অ্যাপ পিন সফলভাবে পরিবর্তন করা হয়েছে!', 'success');
+      showToast('অ্যাপ পিন সফলভাবে পরিবর্তন ও ক্লাউডে সিঙ্ক করা হয়েছে!', 'success');
       return;
     }
 
@@ -615,17 +630,23 @@ export const SettingsView: React.FC<Props> = ({
       }
       const updated: ShopProfile = {
         ...profile,
+        pin: newPin,
+        pinEnabled: true,
         appLockPin: newPin,
         isPinLockEnabled: true,
       };
       onSaveProfile(updated);
       DB.saveProfile(updated);
+      if (updated.phone) {
+        CloudSync.updateCloudPinSettings(updated.phone, true, newPin).catch(() => {});
+        CloudSync.syncNow().catch(() => {});
+      }
       setShowPinModal(false);
       setOldPin('');
       setNewPin('');
       setConfirmPin('');
       setPinError('');
-      showToast('নতুন ৪-সংখ্যার পিন সেট ও অ্যাপ পিন লক চালু করা হয়েছে!', 'success');
+      showToast('নতুন ৪-সংখ্যার পিন সেট ও ক্লাউডে সিঙ্ক করা হয়েছে!', 'success');
     }
   };
 

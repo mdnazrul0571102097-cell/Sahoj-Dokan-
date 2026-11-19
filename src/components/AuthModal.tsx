@@ -47,37 +47,42 @@ export const AuthModal: React.FC<Props> = ({
 
   // Active view: 'phone_login' | 'register' | 'unlock' | 'forgot_pin'
   const [mode, setMode] = useState<'unlock' | 'phone_login' | 'register' | 'forgot_pin'>(
-    isRegistered && profile.isPinLockEnabled && profile.appLockPin ? 'unlock' : 'phone_login'
+    isRegistered && (profile.pinEnabled || profile.isPinLockEnabled) && (profile.appLockPin || profile.pin)
+      ? 'unlock'
+      : 'phone_login'
   );
 
-  // Phone Login State (Direct Cloud Restore & Login)
+  // Phone Login State (Smart Cloud-Aware Login & Restore)
   const [loginPhone, setLoginPhone] = useState(
     profile.phone || (typeof localStorage !== 'undefined' ? localStorage.getItem('sd_registered_phone') || '' : '')
   );
   const [loginPin, setLoginPin] = useState('');
+  const [showLoginPinStep, setShowLoginPinStep] = useState(false);
+  const [loginShopNameHint, setLoginShopNameHint] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Registration Form State
+  // Registration Form State (Zero PIN fields — silent default pin: "1234", pinEnabled: false)
   const [shopName, setShopName] = useState(profile.shopName || '');
   const [ownerName, setOwnerName] = useState(profile.ownerName || '');
   const [phone, setPhone] = useState(profile.phone || '');
   const [email, setEmail] = useState(profile.email || '');
   const [address, setAddress] = useState(profile.address || '');
-  const [regPin, setRegPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
   const [regError, setRegError] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
 
   // Unlock PIN State
   const [enteredPin, setEnteredPin] = useState('');
   const [unlockError, setUnlockError] = useState('');
   const [isWrongPin, setIsWrongPin] = useState(false);
 
-  // Forgot PIN State
+  // Forgot PIN State (supports both local App Lock unlock and Cloud Login Case B)
+  const [forgotOrigin, setForgotOrigin] = useState<'unlock' | 'phone_login'>('unlock');
   const [forgotStep, setForgotStep] = useState<1 | 2>(1);
   const [forgotPhone, setForgotPhone] = useState('');
   const [forgotError, setForgotError] = useState('');
   const [forgotSuccess, setForgotSuccess] = useState('');
+  const [isProcessingForgot, setIsProcessingForgot] = useState(false);
   const [newPin, setNewPin] = useState('');
   const [confirmNewPin, setConfirmNewPin] = useState('');
 
@@ -95,29 +100,29 @@ export const AuthModal: React.FC<Props> = ({
   const [directPhone, setDirectPhone] = useState('');
   const [directError, setDirectError] = useState('');
 
-  // Function to execute cloud restore during onboarding/reinstall with strict PIN check
+  // Execute cloud restore with cloud-aware PIN handling
   const handleExecuteCloudRestore = async (phoneToRestore: string, pinToCheck?: string) => {
     setIsRestoringCloud(true);
     setDirectError('');
     setLoginError('');
     try {
       const cleanPin = (pinToCheck || '').trim();
-      const res = await CloudSync.restoreFromCloud(phoneToRestore, cleanPin);
+      const res = await CloudSync.restoreFromCloud(phoneToRestore, cleanPin || undefined);
       if (res.success) {
-        if (cleanPin && cleanPin.length === 4) {
-          const currentProf = DB.getProfile();
-          DB.saveProfile({
-            ...currentProf,
-            pin: cleanPin,
-            isRegistered: true,
-            appLockPin: '',
-            isPinLockEnabled: false,
-          });
-        }
+        try {
+          await CloudSync.ensurePermanentTrial(phoneToRestore);
+        } catch (_) {}
         if (onDataRestored) {
           onDataRestored();
         }
         onUnlock();
+      } else if (res.requiresPin) {
+        // Cloud account has PIN Lock explicitly enabled -> reveal PIN step in Smart Login
+        setMode('phone_login');
+        setLoginPhone(phoneToRestore);
+        setShowLoginPinStep(true);
+        setLoginError(cleanPin ? res.message : '');
+        setDirectError(res.message);
       } else {
         setDirectError(res.message);
         setLoginError(res.message);
@@ -132,25 +137,64 @@ export const AuthModal: React.FC<Props> = ({
     }
   };
 
-  // Direct Phone Login Handler with mandatory 4-digit PIN verification
+  // Smart Mobile Login Handler (Cloud-aware Case A vs Case B)
   const handlePhoneLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
+
     const clean = loginPhone.replace(/\D/g, '');
     if (clean.length < 10) {
       setLoginError('সঠিক ১০ বা ১১ ডিজিটের মোবাইল নম্বর দিন।');
       return;
     }
-    const cleanPin = loginPin.trim();
-    if (!cleanPin || cleanPin.length !== 4) {
-      setLoginError('আপনার অ্যাকাউন্টের ৪ সংখ্যার গোপন পিন (PIN) লিখুন।');
+
+    // Step 2: PIN box is already revealed (Case B) -> verify PIN and restore
+    if (showLoginPinStep) {
+      const cleanPin = loginPin.trim();
+      if (cleanPin.length !== 4) {
+        setLoginError('আপনার অ্যাকাউন্টের ৪ সংখ্যার পিন নম্বর লিখুন।');
+        return;
+      }
+      setIsLoggingIn(true);
+      await handleExecuteCloudRestore(loginPhone, cleanPin);
       return;
     }
+
+    // Step 1: Check shop record in Firebase first
     setIsLoggingIn(true);
-    await handleExecuteCloudRestore(loginPhone, cleanPin);
     try {
-      await CloudSync.ensurePermanentTrial(loginPhone);
-    } catch (_) {}
+      const checkRes = await CloudSync.checkCloudBackup(loginPhone);
+      if (!checkRes.hasCloudData) {
+        setLoginError(
+          checkRes.error ||
+            'এই মোবাইল নম্বরে কোনো দোকান পাওয়া যায়নি। নতুন দোকান খুলতে "নতুন দোকান খুলুন" ট্যাবে যান।'
+        );
+        setIsLoggingIn(false);
+        return;
+      }
+
+      const isCloudPinLocked = Boolean(
+        checkRes.pinEnabled === true ||
+          checkRes.profile?.pinEnabled === true ||
+          checkRes.profile?.isPinLockEnabled === true
+      );
+
+      if (isCloudPinLocked) {
+        // Case B: pinEnabled is explicitly true -> reveal 4-digit PIN input + Forget PIN
+        setLoginShopNameHint(checkRes.profile?.shopName || '');
+        setShowLoginPinStep(true);
+        setLoginPin('');
+        setLoginError('');
+        setIsLoggingIn(false);
+        return;
+      }
+
+      // Case A: pinEnabled is false or not set -> log in & restore immediately using ONLY mobile number
+      await handleExecuteCloudRestore(loginPhone);
+    } catch (err: any) {
+      setLoginError('লগইন যাচাই করতে সমস্যা হয়েছে: ' + (err?.message || 'আবার চেষ্টা করুন'));
+      setIsLoggingIn(false);
+    }
   };
 
   // Check cloud backup when phone is entered in registration
@@ -211,7 +255,7 @@ export const AuthModal: React.FC<Props> = ({
     setIsWrongPin(false);
   };
 
-  // Handle Initial Registration Submission
+  // Handle Initial Registration Submission (PIN-free: sets pinEnabled: false & silent default pin: "1234")
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegError('');
@@ -229,67 +273,104 @@ export const AuthModal: React.FC<Props> = ({
       setRegError(t.invalidPhone);
       return;
     }
-    if (regPin.length !== 4) {
-      setRegError(t.pinMustBe4Digits);
-      return;
-    }
-    if (regPin !== confirmPin) {
-      setRegError(t.pinMismatch);
-      return;
-    }
 
-    // Check if cloud backup exists for this phone and verify PIN before restoring
+    setIsRegistering(true);
     try {
-      const cloudCheck = await CloudSync.checkCloudBackup(phone);
-      if (cloudCheck.hasCloudData) {
-        const restoreRes = await CloudSync.restoreFromCloud(phone, regPin.trim());
-        if (!restoreRes.success) {
-          setRegError('এই মোবাইল নম্বরে ইতিমধ্যে একটি দোকান চালু আছে। সেই অ্যাকাউন্টের সঠিক ৪ সংখ্যার পিন দিন অথবা লগইন পেজে গিয়ে প্রবেশ করুন।');
-          return;
+      // Check if cloud backup already exists for this phone
+      try {
+        const cloudCheck = await CloudSync.checkCloudBackup(phone);
+        if (cloudCheck.hasCloudData) {
+          const isCloudPinLocked = Boolean(
+            cloudCheck.pinEnabled === true ||
+              cloudCheck.profile?.pinEnabled === true ||
+              cloudCheck.profile?.isPinLockEnabled === true
+          );
+          if (isCloudPinLocked) {
+            // Existing shop with PIN Lock ON -> guide cleanly to Smart Mobile Login PIN step
+            setMode('phone_login');
+            setLoginPhone(phone.trim());
+            setLoginShopNameHint(cloudCheck.profile?.shopName || '');
+            setShowLoginPinStep(true);
+            setLoginPin('');
+            setLoginError('এই মোবাইল নম্বরে পূর্বের দোকানে পিন লক চালু আছে। লগইন করতে ৪ সংখ্যার পিন দিন।');
+            setIsRegistering(false);
+            return;
+          }
+
+          // Existing shop without PIN Lock -> restore seamlessly
+          const restoreRes = await CloudSync.restoreFromCloud(phone);
+          if (restoreRes.success) {
+            await CloudSync.ensurePermanentTrial(phone);
+            if (onDataRestored) {
+              onDataRestored();
+            }
+            onUnlock();
+            setIsRegistering(false);
+            return;
+          }
         }
-        if (onDataRestored) {
-          onDataRestored();
-        }
+        await CloudSync.ensurePermanentTrial(phone);
+      } catch (_) {}
+
+      const updatedProfile: ShopProfile = {
+        ...DB.getProfile(),
+        shopName: shopName.trim(),
+        ownerName: ownerName.trim(),
+        phone: phone.trim(),
+        email: email.trim(),
+        address: address.trim(),
+        pin: '1234',
+        pinEnabled: false,
+        appLockPin: '',
+        isPinLockEnabled: false,
+        isRegistered: true,
+        language: language,
+      };
+
+      onSaveProfile(updatedProfile);
+      DB.saveProfile(updatedProfile);
+      // Save pinEnabled: false & default pin: "1234" in Firebase profile immediately
+      CloudSync.syncNow().catch(() => {});
+
+      if (onDataRestored) {
+        onDataRestored();
       }
-      await CloudSync.ensurePermanentTrial(phone);
-    } catch (_) {}
-
-    const updatedProfile: ShopProfile = {
-      ...DB.getProfile(),
-      shopName: shopName.trim(),
-      ownerName: ownerName.trim(),
-      phone: phone.trim(),
-      email: email.trim(),
-      address: address.trim(),
-      pin: regPin.trim(),
-      isRegistered: true,
-      appLockPin: '',
-      isPinLockEnabled: false,
-      language: language,
-    };
-
-    onSaveProfile(updatedProfile);
-    if (onDataRestored) {
-      onDataRestored();
+      onUnlock();
+    } finally {
+      setIsRegistering(false);
     }
-    onUnlock();
   };
 
-
-  // Step 1: Verify Registered Phone in Forgot PIN (NO OTP required!)
-  const handleVerifyForgotPhone = (e: React.FormEvent) => {
+  // Step 1: Verify Registered Phone in Forgot PIN (works for both local App Lock & Cloud Mobile Login)
+  const handleVerifyForgotPhone = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotError('');
 
     const inputClean = normalizePhone(forgotPhone);
-    const profileClean = normalizePhone(profile.phone || '');
-
     if (!inputClean || inputClean.length < 10) {
       setForgotError(t.invalidPhone);
       return;
     }
 
-    // Match either full cleaned digits or last 10 digits
+    if (forgotOrigin === 'phone_login') {
+      setIsProcessingForgot(true);
+      try {
+        const checkRes = await CloudSync.checkCloudBackup(forgotPhone);
+        if (checkRes.hasCloudData) {
+          setForgotStep(2);
+          setForgotError('');
+        } else {
+          setForgotError('এই মোবাইল নম্বরে কোনো রেজিস্টার্ড দোকান পাওয়া যায়নি।');
+        }
+      } catch (_) {
+        setForgotError('নেটওয়ার্ক সমস্যা হয়েছে। ইন্টারনেট চালু রেখে আবার চেষ্টা করুন।');
+      } finally {
+        setIsProcessingForgot(false);
+      }
+      return;
+    }
+
+    const profileClean = normalizePhone(profile.phone || '');
     const isMatched =
       inputClean === profileClean ||
       (inputClean.length >= 10 &&
@@ -304,8 +385,8 @@ export const AuthModal: React.FC<Props> = ({
     }
   };
 
-  // Step 2: Set and Save New PIN
-  const handleSaveNewPin = (e: React.FormEvent) => {
+  // Step 2: Set and Save New PIN (updates local DB + Firebase cloud shop record)
+  const handleSaveNewPin = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotError('');
 
@@ -318,19 +399,60 @@ export const AuthModal: React.FC<Props> = ({
       return;
     }
 
-    const updatedProfile: ShopProfile = {
-      ...profile,
-      pin: newPin.trim(),
-      appLockPin: profile.isPinLockEnabled ? newPin.trim() : profile.appLockPin || '',
-      isRegistered: true,
-    };
+    setIsProcessingForgot(true);
+    const cleanNewPin = newPin.trim();
+    try {
+      if (forgotOrigin === 'phone_login') {
+        const targetPhone = forgotPhone.trim() || loginPhone.trim();
+        await CloudSync.updateCloudPinSettings(targetPhone, true, cleanNewPin);
+        const restoreRes = await CloudSync.restoreFromCloud(targetPhone, cleanNewPin);
+        if (!restoreRes.success) {
+          setForgotError(restoreRes.message || 'পিন রিসেট করে ডেটা লোড করা যায়নি।');
+          setIsProcessingForgot(false);
+          return;
+        }
+        const restoredProfile: ShopProfile = {
+          ...DB.getProfile(),
+          pin: cleanNewPin,
+          pinEnabled: true,
+          appLockPin: cleanNewPin,
+          isPinLockEnabled: true,
+          isRegistered: true,
+        };
+        onSaveProfile(restoredProfile);
+        DB.saveProfile(restoredProfile);
+        if (onDataRestored) {
+          onDataRestored();
+        }
+        setForgotSuccess(t.pinResetSuccess);
+        setTimeout(() => {
+          onUnlock();
+        }, 900);
+        return;
+      }
 
-    onSaveProfile(updatedProfile);
-    setForgotSuccess(t.pinResetSuccess);
+      const updatedProfile: ShopProfile = {
+        ...profile,
+        pin: cleanNewPin,
+        pinEnabled: true,
+        appLockPin: cleanNewPin,
+        isPinLockEnabled: true,
+        isRegistered: true,
+      };
 
-    setTimeout(() => {
-      onUnlock();
-    }, 1000);
+      onSaveProfile(updatedProfile);
+      DB.saveProfile(updatedProfile);
+      if (updatedProfile.phone) {
+        CloudSync.updateCloudPinSettings(updatedProfile.phone, true, cleanNewPin).catch(() => {});
+      }
+      setForgotSuccess(t.pinResetSuccess);
+
+      setTimeout(() => {
+        onUnlock();
+      }, 900);
+    } finally {
+      setIsProcessingForgot(false);
+    }
   };
 
   return (
@@ -510,10 +632,13 @@ export const AuthModal: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => {
+                    setForgotOrigin('unlock');
                     setForgotStep(1);
                     setForgotPhone('');
                     setForgotError('');
                     setForgotSuccess('');
+                    setNewPin('');
+                    setConfirmNewPin('');
                     setMode('forgot_pin');
                   }}
                   className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300 py-1 px-2.5 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition cursor-pointer"
@@ -575,32 +700,76 @@ export const AuthModal: React.FC<Props> = ({
                     type="tel"
                     required
                     value={loginPhone}
-                    onChange={(e) => setLoginPhone(e.target.value)}
+                    onChange={(e) => {
+                      setLoginPhone(e.target.value);
+                      if (showLoginPinStep) {
+                        setShowLoginPinStep(false);
+                        setLoginPin('');
+                        setLoginShopNameHint('');
+                        setLoginError('');
+                      }
+                    }}
                     placeholder="017xxxxxxxx"
                     className="w-full pl-9 pr-3 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-base font-bold tracking-wide focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  ৪ সংখ্যার পিন নম্বর (ঐচ্ছিক/ডিফল্ট: 1234)
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <KeyRound className="w-4 h-4" />
+              {/* Case B ONLY: Reveal 4-digit PIN box & Forget PIN if pinEnabled === true in Firebase */}
+              {showLoginPinStep && (
+                <div className="space-y-2.5 p-3.5 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-900 dark:text-amber-200">
+                    <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>
+                      {loginShopNameHint
+                        ? `"${loginShopNameHint}" দোকানে পিন লক চালু আছে। প্রবেশ করতে ৪ সংখ্যার পিন দিন।`
+                        : 'এই দোকানে পিন লক চালু আছে। প্রবেশ করতে ৪ সংখ্যার পিন নম্বর দিন।'}
+                    </span>
                   </div>
-                  <input
-                    type="password"
-                    maxLength={4}
-                    inputMode="numeric"
-                    value={loginPin}
-                    onChange={(e) => setLoginPin(e.target.value.replace(/\D/g, ''))}
-                    placeholder="••••"
-                    className="w-full pl-9 pr-3 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-base font-mono tracking-widest text-center focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
+                      ৪ সংখ্যার পিন নম্বর *
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <KeyRound className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="password"
+                        autoFocus
+                        required
+                        maxLength={4}
+                        inputMode="numeric"
+                        value={loginPin}
+                        onChange={(e) => setLoginPin(e.target.value.replace(/\D/g, ''))}
+                        placeholder="••••"
+                        className="w-full pl-9 pr-3 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-base font-mono tracking-widest text-center focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotOrigin('phone_login');
+                        setForgotPhone(loginPhone.trim());
+                        setForgotStep(1);
+                        setForgotError('');
+                        setForgotSuccess('');
+                        setNewPin('');
+                        setConfirmNewPin('');
+                        setMode('forgot_pin');
+                      }}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800 dark:text-emerald-400 hover:underline cursor-pointer"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>পিন ভুলে গেছেন? (Forget PIN)</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="pt-2">
                 <button
@@ -611,12 +780,18 @@ export const AuthModal: React.FC<Props> = ({
                   {isLoggingIn || isRestoringCloud ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>ক্লাউড থেকে ডেটা লোড হচ্ছে...</span>
+                      <span>
+                        {showLoginPinStep ? 'পিন যাচাই ও ডেটা লোড হচ্ছে...' : 'ক্লাউড যাচাই ও ডেটা লোড হচ্ছে...'}
+                      </span>
                     </>
                   ) : (
                     <>
                       <CloudDownload className="w-4 h-4" />
-                      <span>লগইন করুন ও পূর্বের সমস্ত ডেটা লোড করুন</span>
+                      <span>
+                        {showLoginPinStep
+                          ? 'পিন যাচাই করে লগইন করুন'
+                          : 'লগইন করুন ও পূর্বের সমস্ত ডেটা লোড করুন'}
+                      </span>
                     </>
                   )}
                 </button>
@@ -829,11 +1004,6 @@ export const AuthModal: React.FC<Props> = ({
                     className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
-                  {language === 'bn'
-                    ? 'এই নম্বরটি পিন ভুলে গেলে পিন রিসেট করার জন্য প্রয়োজন হবে।'
-                    : 'This number is required to recover your PIN if forgotten.'}
-                </p>
               </div>
 
             {/* 4. ইমেইল (ঐচ্ছিক) (Email - optional) */}
@@ -874,54 +1044,24 @@ export const AuthModal: React.FC<Props> = ({
               </div>
             </div>
 
-            {/* 6 & 7: ৪ সংখ্যার লগইন পিন এবং পিন নিশ্চিতকরণ */}
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div>
-                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  {language === 'bn' ? '৪ সংখ্যার পিন *' : '4-Digit PIN *'}
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <KeyRound className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="password"
-                    maxLength={4}
-                    inputMode="numeric"
-                    required
-                    value={regPin}
-                    onChange={(e) => setRegPin(e.target.value.replace(/\D/g, ''))}
-                    placeholder="••••"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-base font-mono tracking-widest text-center focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  {t.confirmPin} *
-                </label>
-                <input
-                  type="password"
-                  maxLength={4}
-                  inputMode="numeric"
-                  required
-                  value={confirmPin}
-                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
-                  placeholder="••••"
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-base font-mono tracking-widest text-center focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
             {/* Submit Button: 'তথ্য সংরক্ষণ করুন' */}
             <div className="pt-3">
               <button
                 type="submit"
-                className="w-full py-3.5 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-2xl shadow-lg shadow-emerald-700/25 transition active:scale-[0.99] flex items-center justify-center gap-2 text-sm"
+                disabled={isRegistering}
+                className="w-full py-3.5 px-4 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white font-bold rounded-2xl shadow-lg shadow-emerald-700/25 transition active:scale-[0.99] flex items-center justify-center gap-2 text-sm cursor-pointer"
               >
-                <Save className="w-4 h-4" />
-                <span>{t.saveInfoBtn}</span>
+                {isRegistering ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>দোকান তৈরি হচ্ছে...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>{t.saveInfoBtn}</span>
+                  </>
+                )}
               </button>
             </div>
           </form>
@@ -987,20 +1127,26 @@ export const AuthModal: React.FC<Props> = ({
                     <div className="flex flex-col gap-2 pt-2">
                       <button
                         type="submit"
-                        className="w-full py-3 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-2xl shadow-md transition active:scale-[0.99] flex items-center justify-center gap-2 text-sm"
+                        disabled={isProcessingForgot}
+                        className="w-full py-3 px-4 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white font-bold rounded-2xl shadow-md transition active:scale-[0.99] flex items-center justify-center gap-2 text-sm cursor-pointer"
                       >
-                        <ShieldCheck className="w-4 h-4" />
-                        <span>{t.verifyPhoneBtn}</span>
+                        {isProcessingForgot ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <ShieldCheck className="w-4 h-4" />
+                        )}
+                        <span>{isProcessingForgot ? 'যাচাই হচ্ছে...' : t.verifyPhoneBtn}</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => {
-                          setMode('unlock');
+                          setMode(forgotOrigin);
                           setUnlockError('');
                           setEnteredPin('');
+                          setLoginError('');
                         }}
-                        className="w-full py-2.5 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 flex items-center justify-center gap-1.5"
+                        className="w-full py-2.5 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <ArrowLeft className="w-3.5 h-3.5" />
                         <span>{t.backToLogin}</span>
@@ -1063,20 +1209,26 @@ export const AuthModal: React.FC<Props> = ({
                     <div className="flex flex-col gap-2 pt-2">
                       <button
                         type="submit"
-                        className="w-full py-3.5 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-2xl shadow-md transition active:scale-[0.99] flex items-center justify-center gap-2 text-sm"
+                        disabled={isProcessingForgot}
+                        className="w-full py-3.5 px-4 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white font-bold rounded-2xl shadow-md transition active:scale-[0.99] flex items-center justify-center gap-2 text-sm cursor-pointer"
                       >
-                        <Save className="w-4 h-4" />
-                        <span>{t.saveNewPinBtn}</span>
+                        {isProcessingForgot ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Save className="w-4 h-4" />
+                        )}
+                        <span>{isProcessingForgot ? 'সংরক্ষণ হচ্ছে...' : t.saveNewPinBtn}</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => {
-                          setMode('unlock');
+                          setMode(forgotOrigin);
                           setUnlockError('');
                           setEnteredPin('');
+                          setLoginError('');
                         }}
-                        className="w-full py-2 text-xs font-bold text-slate-500 hover:text-slate-700"
+                        className="w-full py-2 text-xs font-bold text-slate-500 hover:text-slate-700 cursor-pointer"
                       >
                         {t.backToLogin}
                       </button>

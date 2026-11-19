@@ -94,7 +94,8 @@ export default function App() {
     // If registered, only require 4-digit App Lock PIN when explicitly turned ON in Settings with a saved appLockPin
     const p = DB.getProfile();
     if (!p.isRegistered || !p.phone) return true;
-    return Boolean(p.isPinLockEnabled && p.appLockPin && p.appLockPin.trim().length === 4);
+    const activePin = (p.appLockPin || p.pin || '').trim();
+    return Boolean((p.pinEnabled || p.isPinLockEnabled) && activePin.length === 4);
   });
   const [showLanguageModal, setShowLanguageModal] = useState<boolean>(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState<boolean>(false);
@@ -351,10 +352,11 @@ export default function App() {
   // Handle Lock
   const handleLock = () => {
     const p = DB.getProfile();
+    const activePin = (p.appLockPin || p.pin || '').trim();
     if (
       !p.isRegistered ||
       !p.phone ||
-      (p.isPinLockEnabled && p.appLockPin && p.appLockPin.trim().length === 4)
+      ((p.pinEnabled || p.isPinLockEnabled) && activePin.length === 4)
     ) {
       setIsLocked(true);
     }

@@ -597,21 +597,11 @@ export const CashReconciliationManager: React.FC<Props> = ({
 
       {/* ================= FULLY AUTOMATED DAILY CASH RECONCILIATION ================= */}
       <div className="bg-white rounded-[24px] p-4 sm:p-5 border border-[#E2E8F0] shadow-xs space-y-4">
-        {/* Header & Live Automated Status */}
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#E2E8F0]">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-black text-base sm:text-lg text-[#102A43]">
-                দিনের ক্যাশ হিসাব ({formatDateDDMMYYYY(selectedDate)})
-              </h3>
-              <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-100 text-[#2E7D32] border border-emerald-300 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> ১০০% স্বয়ংক্রিয় লাইভ হিসাব
-              </span>
-            </div>
-            <p className="text-xs text-[#64748B] mt-0.5">
-              কোনো বাটন চাপতে হবে না—প্রতিটি লেনদেনের সাথে সাথে ক্যাশ বাক্সের টাকা নিজে থেকেই লাইভ হিসাব হয়।
-            </p>
-          </div>
+          <h3 className="font-black text-base sm:text-lg text-[#102A43]">
+            দিনের ক্যাশ হিসাব ({formatDateDDMMYYYY(selectedDate)})
+          </h3>
           <div className="flex items-center gap-2 self-start sm:self-center">
             <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-[#EDF2F7] text-[#102A43] border border-[#E2E8F0]">
               তারিখ: {formatDateDDMMYYYY(selectedDate)}

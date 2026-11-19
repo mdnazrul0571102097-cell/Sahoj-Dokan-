@@ -96,6 +96,7 @@ export interface ShopProfile {
   email?: string;
   address: string;
   pin: string;          // 4-digit PIN (Phone Login & Firebase Sync)
+  pinEnabled?: boolean; // Firebase-synced PIN Lock flag (false by default)
   appLockPin?: string;  // ঐচ্ছিক ৪-সংখ্যার অ্যাপ স্ক্রিন লক পিন (সেটিংস থেকে সেট করা হলে তবেই থাকবে)
   isPinLockEnabled?: boolean; // অ্যাপ ওপেন করার সময় ৪-সংখ্যার পিন লক চালু/বন্ধ (ডিফল্ট OFF)
   currency: string;     // '৳'

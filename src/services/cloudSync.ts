@@ -157,14 +157,25 @@ export const CloudSync = {
           ? 'Android APK'
           : 'Web / Mobile';
 
+      const effectivePinEnabled = Boolean(
+        profile.pinEnabled === true || profile.isPinLockEnabled === true
+      );
+      const effectivePin =
+        (effectivePinEnabled ? profile.appLockPin || profile.pin : profile.pin || '1234').trim() || '1234';
+
       const payload = {
         phone: cleanPhone,
         fullPhone: phoneToUse.startsWith('0') ? phoneToUse : '0' + cleanPhone,
         shopId: profile.shopId || subscription.shopId || `SD-${cleanPhone}`,
         platform,
+        pinEnabled: effectivePinEnabled,
         profile: {
           ...profile,
           phone: phoneToUse,
+          pin: effectivePin,
+          pinEnabled: effectivePinEnabled,
+          isPinLockEnabled: effectivePinEnabled,
+          appLockPin: effectivePinEnabled ? effectivePin : '',
         },
         data: {
           ...allData,
@@ -260,6 +271,7 @@ export const CloudSync = {
   // Check if Firebase Firestore backup exists for a phone number
   async checkCloudBackup(phone: string): Promise<{
     hasCloudData: boolean;
+    pinEnabled?: boolean;
     lastSyncedAt?: string;
     profile?: any;
     stats?: { products: number; sales: number; customers: number };
@@ -286,12 +298,18 @@ export const CloudSync = {
           const docData = snap.data();
           const dataObj = docData.data || docData;
           const profileObj = docData.profile || dataObj.profile;
+          const pinEnabled = Boolean(
+            profileObj?.pinEnabled === true ||
+              profileObj?.isPinLockEnabled === true ||
+              docData.pinEnabled === true
+          );
 
           if (dataObj && (Array.isArray(dataObj.products) || profileObj?.shopName)) {
             return {
               hasCloudData: true,
+              pinEnabled,
               lastSyncedAt: docData.lastSyncedAt || docData.updatedAt || new Date().toISOString(),
-              profile: profileObj,
+              profile: profileObj ? { ...profileObj, pinEnabled } : profileObj,
               stats: {
                 products: (dataObj.products || []).length,
                 sales: (dataObj.sales || []).length,
@@ -387,9 +405,46 @@ export const CloudSync = {
     };
   },
 
+  // Update PIN Lock status & PIN directly in Firebase Firestore for a shop
+  async updateCloudPinSettings(
+    phone: string,
+    pinEnabled: boolean,
+    pin?: string
+  ): Promise<{ success: boolean }> {
+    const cleanPhone = cleanPhoneNumber(phone);
+    if (!cleanPhone || cleanPhone.length < 9) {
+      return { success: false };
+    }
+
+    const cleanPin = (pin || '1234').toString().trim() || '1234';
+    const nowIso = new Date().toISOString();
+    const patch = {
+      pinEnabled: Boolean(pinEnabled),
+      updatedAt: nowIso,
+      profile: {
+        pin: cleanPin,
+        pinEnabled: Boolean(pinEnabled),
+        isPinLockEnabled: Boolean(pinEnabled),
+        appLockPin: pinEnabled ? cleanPin : '',
+      },
+    };
+
+    try {
+      await Promise.all([
+        setDoc(doc(firestore, 'shops', cleanPhone), patch, { merge: true }),
+        setDoc(doc(firestore, 'shops', '0' + cleanPhone), patch, { merge: true }),
+      ]);
+      return { success: true };
+    } catch (err) {
+      console.warn('Failed to update PIN settings in Firestore:', err);
+      return { success: false };
+    }
+  },
+
   // Restore everything from Firebase Firestore for a phone number
   async restoreFromCloud(phone: string, pinToCheck?: string): Promise<{
     success: boolean;
+    requiresPin?: boolean;
     message: string;
     stats?: { products: number; sales: number; customers: number };
   }> {
@@ -423,14 +478,30 @@ export const CloudSync = {
               Boolean(profileObj?.shopName));
 
           if (hasData) {
-            // STRICT PIN VERIFICATION
-            const cloudPin = (profileObj?.pin || dataObj?.profile?.pin || '').toString().trim();
+            // Smart cloud-aware PIN verification: ONLY enforce when pinEnabled is explicitly true
+            const requiresPin = Boolean(
+              profileObj?.pinEnabled === true ||
+                profileObj?.isPinLockEnabled === true ||
+                docData.pinEnabled === true
+            );
+            const cloudPin = (
+              profileObj?.appLockPin ||
+              profileObj?.pin ||
+              dataObj?.profile?.appLockPin ||
+              dataObj?.profile?.pin ||
+              ''
+            )
+              .toString()
+              .trim();
             const enteredPin = (pinToCheck || '').toString().trim();
 
-            if (cloudPin && enteredPin !== cloudPin) {
+            if (requiresPin && cloudPin && enteredPin !== cloudPin) {
               return {
                 success: false,
-                message: 'ভুল পিন (PIN)! আপনার অ্যাকাউন্টের সঠিক ৪ সংখ্যার পিন লিখুন।',
+                requiresPin: true,
+                message: enteredPin
+                  ? 'ভুল পিন (PIN)! আপনার অ্যাকাউন্টের সঠিক ৪ সংখ্যার পিন লিখুন।'
+                  : 'এই দোকানে পিন লক চালু আছে। অনুগ্রহ করে ৪ সংখ্যার পিন নম্বর দিন।',
               };
             }
 
@@ -439,6 +510,10 @@ export const CloudSync = {
               DB.saveProfile({
                 ...profileObj,
                 phone: phone.startsWith('0') ? phone : '0' + cleanPhone,
+                pin: cloudPin || '1234',
+                pinEnabled: requiresPin,
+                isPinLockEnabled: requiresPin,
+                appLockPin: requiresPin ? cloudPin : '',
                 isRegistered: true,
               });
             }
@@ -496,20 +571,44 @@ export const CloudSync = {
           const profileObj = parsed.profile || dataObj.profile;
 
           if (dataObj && Array.isArray(dataObj.products)) {
-            // STRICT PIN CHECK FOR LOCAL BACKUP
-            const cloudPin = (profileObj?.pin || dataObj?.profile?.pin || '').toString().trim();
+            // Smart PIN check for local Android backup: only enforce if pinEnabled is explicitly true
+            const requiresPin = Boolean(
+              profileObj?.pinEnabled === true ||
+                profileObj?.isPinLockEnabled === true ||
+                parsed.pinEnabled === true
+            );
+            const cloudPin = (
+              profileObj?.appLockPin ||
+              profileObj?.pin ||
+              dataObj?.profile?.appLockPin ||
+              dataObj?.profile?.pin ||
+              ''
+            )
+              .toString()
+              .trim();
             const enteredPin = (pinToCheck || '').toString().trim();
 
-            if (cloudPin && enteredPin !== cloudPin) {
+            if (requiresPin && cloudPin && enteredPin !== cloudPin) {
               return {
                 success: false,
-                message: 'ভুল পিন (PIN)! আপনার অ্যাকাউন্টের সঠিক ৪ সংখ্যার পিন লিখুন।',
+                requiresPin: true,
+                message: enteredPin
+                  ? 'ভুল পিন (PIN)! আপনার অ্যাকাউন্টের সঠিক ৪ সংখ্যার পিন লিখুন।'
+                  : 'এই দোকানে পিন লক চালু আছে। অনুগ্রহ করে ৪ সংখ্যার পিন নম্বর দিন।',
               };
             }
 
             DB.importAllData(dataObj);
             if (profileObj) {
-              DB.saveProfile({ ...profileObj, phone });
+              DB.saveProfile({
+                ...profileObj,
+                phone,
+                pin: cloudPin || '1234',
+                pinEnabled: requiresPin,
+                isPinLockEnabled: requiresPin,
+                appLockPin: requiresPin ? cloudPin : '',
+                isRegistered: true,
+              });
             }
             const nowIso = new Date().toISOString();
             if (typeof localStorage !== 'undefined') {
@@ -547,14 +646,31 @@ export const CloudSync = {
       const res = await fetchCloud(`/api/cloud/restore/${cleanPhone}`);
       const json = await res.json();
       if (json && json.hasCloudData && json.data) {
-        // STRICT PIN CHECK FOR SERVER BACKUP
-        const cloudPin = (json.profile?.pin || json.data?.profile?.pin || '').toString().trim();
+        // Smart PIN check for server backup: only enforce if pinEnabled is explicitly true
+        const requiresPin = Boolean(
+          json.profile?.pinEnabled === true ||
+            json.profile?.isPinLockEnabled === true ||
+            json.data?.profile?.pinEnabled === true ||
+            json.data?.profile?.isPinLockEnabled === true
+        );
+        const cloudPin = (
+          json.profile?.appLockPin ||
+          json.profile?.pin ||
+          json.data?.profile?.appLockPin ||
+          json.data?.profile?.pin ||
+          ''
+        )
+          .toString()
+          .trim();
         const enteredPin = (pinToCheck || '').toString().trim();
 
-        if (cloudPin && enteredPin !== cloudPin) {
+        if (requiresPin && cloudPin && enteredPin !== cloudPin) {
           return {
             success: false,
-            message: 'ভুল পিন (PIN)! আপনার অ্যাকাউন্টের সঠিক ৪ সংখ্যার পিন লিখুন।',
+            requiresPin: true,
+            message: enteredPin
+              ? 'ভুল পিন (PIN)! আপনার অ্যাকাউন্টের সঠিক ৪ সংখ্যার পিন লিখুন।'
+              : 'এই দোকানে পিন লক চালু আছে। অনুগ্রহ করে ৪ সংখ্যার পিন নম্বর দিন।',
           };
         }
 
@@ -563,6 +679,11 @@ export const CloudSync = {
           DB.saveProfile({
             ...json.profile,
             phone,
+            pin: cloudPin || '1234',
+            pinEnabled: requiresPin,
+            isPinLockEnabled: requiresPin,
+            appLockPin: requiresPin ? cloudPin : '',
+            isRegistered: true,
           });
         }
         if (json.lastSyncedAt && typeof localStorage !== 'undefined') {
