@@ -6,6 +6,7 @@ import { playSuccessChime } from '../utils/audio';
 import { SupplierKhataView } from './SupplierKhataView';
 import { ReceiptModal } from './ReceiptModal';
 import { CalculatorInput } from './CalculatorKeypad';
+import { showToast } from './Toast';
 import {
   BookOpen,
   Search,
@@ -167,6 +168,7 @@ export const BakiKhataView: React.FC<Props> = ({
   }, [initialSubTab]);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [customerFilterMode, setCustomerFilterMode] = useState<'all' | 'due_only' | 'highest_due'>('all');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [confirmDeleteCustomerId, setConfirmDeleteCustomerId] = useState<string | null>(null);
 
@@ -313,17 +315,26 @@ export const BakiKhataView: React.FC<Props> = ({
     return customers.filter((c) => c.totalDue > 0).length;
   }, [customers]);
 
-  // Filter customers by search query
+  // Filter and sort customers for display without modifying underlying data
   const filteredCustomers = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return customers;
-    return customers.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.phone && c.phone.includes(q)) ||
-        (c.address && c.address.toLowerCase().includes(q))
-    );
-  }, [customers, searchQuery]);
+    let list = !q
+      ? customers
+      : customers.filter(
+          (c) =>
+            c.name.toLowerCase().includes(q) ||
+            (c.phone && c.phone.includes(q)) ||
+            (c.address && c.address.toLowerCase().includes(q))
+        );
+
+    if (customerFilterMode === 'due_only') {
+      list = list.filter((c) => (c.totalDue || 0) > 0);
+    } else if (customerFilterMode === 'highest_due') {
+      list = [...list].sort((a, b) => (b.totalDue || 0) - (a.totalDue || 0));
+    }
+
+    return list;
+  }, [customers, searchQuery, customerFilterMode]);
 
   // Open Edit Customer Modal
   const handleOpenEditCustomer = (cust: Customer) => {
@@ -494,7 +505,10 @@ export const BakiKhataView: React.FC<Props> = ({
       if (onOpenSubscriptionModal) {
         onOpenSubscriptionModal();
       } else {
-        alert('🔒 ৬০ দিনের ফ্রি ট্রায়াল শেষ! কাস্টমারকে হোয়াটসঅ্যাপ মেসেজ পাঠাতে Pro সাবস্ক্রিপশন চালু করুন।');
+        showToast(
+          '🔒 ৬০ দিনের ফ্রি ট্রায়াল শেষ! কাস্টমারকে হোয়াটসঅ্যাপ মেসেজ পাঠাতে Pro সাবস্ক্রিপশন চালু করুন।',
+          'warning'
+        );
       }
       return;
     }
@@ -721,15 +735,55 @@ export const BakiKhataView: React.FC<Props> = ({
             </div>
             <button
               type="button"
-              onClick={() => setSearchQuery('')}
+              onClick={() => {
+                setSearchQuery('');
+                setCustomerFilterMode('all');
+              }}
               className="w-10 h-10 rounded-2xl bg-white border border-[#E2E8F0] flex items-center justify-center text-[#64748B] shadow-xs hover:bg-[#EDF2F7] transition"
-              title="ফিল্টার"
+              title="রিসেট ফিল্টার"
             >
               <div className="space-y-1">
                 <div className="w-4 h-0.5 bg-[#64748B] rounded-full"></div>
                 <div className="w-3 h-0.5 bg-[#64748B] rounded-full mx-auto"></div>
                 <div className="w-2 h-0.5 bg-[#64748B] rounded-full mx-auto"></div>
               </div>
+            </button>
+          </div>
+
+          {/* 3 Clean Customer List Filter Pills */}
+          <div className="flex items-center gap-1.5 mb-2.5 overflow-x-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => setCustomerFilterMode('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition whitespace-nowrap cursor-pointer active:scale-95 ${
+                customerFilterMode === 'all'
+                  ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-xs'
+                  : 'bg-white text-[#64748B] border-[#E2E8F0] hover:bg-[#F8FAFC]'
+              }`}
+            >
+              সবাই
+            </button>
+            <button
+              type="button"
+              onClick={() => setCustomerFilterMode('due_only')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition whitespace-nowrap cursor-pointer active:scale-95 ${
+                customerFilterMode === 'due_only'
+                  ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-xs'
+                  : 'bg-white text-[#64748B] border-[#E2E8F0] hover:bg-[#F8FAFC]'
+              }`}
+            >
+              শুধু বাকি আছে
+            </button>
+            <button
+              type="button"
+              onClick={() => setCustomerFilterMode('highest_due')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition whitespace-nowrap cursor-pointer active:scale-95 ${
+                customerFilterMode === 'highest_due'
+                  ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-xs'
+                  : 'bg-white text-[#64748B] border-[#E2E8F0] hover:bg-[#F8FAFC]'
+              }`}
+            >
+              বেশি বাকি আগে
             </button>
           </div>
 
@@ -744,7 +798,10 @@ export const BakiKhataView: React.FC<Props> = ({
             <button
               type="button"
               onClick={() => {
-                alert(`মোট বাকি রিপোর্ট:\nগ্রাহক সংখ্যা: ${customers.length} জন\nমোট বকেয়া: ৳${totalOutstandingDue}`);
+                showToast(
+                  `মোট বাকি রিপোর্ট:\nগ্রাহক সংখ্যা: ${customers.length} জন\nমোট বকেয়া: ৳${totalOutstandingDue.toLocaleString()}`,
+                  'info'
+                );
               }}
               className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#E0F2F1] text-[#0E6B6B] hover:bg-[#B2DFDB] font-bold text-xs border border-[#B2DFDB] transition"
             >
@@ -799,6 +856,11 @@ export const BakiKhataView: React.FC<Props> = ({
                 ) : (
                   filteredCustomers.map((cust: Customer) => {
                     const hasDue = cust.totalDue > 0;
+                    const dialPhone = (cust.phone || '').replace(/[^\d+]/g, '');
+                    const hasValidPhone =
+                      Boolean(cust.phone) &&
+                      cust.phone.trim() !== '---' &&
+                      /\d/.test(dialPhone);
                     return (
                       <div
                         key={cust.id}
@@ -845,16 +907,16 @@ export const BakiKhataView: React.FC<Props> = ({
                           </div>
                         </div>
 
-                        {/* Row 2: Quick Action Buttons (+ বাকি, ৳ জমা, Edit, WhatsApp) */}
-                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#F1F5F9]">
-                          <div className="flex items-center gap-1.5 flex-1">
+                        {/* Row 2: Quick Action Buttons (+ বাকি, ৳ জমা, কল, Edit, WhatsApp) */}
+                        <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-[#F1F5F9]">
+                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openCustomerDueModal(cust);
                               }}
-                              className="flex-1 py-2 px-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[#D32F2F] text-xs font-extrabold transition active:scale-95 cursor-pointer whitespace-nowrap"
+                              className="flex-1 py-2 px-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[#D32F2F] text-xs font-extrabold transition active:scale-95 cursor-pointer whitespace-nowrap"
                             >
                               + বাকি
                             </button>
@@ -869,13 +931,25 @@ export const BakiKhataView: React.FC<Props> = ({
                                 setPaymentDate(getLocalDateStr(new Date()));
                                 setShowPaymentModal(true);
                               }}
-                              className="flex-1 py-2 px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[#2E7D32] text-xs font-extrabold transition active:scale-95 cursor-pointer whitespace-nowrap"
+                              className="flex-1 py-2 px-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[#2E7D32] text-xs font-extrabold transition active:scale-95 cursor-pointer whitespace-nowrap"
                             >
                               ৳ জমা
                             </button>
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0">
+                            {hasValidPhone && (
+                              <a
+                                href={`tel:${dialPhone}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="px-2.5 py-2 rounded-xl border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                                title="সরাসরি কল করুন"
+                              >
+                                <Phone className="w-3.5 h-3.5" />
+                                <span>কল</span>
+                              </a>
+                            )}
+
                             <button
                               type="button"
                               onClick={(e) => {
@@ -934,7 +1008,21 @@ export const BakiKhataView: React.FC<Props> = ({
                     <h3 className="font-bold text-base text-[#102A43]">
                       {selectedCustomer.name}
                     </h3>
-                    <p className="text-xs text-[#64748B]">{selectedCustomer.phone}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-xs text-[#64748B]">{selectedCustomer.phone}</p>
+                      {selectedCustomer.phone &&
+                        selectedCustomer.phone.trim() !== '---' &&
+                        /\d/.test(selectedCustomer.phone) && (
+                          <a
+                            href={`tel:${selectedCustomer.phone.replace(/[^\d+]/g, '')}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-700 text-[11px] font-bold hover:bg-sky-100 transition"
+                            title="সরাসরি কল করুন"
+                          >
+                            <Phone className="w-3 h-3" />
+                            <span>কল</span>
+                          </a>
+                        )}
+                    </div>
                     {selectedCustomer.address && (
                       <p className="text-xs text-[#64748B] mt-0.5">{selectedCustomer.address}</p>
                     )}

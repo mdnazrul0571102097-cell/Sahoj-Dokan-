@@ -338,3 +338,13 @@ export interface MonthlyCashReconciliation {
   note?: string;                  // পার্থক্যের বিবরণ / মন্তব্য
   updatedAt: string;
 }
+
+// ================= SHOP NOTEBOOK (দোকানের নোটবুক) =================
+export interface ShopNote {
+  id: string;
+  content: string;
+  isCompleted: boolean;
+  isPinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

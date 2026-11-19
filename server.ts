@@ -34,6 +34,15 @@ const LICENSE_SECRET_KEY =
   process.env.LICENSE_SECRET_KEY || 'sahoj_dokan_pos_secure_license_signing_key_2026_bd_nazrul';
 
 let ADMIN_MASTER_PIN = process.env.ADMIN_MASTER_PIN || 'sahoj2026admin';
+const ADMIN_CONFIG_FILE = path.join(__dirname, '.admin_config.json');
+try {
+  if (fs.existsSync(ADMIN_CONFIG_FILE)) {
+    const cfg = JSON.parse(fs.readFileSync(ADMIN_CONFIG_FILE, 'utf-8'));
+    if (cfg?.adminPassword && typeof cfg.adminPassword === 'string' && cfg.adminPassword.trim().length >= 4) {
+      ADMIN_MASTER_PIN = cfg.adminPassword.trim();
+    }
+  }
+} catch (_) {}
 
 // Server-side in-memory + optional JSON file storage for synced payment requests
 const DB_FILE = path.join(__dirname, '.payment_db.json');
@@ -161,7 +170,7 @@ app.get('/api/payment-requests', (req, res) => {
 
 function verifyAdminPin(pin: string): boolean {
   if (!pin) return false;
-  return pin === ADMIN_MASTER_PIN || pin === 'sahoj2026admin';
+  return pin.trim() === ADMIN_MASTER_PIN;
 }
 
 // 3. Admin Login verification
@@ -184,6 +193,13 @@ app.post('/api/admin/change-pin', (req, res) => {
       return res.status(401).json({ error: 'বর্তমান অ্যাডমিন পাসওয়ার্ড সঠিক নয়!' });
     }
     ADMIN_MASTER_PIN = newPin.trim();
+    try {
+      fs.writeFileSync(
+        ADMIN_CONFIG_FILE,
+        JSON.stringify({ adminPassword: ADMIN_MASTER_PIN, updatedAt: new Date().toISOString() }, null, 2),
+        'utf-8'
+      );
+    } catch (_) {}
     res.json({ success: true, message: 'অ্যাডমিন পাসওয়ার্ড সফলভাবে পরিবর্তিত হয়েছে।' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

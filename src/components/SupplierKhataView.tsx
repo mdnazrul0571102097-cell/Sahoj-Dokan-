@@ -6,6 +6,7 @@ import { DB } from '../storage/db';
 import { MemoScannerCard, MemoAttachment } from './MemoScannerCard';
 import { ScannedMemoResult } from '../utils/memoScanner';
 import { CalculatorInput } from './CalculatorKeypad';
+import { showToast } from './Toast';
 import {
   Building2,
   Search,
@@ -974,7 +975,7 @@ export const SupplierKhataView: React.FC<Props> = ({
       if (onOpenSubscriptionModal) {
         onOpenSubscriptionModal();
       } else {
-        alert('🔒 ৬০ দিনের ফ্রি ট্রায়াল শেষ! সাপ্লায়ারকে হোয়াটসঅ্যাপ মেসেজ পাঠাতে Pro সাবস্ক্রিপশন চালু করুন।');
+        showToast('🔒 ৬০ দিনের ফ্রি ট্রায়াল শেষ! সাপ্লায়ারকে হোয়াটসঅ্যাপ মেসেজ পাঠাতে Pro সাবস্ক্রিপশন চালু করুন।', 'warning');
       }
       return;
     }

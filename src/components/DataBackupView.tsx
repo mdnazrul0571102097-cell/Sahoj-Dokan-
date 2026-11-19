@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Check, Shield, Smartphone, Cloud, RefreshCw, CloudDownload, CheckCircle2, AlertTriangle, AlertCircle } from 'lucide-react';
 import { ShopProfile, Language } from '../types';
 import { CloudSync, CloudSyncStatus } from '../services/cloudSync';
+import { showToast } from './Toast';
 
 interface Props {
   profile: ShopProfile;
@@ -90,7 +91,7 @@ export const DataBackupView: React.FC<Props> = ({
 
   const handleCheckCloud = async () => {
     if (!restorePhone.trim()) {
-      alert('অনুগ্রহ করে মোবাইল নম্বর লিখুন');
+      showToast('অনুগ্রহ করে মোবাইল নম্বর লিখুন', 'warning');
       return;
     }
     setIsChecking(true);
@@ -114,15 +115,15 @@ export const DataBackupView: React.FC<Props> = ({
     try {
       const res = await CloudSync.restoreFromCloud(restorePhone, profile.pin);
       if (res.success) {
-        alert('✅ ' + res.message);
+        showToast(res.message, 'success');
         setShowRestoreModal(false);
         setCloudBackupInfo(null);
         onDataRestored();
       } else {
-        alert('❌ ' + res.message);
+        showToast(res.message, 'error');
       }
     } catch (err: any) {
-      alert('রিস্টোর করতে সমস্যা: ' + err.message);
+      showToast('রিস্টোর করতে সমস্যা: ' + err.message, 'error');
     } finally {
       setIsRestoring(false);
     }

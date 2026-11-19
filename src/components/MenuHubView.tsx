@@ -21,6 +21,7 @@ import {
   Landmark,
   BarChart3,
   Calculator,
+  NotebookPen,
 } from 'lucide-react';
 
 export type MenuTileTarget =
@@ -33,7 +34,8 @@ export type MenuTileTarget =
   | 'suppliersDue'
   | 'cashBox'
   | 'allReports'
-  | 'calculator';
+  | 'calculator'
+  | 'notebook';
 
 interface Props {
   sales: Sale[];
@@ -356,12 +358,18 @@ export const MenuHubView: React.FC<Props> = ({
       bgClass: 'bg-[#0097A7] hover:bg-[#008290]',
       icon: BarChart3,
     },
-    // Row 4: ক্যালকুলেটর (left single-column, middle & right empty)
+    // Row 4: ক্যালকুলেটর | দোকানের নোটবুক
     {
       id: 'calculator',
       label: 'ক্যালকুলেটর',
       bgClass: 'bg-[#3949AB] hover:bg-[#2F3E94]',
       icon: Calculator,
+    },
+    {
+      id: 'notebook',
+      label: 'দোকানের নোটবুক',
+      bgClass: 'bg-[#0E6B6B] hover:bg-[#0A5454]',
+      icon: NotebookPen,
     },
   ];
 

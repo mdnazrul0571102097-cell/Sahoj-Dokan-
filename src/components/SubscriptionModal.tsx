@@ -9,6 +9,7 @@ import { translations } from '../i18n/translations';
 import { DB } from '../storage/db';
 import { compressImage } from '../utils/image';
 import { parseAndVerifyLicenseKey, getSubscriptionDetails } from '../utils/license';
+import { showToast } from './Toast';
 import {
   Sparkles,
   Check,
@@ -228,7 +229,7 @@ export const SubscriptionModal: React.FC<Props> = ({
             : 30;
         const updated = DB.activatePro(result.payload.plan, durationDays, req.generatedLicenseKey);
         onSubscriptionUpdated(updated);
-        alert('আপনার Pro লাইসেন্স সফলভাবে সক্রিয় হয়েছে!');
+        showToast('আপনার Pro লাইসেন্স সফলভাবে সক্রিয় হয়েছে!', 'success');
         onClose();
       }
     }

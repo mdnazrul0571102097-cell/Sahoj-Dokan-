@@ -23,6 +23,7 @@ import {
   OtherCashEntry,
   DailyCashReconciliation,
   MonthlyCashReconciliation,
+  ShopNote,
 } from './types';
 import { DB } from './storage/db';
 import { getSubscriptionDetails } from './utils/license';
@@ -40,8 +41,10 @@ import { AdminPanelModal } from './components/AdminPanelModal';
 import { TrialBanner } from './components/TrialBanner';
 import { MenuHubView, MenuTileTarget } from './components/MenuHubView';
 import { AllReportsView } from './components/AllReportsView';
+import { ShopNotebookView } from './components/ShopNotebookView';
 import { CalculatorModal } from './components/CalculatorModal';
 import { CalculatorKeypadProvider } from './components/CalculatorKeypad';
+import { ToastContainer } from './components/Toast';
 import { CloudSync } from './services/cloudSync';
 
 export default function App() {
@@ -79,6 +82,7 @@ export default function App() {
   const [initialStoreCapital, setInitialStoreCapital] = useState<number>(() =>
     DB.getInitialStoreCapital()
   );
+  const [notes, setNotes] = useState<ShopNote[]>(() => DB.getNotes());
 
   // App UI states
   const [activeTab, setActiveTab] = useState<NavTab>('pos');
@@ -1542,6 +1546,67 @@ export default function App() {
     DB.saveInitialStoreCapital(clean);
   };
 
+  // Shop Notebook handlers (isolated notes state + DB/CloudSync)
+  const handleAddNote = (content: string) => {
+    const nowIso = new Date().toISOString();
+    const newNote: ShopNote = {
+      id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      content,
+      isCompleted: false,
+      isPinned: false,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    setNotes((prev) => {
+      const next = [newNote, ...prev];
+      DB.saveNotes(next);
+      return next;
+    });
+  };
+
+  const handleUpdateNote = (id: string, content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    const nowIso = new Date().toISOString();
+    setNotes((prev) => {
+      const next = prev.map((n) =>
+        n.id === id ? { ...n, content: trimmed, updatedAt: nowIso } : n
+      );
+      DB.saveNotes(next);
+      return next;
+    });
+  };
+
+  const handleToggleNoteComplete = (id: string) => {
+    const nowIso = new Date().toISOString();
+    setNotes((prev) => {
+      const next = prev.map((n) =>
+        n.id === id ? { ...n, isCompleted: !n.isCompleted, updatedAt: nowIso } : n
+      );
+      DB.saveNotes(next);
+      return next;
+    });
+  };
+
+  const handleToggleNotePin = (id: string) => {
+    const nowIso = new Date().toISOString();
+    setNotes((prev) => {
+      const next = prev.map((n) =>
+        n.id === id ? { ...n, isPinned: !n.isPinned, updatedAt: nowIso } : n
+      );
+      DB.saveNotes(next);
+      return next;
+    });
+  };
+
+  const handleDeleteNote = (id: string) => {
+    setNotes((prev) => {
+      const next = prev.filter((n) => n.id !== id);
+      DB.saveNotes(next);
+      return next;
+    });
+  };
+
   // Handle Data Restored from Backup file
   const handleDataRestored = () => {
     setProfile(DB.getProfile());
@@ -1561,6 +1626,7 @@ export default function App() {
     setMonthlyReconciliations(DB.getMonthlyReconciliations());
     setInitialOpeningCash(DB.getInitialOpeningCash());
     setInitialStoreCapital(DB.getInitialStoreCapital());
+    setNotes(DB.getNotes());
     setCart([]);
   };
 
@@ -1784,6 +1850,19 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'menu' && activeMenuPage === 'notebook' && (
+          <ShopNotebookView
+            notes={notes}
+            shopName={profile.shopName}
+            onAddNote={handleAddNote}
+            onUpdateNote={handleUpdateNote}
+            onToggleComplete={handleToggleNoteComplete}
+            onTogglePin={handleToggleNotePin}
+            onDeleteNote={handleDeleteNote}
+            onBackToMenu={() => setActiveMenuPage(null)}
+          />
+        )}
+
         {activeTab === 'settings' && (
           <SettingsView
             profile={profile}
@@ -1938,6 +2017,9 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Global In-App Toast Notifications */}
+      <ToastContainer />
 
       {/* Double-Tap Back to Exit Toast Notification */}
       {exitToastVisible && (

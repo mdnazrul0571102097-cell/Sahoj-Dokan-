@@ -16,6 +16,7 @@ import {
   OtherCashEntry,
   DailyCashReconciliation,
   MonthlyCashReconciliation,
+  ShopNote,
 } from '../types';
 import { verifyClockIntegrity, generateShopId } from '../utils/license';
 
@@ -47,6 +48,7 @@ const STORAGE_KEYS = {
   APK_DOWNLOAD_COUNT: 'sahoj_dokan_apk_download_count',
   QUICK_SALE_MARGIN: 'sahoj_dokan_quick_sale_margin',
   DEMO_WIPED: 'sahoj_dokan_demo_wiped',
+  NOTES: 'sahoj_dokan_notes',
 };
 
 // Curated authentic Bangladeshi grocery items
@@ -1026,6 +1028,33 @@ export const DB = {
     }
   },
 
+  // ================= SHOP NOTEBOOK (দোকানের নোটবুক - Isolated Notes) =================
+  getNotes(): ShopNote[] {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.NOTES);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return [];
+  },
+
+  saveNotes(notes: ShopNote[]) {
+    const seen = new Set<string>();
+    const deduped = notes.filter((n) => {
+      if (!n || !n.id || seen.has(n.id)) return false;
+      seen.add(n.id);
+      return true;
+    });
+    localStorage.setItem(STORAGE_KEYS.NOTES, JSON.stringify(deduped));
+    if (typeof window !== 'undefined' && (window as any).__sd_schedule_sync) {
+      (window as any).__sd_schedule_sync();
+    }
+  },
+
   getInitialOpeningCash(): number {
     try {
       const val = parseFloat(localStorage.getItem(STORAGE_KEYS.INITIAL_OPENING_CASH) || '0');
@@ -1538,6 +1567,7 @@ export const DB = {
       initialStoreCapital: this.getInitialStoreCapital(),
       subscription: this.getSubscription(),
       paymentRequests: this.getPaymentRequests(),
+      notes: this.getNotes(),
     };
   },
 
@@ -1574,6 +1604,7 @@ export const DB = {
     if (Array.isArray(data.otherCashEntries)) this.saveOtherCashEntries(dedupeById(data.otherCashEntries));
     if (Array.isArray(data.dailyReconciliations)) this.saveDailyReconciliations(data.dailyReconciliations);
     if (Array.isArray(data.monthlyReconciliations)) this.saveMonthlyReconciliations(data.monthlyReconciliations);
+    if (Array.isArray(data.notes)) this.saveNotes(dedupeById(data.notes));
     if (typeof data.initialOpeningCash === 'number') {
       this.saveInitialOpeningCash(data.initialOpeningCash);
     }

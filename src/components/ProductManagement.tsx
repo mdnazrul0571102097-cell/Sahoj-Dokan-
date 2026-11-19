@@ -7,6 +7,7 @@ import { compressImage } from '../utils/image';
 import { parseBanglaNumber } from '../utils/number';
 import { playSuccessChime } from '../utils/audio';
 import { CalculatorInput } from './CalculatorKeypad';
+import { showToast } from './Toast';
 import {
   Package,
   Plus,
@@ -140,7 +141,7 @@ export const ProductManagement: React.FC<Props> = ({
       if (onOpenSubscriptionModal) {
         onOpenSubscriptionModal();
       } else {
-        alert('আপনার ৬০ দিনের ফ্রি ট্রায়াল শেষ হয়েছে। নতুন প্রোডাক্ট যোগ করতে Pro সাবস্ক্রিপশন চালু করুন।');
+        showToast('আপনার ৬০ দিনের ফ্রি ট্রায়াল শেষ হয়েছে। নতুন প্রোডাক্ট যোগ করতে Pro সাবস্ক্রিপশন চালু করুন।', 'warning');
       }
       return;
     }

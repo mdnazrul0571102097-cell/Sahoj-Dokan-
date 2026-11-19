@@ -21,6 +21,7 @@ import { LooseItemModal } from './LooseItemModal';
 import { ReceiptModal } from './ReceiptModal';
 import { QuickSaleModal } from './QuickSaleModal';
 import { CalculatorInput } from './CalculatorKeypad';
+import { showToast } from './Toast';
 import {
   Search,
   Camera,
@@ -186,10 +187,11 @@ export const PosView: React.FC<Props> = ({
         handleAddToCart(matched, 1, matched.sellPrice);
       }
     } else {
-      alert(
+      showToast(
         language === 'bn'
           ? `বারকোড '${scannedCode}' দিয়ে কোনো পণ্য পাওয়া যায়নি!`
-          : `No product found for barcode '${scannedCode}'`
+          : `No product found for barcode '${scannedCode}'`,
+        'error'
       );
     }
   };
@@ -197,7 +199,7 @@ export const PosView: React.FC<Props> = ({
   // Add Item to Cart
   const handleAddToCart = (product: Product, quantity: number, calculatedPrice: number) => {
     if (product.stock <= 0) {
-      alert(t.insufficientStock);
+      showToast(t.insufficientStock, 'warning');
       return;
     }
 
@@ -238,7 +240,7 @@ export const PosView: React.FC<Props> = ({
         if (onOpenSubscriptionModal) {
           onOpenSubscriptionModal();
         } else {
-          alert('খোলা পণ্য ও ওজন অনুযায়ী বিক্রি করার সুবিধাটি Pro প্যাকেজের অন্তর্ভুক্ত।');
+          showToast('খোলা পণ্য ও ওজন অনুযায়ী বিক্রি করার সুবিধাটি Pro প্যাকেজের অন্তর্ভুক্ত।', 'warning');
         }
         return;
       }
@@ -339,16 +341,17 @@ export const PosView: React.FC<Props> = ({
       if (onOpenSubscriptionModal) {
         onOpenSubscriptionModal();
       } else {
-        alert('আপনার ৬০ দিনের ফ্রি ট্রায়াল শেষ হয়েছে। বিক্রি সম্পন্ন করতে ও রসিদ প্রিন্ট করতে Pro চালু করুন।');
+        showToast('আপনার ৬০ দিনের ফ্রি ট্রায়াল শেষ হয়েছে। বিক্রি সম্পন্ন করতে ও রসিদ প্রিন্ট করতে Pro চালু করুন।', 'warning');
       }
       return;
     }
 
     if (dueAmount > 0 && selectedCustomerId === 'cash') {
-      alert(
+      showToast(
         language === 'bn'
           ? 'বাকি বিক্রির জন্য অনুগ্রহ করে বাকি খাতা থেকে কাস্টমার নির্বাচন করুন!'
-          : 'Please select a customer from Baki Khata for credit sales!'
+          : 'Please select a customer from Baki Khata for credit sales!',
+        'warning'
       );
       return;
     }
@@ -694,7 +697,7 @@ export const PosView: React.FC<Props> = ({
               if (onOpenSubscriptionModal) {
                 onOpenSubscriptionModal();
               } else {
-                alert('বারকোড স্ক্যানার দিয়ে দ্রুত বিক্রির সুবিধাটি Pro প্যাকেজের অন্তর্ভুক্ত।');
+                showToast('বারকোড স্ক্যানার দিয়ে দ্রুত বিক্রির সুবিধাটি Pro প্যাকেজের অন্তর্ভুক্ত।', 'warning');
               }
               return;
             }

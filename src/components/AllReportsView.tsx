@@ -28,6 +28,10 @@ import {
   FileText,
   History,
   Download,
+  ChevronDown,
+  ChevronUp,
+  Banknote,
+  BookOpen,
 } from 'lucide-react';
 
 interface Props {
@@ -96,6 +100,7 @@ export const AllReportsView: React.FC<Props> = ({
 
   const [selectedMonth, setSelectedMonth] = useState<string>(currentYearMonth);
   const [isMonthlyModalOpen, setIsMonthlyModalOpen] = useState<boolean>(false);
+  const [showDayCloseHistory, setShowDayCloseHistory] = useState<boolean>(false);
 
   const defaultMargin = DB.getQuickSaleProfitMargin();
 
@@ -150,6 +155,17 @@ export const AllReportsView: React.FC<Props> = ({
     const monthSales = Math.round(
       monthSalesList.reduce((sum, s) => sum + (Number(s.grandTotal) || 0), 0)
     );
+    const monthCashSales = Math.round(
+      monthSalesList.reduce((sum, s) => {
+        if (s.id?.startsWith('return_') || (s.grandTotal || 0) < 0 || (s.paidAmount || 0) < 0) {
+          return sum + (s.paidAmount || s.grandTotal || 0);
+        }
+        return sum + Math.max(0, (s.grandTotal || 0) - (s.dueAmount || 0));
+      }, 0)
+    );
+    const monthDueSales = Math.round(
+      monthSalesList.reduce((sum, s) => sum + (Number(s.dueAmount) || 0), 0)
+    );
     const monthProfit = Math.round(
       monthSalesList.reduce((sum, s) => sum + computeSaleProfit(s), 0)
     );
@@ -158,6 +174,24 @@ export const AllReportsView: React.FC<Props> = ({
         .filter((e) => matchesMonth(e.date, selectedMonth))
         .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
     );
+    const monthNetProfit = monthProfit - monthExpense;
+
+    const [selYear, selMon] = selectedMonth.split('-').map(Number);
+    const prevDate = new Date(selYear || new Date().getFullYear(), (selMon || 1) - 2, 1);
+    const prevYearMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+    const prevMonthSalesList = sales.filter((s) => matchesMonth(s.date, prevYearMonth));
+    const prevMonthSales = Math.round(
+      prevMonthSalesList.reduce((sum, s) => sum + (Number(s.grandTotal) || 0), 0)
+    );
+    const prevMonthProfit = Math.round(
+      prevMonthSalesList.reduce((sum, s) => sum + computeSaleProfit(s), 0)
+    );
+    const prevMonthExpense = Math.round(
+      expenses
+        .filter((e) => matchesMonth(e.date, prevYearMonth))
+        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+    );
+    const prevMonthNetProfit = prevMonthProfit - prevMonthExpense;
 
     return {
       todaySales,
@@ -165,9 +199,13 @@ export const AllReportsView: React.FC<Props> = ({
       todayExpense,
       todayNetProfit: todayProfit - todayExpense,
       monthSales,
+      monthCashSales,
+      monthDueSales,
       monthProfit,
       monthExpense,
-      monthNetProfit: monthProfit - monthExpense,
+      monthNetProfit,
+      salesDiffVsPrevMonth: monthSales - prevMonthSales,
+      netProfitDiffVsPrevMonth: monthNetProfit - prevMonthNetProfit,
     };
   }, [sales, expenses, todayStr, selectedMonth, defaultMargin]);
 
@@ -530,13 +568,13 @@ export const AllReportsView: React.FC<Props> = ({
               দৈনিক ও মাসিক বিক্রি ও লাভ রিপোর্ট
             </h3>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Calendar className="w-3.5 h-3.5 text-[#0E6B6B]" />
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Calendar className="w-4 h-4 text-[#0E6B6B] shrink-0" />
             <input
               type="month"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="px-2 py-1 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-bold text-[#102A43] focus:outline-none"
+              className="min-w-[182px] sm:min-w-[195px] w-auto px-2.5 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs sm:text-sm font-bold text-[#102A43] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]"
             />
           </div>
         </div>
@@ -559,8 +597,54 @@ export const AllReportsView: React.FC<Props> = ({
             <p className="text-lg font-black text-[#0E6B6B] tabular-nums mt-0.5">
               ৳ {reportStats.monthSales.toLocaleString()}
             </p>
-            <span className="text-[11px] font-bold text-[#2E7D32] block mt-1 tabular-nums">
-              মাসিক নিট লাভ: ৳ {reportStats.monthNetProfit.toLocaleString()}
+            <div className="flex items-center gap-1.5 flex-wrap mt-1">
+              <span className="text-[11px] font-bold text-[#2E7D32] tabular-nums">
+                মাসিক নিট লাভ: ৳ {reportStats.monthNetProfit.toLocaleString()}
+              </span>
+              <span
+                className={`text-[11px] font-extrabold tabular-nums ${
+                  reportStats.netProfitDiffVsPrevMonth > 0
+                    ? 'text-[#2E7D32]'
+                    : reportStats.netProfitDiffVsPrevMonth < 0
+                    ? 'text-[#D32F2F]'
+                    : 'text-[#64748B]'
+                }`}
+              >
+                {reportStats.netProfitDiffVsPrevMonth > 0
+                  ? `গত মাসের চেয়ে +৳${reportStats.netProfitDiffVsPrevMonth.toLocaleString()} বেশি ↗`
+                  : reportStats.netProfitDiffVsPrevMonth < 0
+                  ? `গত মাসের চেয়ে -৳${Math.abs(reportStats.netProfitDiffVsPrevMonth).toLocaleString()} কম ↘`
+                  : 'গত মাসের সমান'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Cash Sales vs Due Sales for selected period */}
+        <div className="grid grid-cols-2 gap-2.5">
+          <div className="p-3 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0]">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#2E7D32]">
+              <Banknote className="w-3.5 h-3.5 shrink-0" />
+              <span>নগদ বিক্রি</span>
+            </div>
+            <p className="text-base sm:text-lg font-black text-[#102A43] tabular-nums mt-0.5">
+              ৳ {reportStats.monthCashSales.toLocaleString()}
+            </p>
+            <span className="text-[10px] font-semibold text-[#64748B] block mt-0.5">
+              নির্বাচিত মাস ({selectedMonth})
+            </span>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-[#FFFBEB] border border-amber-200">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-800">
+              <BookOpen className="w-3.5 h-3.5 shrink-0" />
+              <span>বাকি বিক্রি</span>
+            </div>
+            <p className="text-base sm:text-lg font-black text-amber-900 tabular-nums mt-0.5">
+              ৳ {reportStats.monthDueSales.toLocaleString()}
+            </p>
+            <span className="text-[10px] font-semibold text-[#64748B] block mt-0.5">
+              নির্বাচিত মাস ({selectedMonth})
             </span>
           </div>
         </div>
@@ -662,52 +746,79 @@ export const AllReportsView: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* 4. Day-Close History */}
+      {/* 4. বিগত দিনের ক্যাশ ক্লোজিং ইতিহাস (Collapsible, closed by default) */}
       <div className="bg-white rounded-[22px] p-4 border border-[#E2E8F0] shadow-2xs space-y-3">
-        <div className="flex items-center gap-2 border-b border-[#E2E8F0] pb-2.5">
-          <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#2E7D32] flex items-center justify-center">
-            <History className="w-4 h-4 stroke-[2.4]" />
+        <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-[#E2E8F0]">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#2E7D32] flex items-center justify-center shrink-0">
+              <History className="w-4 h-4 stroke-[2.4]" />
+            </div>
+            <h3 className="text-sm sm:text-base font-black text-[#102A43]">
+              বিগত দিনের ক্যাশ ক্লোজিং ইতিহাস
+            </h3>
           </div>
-          <h3 className="text-sm sm:text-base font-black text-[#102A43]">
-            দিনশেষ ও ক্লোজিং হিস্ট্রি (Day-Close History)
-          </h3>
+          <span className="text-xs font-bold text-[#64748B] tabular-nums">
+            {dayCloseHistory.length} দিন
+          </span>
         </div>
 
-        {dayCloseHistory.length === 0 ? (
-          <p className="text-xs text-[#64748B] text-center py-6">
-            এখনো কোনো পূর্ববর্তী দিনের ক্লোজিং হিস্ট্রি তৈরি হয়নি।
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {dayCloseHistory.map((row) => (
-              <div
-                key={row.date}
-                className="p-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-between gap-2 text-xs"
-              >
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-extrabold text-[#102A43]">
-                      {formatDateDDMMYYYY(row.date)}
-                    </span>
-                    {row.isManualClosed && (
-                      <span className="px-1.5 py-0.5 rounded bg-[#E0F2F1] text-[#0E6B6B] text-[10px] font-bold">
-                        ক্লোজড
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-[#64748B] mt-0.5 tabular-nums">
-                    জমা: +৳{row.totalCashIn.toLocaleString()} • খরচ: -৳{row.totalCashOut.toLocaleString()}
-                  </p>
-                </div>
+        <button
+          type="button"
+          onClick={() => setShowDayCloseHistory((prev) => !prev)}
+          aria-expanded={showDayCloseHistory}
+          className="w-full py-2.5 px-4 rounded-xl bg-[#F8FAFC] hover:bg-[#E0F2F1]/60 border border-[#CBD5E1] hover:border-[#80CBC4] text-[#0E6B6B] text-xs sm:text-sm font-extrabold flex items-center justify-between gap-2 transition active:scale-[0.99] cursor-pointer"
+        >
+          <span>
+            {showDayCloseHistory
+              ? 'বিগত দিনের ক্যাশ ক্লোজিং ইতিহাস লুকান'
+              : `বিগত দিনের ক্যাশ ক্লোজিং ইতিহাস দেখুন (${dayCloseHistory.length}টি)`}
+          </span>
+          {showDayCloseHistory ? (
+            <ChevronUp className="w-4 h-4 shrink-0" />
+          ) : (
+            <ChevronDown className="w-4 h-4 shrink-0" />
+          )}
+        </button>
 
-                <div className="text-right shrink-0">
-                  <span className="text-[10px] font-bold text-[#64748B] block">দিনশেষ ক্যাশ</span>
-                  <span className="text-sm font-black text-[#0E6B6B] tabular-nums">
-                    ৳ {row.closingCash.toLocaleString()}
-                  </span>
-                </div>
+        {showDayCloseHistory && (
+          <div className="pt-1">
+            {dayCloseHistory.length === 0 ? (
+              <p className="text-xs text-[#64748B] text-center py-6">
+                এখনো কোনো পূর্ববর্তী দিনের ক্লোজিং হিস্ট্রি তৈরি হয়নি।
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {dayCloseHistory.map((row) => (
+                  <div
+                    key={row.date}
+                    className="p-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-between gap-2 text-xs"
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-extrabold text-[#102A43]">
+                          {formatDateDDMMYYYY(row.date)}
+                        </span>
+                        {row.isManualClosed && (
+                          <span className="px-1.5 py-0.5 rounded bg-[#E0F2F1] text-[#0E6B6B] text-[10px] font-bold">
+                            ক্লোজড
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-[#64748B] mt-0.5 tabular-nums">
+                        জমা: +৳{row.totalCashIn.toLocaleString()} • খরচ: -৳{row.totalCashOut.toLocaleString()}
+                      </p>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="text-[10px] font-bold text-[#64748B] block">দিনশেষ ক্যাশ</span>
+                      <span className="text-sm font-black text-[#0E6B6B] tabular-nums">
+                        ৳ {row.closingCash.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>

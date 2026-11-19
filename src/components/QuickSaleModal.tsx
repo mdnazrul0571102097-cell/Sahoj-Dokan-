@@ -14,6 +14,7 @@ import {
 import { playSuccessChime } from '../utils/audio';
 import { DB } from '../storage/db';
 import { CalculatorInput } from './CalculatorKeypad';
+import { showToast } from './Toast';
 import {
   Zap,
   X,
@@ -267,12 +268,12 @@ export const QuickSaleModal: React.FC<Props> = ({
 
   const handleSubmitSale = (openReceipt: boolean = false) => {
     if (numericAmount <= 0) {
-      alert('অনুগ্রহ করে বিক্রির টাকার পরিমাণ লিখুন!');
+      showToast('অনুগ্রহ করে বিক্রির টাকার পরিমাণ লিখুন!', 'warning');
       return;
     }
 
     if (paymentMode === 'due' && !selectedCustomerId) {
-      alert('বাকি বিক্রির জন্য একজন কাস্টমার নির্বাচন করুন অথবা "+ নতুন গ্রাহক" যোগ করুন!');
+      showToast('বাকি বিক্রির জন্য একজন কাস্টমার নির্বাচন করুন অথবা "+ নতুন গ্রাহক" যোগ করুন!', 'warning');
       return;
     }
 
@@ -336,7 +337,7 @@ export const QuickSaleModal: React.FC<Props> = ({
 
   const handleSubmitReturn = () => {
     if (returnNumericAmount <= 0) {
-      alert('অনুগ্রহ করে ফেরত পণ্যের টাকার পরিমাণ লিখুন!');
+      showToast('অনুগ্রহ করে ফেরত পণ্যের টাকার পরিমাণ লিখুন!', 'warning');
       return;
     }
 
