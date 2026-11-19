@@ -878,6 +878,9 @@ export const ReportsView: React.FC<Props> = ({
             customers={customers}
             bakiTransactions={bakiTransactions}
             supplierTransactions={supplierTransactions}
+            otherCashEntries={otherCashEntries}
+            dailyReconciliations={dailyReconciliations}
+            initialOpeningCash={initialOpeningCash}
           />
           <CashReconciliationManager
             sales={sales}

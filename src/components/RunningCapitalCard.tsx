@@ -8,6 +8,8 @@ import {
   Customer,
   BakiTransaction,
   SupplierTransaction,
+  OtherCashEntry,
+  DailyCashReconciliation,
 } from '../types';
 import { DB } from '../storage/db';
 import { playSuccessChime } from '../utils/audio';
@@ -30,6 +32,9 @@ interface Props {
   customers?: Customer[];
   bakiTransactions?: BakiTransaction[];
   supplierTransactions?: SupplierTransaction[];
+  otherCashEntries?: OtherCashEntry[];
+  dailyReconciliations?: DailyCashReconciliation[];
+  initialOpeningCash?: number;
   compact?: boolean;
   onOpenOwnerCapital?: () => void;
 }
@@ -67,6 +72,9 @@ export function calculateRunningCapital({
   customers = [],
   bakiTransactions = [],
   supplierTransactions = [],
+  otherCashEntries,
+  dailyReconciliations,
+  initialOpeningCash,
 }: {
   initialStoreCapital: number;
   sales: Sale[];
@@ -77,6 +85,9 @@ export function calculateRunningCapital({
   customers?: Customer[];
   bakiTransactions?: BakiTransaction[];
   supplierTransactions?: SupplierTransaction[];
+  otherCashEntries?: OtherCashEntry[];
+  dailyReconciliations?: DailyCashReconciliation[];
+  initialOpeningCash?: number;
 }) {
   const defaultMargin = DB.getQuickSaleProfitMargin();
   const todayStr = getLocalDateStr(new Date());
@@ -275,19 +286,182 @@ export function calculateRunningCapital({
     Math.round(initialCapital - totalCostOfGoodsSold + totalPurchases)
   );
 
-  // - ক্যাশ বাক্সে নগদ টাকা (Cash in Hand) = নগদ বিক্রি আদায় + কাস্টমার বকেয়া আদায় + মালিকের জমা - দোকান খরচ - নগদ মাল কেনা - সাপ্লায়ারকে পরিশোধকৃত টাকা - মালিকের ম্যানুয়াল উত্তোলন
-  const drawerCash = Math.max(
-    0,
-    Math.round(
-      totalCashSalesCollected +
-        customerDueCollected +
-        totalOwnerAdded -
-        totalExpenses -
-        cashPurchasesPaid -
-        totalSupplierPaid -
-        totalWithdrawals
-    )
+  // - ক্যাশ বাক্সে নগদ টাকা (Live Daily Carry-Forward Cash Box Balance — মেনু পেজ ও দৈনিক ক্যাশ বক্সের সাথে ১০০% অভিন্ন)
+  const actualOtherCashEntries =
+    otherCashEntries !== undefined ? otherCashEntries : DB.getOtherCashEntries();
+  const actualDailyRecons =
+    dailyReconciliations !== undefined ? dailyReconciliations : DB.getDailyReconciliations();
+  const actualInitialOpeningCash =
+    initialOpeningCash !== undefined ? initialOpeningCash : DB.getInitialOpeningCash();
+
+  const matchesDate = (rawDate: string | undefined, targetDate: string): boolean => {
+    if (!rawDate) return false;
+    return getLocalDateStr(rawDate) === targetDate || rawDate.slice(0, 10) === targetDate;
+  };
+
+  const computeDayFlows = (dateStr: string) => {
+    const dayCashSales = Math.round(
+      sales
+        .filter((s) => matchesDate(s.date, dateStr))
+        .reduce((sum, s) => {
+          if (s.id?.startsWith('return_') || (s.grandTotal || 0) < 0 || (s.paidAmount || 0) < 0) {
+            const refundCash =
+              s.paidAmount !== undefined && s.paidAmount !== 0
+                ? s.paidAmount
+                : (s.grandTotal || 0) !== 0
+                ? s.grandTotal
+                : s.profit || 0;
+            return sum + refundCash;
+          }
+          return sum + Math.max(0, (s.grandTotal || 0) - (s.dueAmount || 0));
+        }, 0)
+    );
+
+    const dayCustomerDueCollected = Math.round(
+      bakiTxs
+        .filter((tx) => tx.type === 'payment_received' && matchesDate(tx.date, dateStr))
+        .reduce((sum, tx) => sum + (tx.amount || 0), 0)
+    );
+
+    const dayOwnerNewCapital = Math.round(
+      ownerTransactions
+        .filter((tx) => tx.type === 'capital_deposit' && matchesDate(tx.date, dateStr))
+        .reduce((sum, tx) => sum + (tx.amount || 0), 0)
+    );
+
+    const dayOwnerWithdrawalReturn = Math.round(
+      ownerTransactions
+        .filter((tx) => tx.type === 'withdrawal_return' && matchesDate(tx.date, dateStr))
+        .reduce((sum, tx) => sum + (tx.amount || 0), 0)
+    );
+
+    const dayOtherCashIn = Math.round(
+      actualOtherCashEntries
+        .filter(
+          (e) => e.type === 'cash_in' && !e.isPostCloseAdjustment && matchesDate(e.date, dateStr)
+        )
+        .reduce((sum, e) => sum + (e.amount || 0), 0)
+    );
+
+    const rawBulkCashPaid = bulkPurchases
+      .filter((bp) => matchesDate(bp.date, dateStr))
+      .reduce(
+        (sum, bp) =>
+          sum +
+          Math.max(
+            0,
+            bp.paidAmount !== undefined
+              ? bp.paidAmount
+              : (bp.totalAmount || 0) - (bp.dueAmount || 0)
+          ),
+        0
+      );
+
+    let dayReturnedCash = 0;
+    bulkPurchases.forEach((bp) => {
+      if (bp.returns && bp.returns.length > 0) {
+        bp.returns.forEach((ret) => {
+          if (matchesDate(ret.date, dateStr)) {
+            dayReturnedCash += Number(ret.amount) || 0;
+          }
+        });
+      } else if (matchesDate(bp.date, dateStr) && bp.returnedAmount) {
+        dayReturnedCash += Number(bp.returnedAmount) || 0;
+      }
+    });
+
+    const directPurchasePaid = purchases
+      .filter((p) => matchesDate(p.date, dateStr))
+      .reduce((sum, p) => sum + (p.totalCost || 0), 0);
+
+    const dayCashPurchases = Math.round(rawBulkCashPaid + directPurchasePaid);
+
+    const dayShopExpenses = Math.round(
+      expenses
+        .filter((exp) => matchesDate(exp.date, dateStr))
+        .reduce((sum, exp) => sum + (exp.amount || 0), 0)
+    );
+
+    const daySupplierDuePaid = Math.round(
+      actualSupplierTxs
+        .filter(
+          (stx) =>
+            (stx.type === 'payment_made' || stx.type === 'payment_given') &&
+            matchesDate(stx.date, dateStr)
+        )
+        .reduce((sum, stx) => sum + (stx.amount || 0), 0)
+    );
+
+    const dayOwnerWithdrawal = Math.round(
+      ownerTransactions
+        .filter((tx) => tx.type === 'withdrawal' && matchesDate(tx.date, dateStr))
+        .reduce((sum, tx) => sum + (tx.amount || 0), 0)
+    );
+
+    const dayOtherCashOut = Math.round(
+      actualOtherCashEntries
+        .filter(
+          (e) => e.type === 'cash_out' && !e.isPostCloseAdjustment && matchesDate(e.date, dateStr)
+        )
+        .reduce((sum, e) => sum + (e.amount || 0), 0)
+    );
+
+    const totalCashIn =
+      dayCashSales +
+      dayCustomerDueCollected +
+      dayReturnedCash +
+      dayOwnerNewCapital +
+      dayOwnerWithdrawalReturn +
+      dayOtherCashIn;
+    const totalCashOut =
+      dayCashPurchases + dayShopExpenses + daySupplierDuePaid + dayOwnerWithdrawal + dayOtherCashOut;
+
+    return { totalCashIn, totalCashOut };
+  };
+
+  const dateSet = new Set<string>();
+  const addDate = (raw?: string) => {
+    const d = getLocalDateStr(raw);
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) dateSet.add(d);
+  };
+  sales.forEach((s) => addDate(s.date));
+  bakiTxs.forEach((tx) => addDate(tx.date));
+  ownerTransactions.forEach((tx) => addDate(tx.date));
+  bulkPurchases.forEach((bp) => {
+    addDate(bp.date);
+    if (bp.returns) bp.returns.forEach((r) => addDate(r.date));
+  });
+  purchases.forEach((p) => addDate(p.date));
+  actualSupplierTxs.forEach((stx) => addDate(stx.date));
+  expenses.forEach((exp) => addDate(exp.date));
+  actualOtherCashEntries.forEach((oce) => addDate(oce.date));
+  dateSet.add(todayStr);
+
+  const allDates = Array.from(dateSet).sort((a, b) => a.localeCompare(b));
+  let runningCashBalance = Math.max(0, Math.round(actualInitialOpeningCash || 0));
+  for (const d of allDates) {
+    if (d >= todayStr) break;
+    const flow = computeDayFlows(d);
+    runningCashBalance = Math.max(0, runningCashBalance + flow.totalCashIn - flow.totalCashOut);
+  }
+
+  const savedTodayRecon = actualDailyRecons.find((r) => r.date === todayStr);
+  if (
+    savedTodayRecon &&
+    typeof savedTodayRecon.openingCash === 'number' &&
+    savedTodayRecon.openingCash > 0 &&
+    runningCashBalance === 0
+  ) {
+    runningCashBalance = Math.max(0, Math.round(savedTodayRecon.openingCash));
+  }
+
+  const todayCashFlow = computeDayFlows(todayStr);
+  const rawTodayCashClosing = Math.round(
+    runningCashBalance + todayCashFlow.totalCashIn - todayCashFlow.totalCashOut
   );
+  const isTodayDeficit = rawTodayCashClosing < 0;
+  const todayDeficitAmount = isTodayDeficit ? Math.abs(rawTodayCashClosing) : 0;
+  const drawerCash = Math.max(0, rawTodayCashClosing);
 
   // - আজকের লাভ / নিট লাভ (Today's Profit)
   const todayNetProfit = Math.round(todaySalesProfit - todayExpenses);
@@ -304,6 +478,8 @@ export function calculateRunningCapital({
     displayInitialCapital,
     remainingGoodsCapital,
     drawerCash,
+    isTodayDeficit,
+    todayDeficitAmount,
     customerDue,
     todaySalesProfit,
     todayNetProfit,
@@ -333,6 +509,9 @@ export const RunningCapitalCard: React.FC<Props> = ({
   customers = [],
   bakiTransactions = [],
   supplierTransactions = [],
+  otherCashEntries,
+  dailyReconciliations,
+  initialOpeningCash,
 }) => {
   const [isEditingCapital, setIsEditingCapital] = useState(false);
   const [capitalInput, setCapitalInput] = useState<string>(
@@ -352,6 +531,9 @@ export const RunningCapitalCard: React.FC<Props> = ({
         customers,
         bakiTransactions,
         supplierTransactions,
+        otherCashEntries,
+        dailyReconciliations,
+        initialOpeningCash,
       }),
     [
       initialStoreCapital,
@@ -363,6 +545,9 @@ export const RunningCapitalCard: React.FC<Props> = ({
       customers,
       bakiTransactions,
       supplierTransactions,
+      otherCashEntries,
+      dailyReconciliations,
+      initialOpeningCash,
     ]
   );
 
@@ -430,13 +615,32 @@ export const RunningCapitalCard: React.FC<Props> = ({
           </span>
         </div>
 
-        <div className="rounded-xl bg-white/10 border border-white/15 px-2.5 py-1.5">
-          <span className="block text-[10px] font-bold text-emerald-100/90 leading-tight">
+        <div
+          className={`rounded-xl border px-2.5 py-1.5 ${
+            stats.isTodayDeficit
+              ? 'bg-[#FFEBEE] border-rose-300'
+              : 'bg-white/10 border-white/15'
+          }`}
+        >
+          <span
+            className={`block text-[10px] font-bold leading-tight ${
+              stats.isTodayDeficit ? 'text-[#B71C1C]' : 'text-emerald-100/90'
+            }`}
+          >
             ক্যাশ বাক্সে নগদ
           </span>
-          <span className="text-sm sm:text-base font-black text-amber-300 tabular-nums">
+          <span
+            className={`text-sm sm:text-base font-black tabular-nums ${
+              stats.isTodayDeficit ? 'text-[#D32F2F]' : 'text-amber-300'
+            }`}
+          >
             ৳{formatBnNumber(stats.drawerCash)}
           </span>
+          {stats.isTodayDeficit && (
+            <span className="block text-[9px] font-extrabold text-[#D32F2F] leading-tight mt-0.5 tabular-nums">
+              বেশি খরচ: ৳{formatBnNumber(stats.todayDeficitAmount)}
+            </span>
+          )}
         </div>
 
         <div

@@ -552,13 +552,37 @@ export const CashReconciliationManager: React.FC<Props> = ({
 
       {/* Top 5 Live Overview Cards with Simple Shopkeeper Bengali Labels */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-        <div className="bg-white rounded-2xl p-3 border-2 border-[#0E6B6B] shadow-2xs">
-          <span className="text-[11px] font-extrabold text-[#0E6B6B] flex items-center gap-1">
-            <Wallet className="w-3.5 h-3.5 text-[#0E6B6B]" /> ক্যাশ বাক্সে থাকার কথা
+        <div
+          className={`rounded-2xl p-3 border-2 shadow-2xs ${
+            activeDayData.isDeficitWarning
+              ? 'bg-[#FFEBEE] border-[#D32F2F]'
+              : 'bg-white border-[#0E6B6B]'
+          }`}
+        >
+          <span
+            className={`text-[11px] font-extrabold flex items-center gap-1 ${
+              activeDayData.isDeficitWarning ? 'text-[#D32F2F]' : 'text-[#0E6B6B]'
+            }`}
+          >
+            <Wallet
+              className={`w-3.5 h-3.5 ${
+                activeDayData.isDeficitWarning ? 'text-[#D32F2F]' : 'text-[#0E6B6B]'
+              }`}
+            />{' '}
+            ক্যাশ বাক্সে থাকার কথা
           </span>
-          <p className="text-base sm:text-lg font-black text-[#0E6B6B] mt-0.5">
+          <p
+            className={`text-base sm:text-lg font-black mt-0.5 ${
+              activeDayData.isDeficitWarning ? 'text-[#D32F2F]' : 'text-[#0E6B6B]'
+            }`}
+          >
             ৳ {activeDayData.displayClosingCash.toLocaleString()}
           </p>
+          {activeDayData.isDeficitWarning && (
+            <p className="text-[10px] font-extrabold text-[#B71C1C] mt-0.5 leading-tight">
+              বেশি খরচ: ৳ {activeDayData.deficitAmount.toLocaleString()}
+            </p>
+          )}
         </div>
         <div className="bg-white rounded-2xl p-3 border border-[#E2E8F0] shadow-2xs">
           <span className="text-[11px] font-bold text-[#64748B] flex items-center gap-1">
@@ -595,6 +619,35 @@ export const CashReconciliationManager: React.FC<Props> = ({
         </div>
       </div>
 
+      {/* Prominent Red Warning Banner when Expenses/Withdrawals > Available Cash on Selected Date */}
+      {activeDayData.isDeficitWarning && (
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-[#FFEBEE] border-2 border-[#D32F2F] flex items-start gap-3 text-[#B71C1C] shadow-xs">
+          <AlertTriangle className="w-6 h-6 text-[#D32F2F] shrink-0 mt-0.5" />
+          <div className="space-y-1 min-w-0">
+            <h5 className="text-xs sm:text-sm font-black text-[#D32F2F] leading-snug">
+              সতর্কবার্তা: {selectedDate === todayStr ? 'আজ' : `${formatDateDDMMYYYY(selectedDate)} তারিখে`} ক্যাশের চেয়ে ৳{' '}
+              {activeDayData.deficitAmount.toLocaleString()} বেশি খরচ হয়েছে!
+            </h5>
+            <p className="text-[11px] sm:text-xs font-semibold text-[#102A43] leading-relaxed">
+              ক্যাশে মোট ছিল{' '}
+              <strong>
+                ৳ {(activeDayData.openingCash + activeDayData.totalCashIn).toLocaleString()}
+              </strong>{' '}
+              (সকালের ক্যাশ + জমা), কিন্তু খরচ/মাল ক্রয়/উত্তোলন হয়েছে{' '}
+              <strong className="text-[#D32F2F]">
+                ৳ {activeDayData.totalCashOut.toLocaleString()}
+              </strong>
+              । ক্যাশ বাক্স মাইনাস হয় না বলে <strong>৳ ০</strong> দেখানো হচ্ছে। বাড়তি{' '}
+              <strong className="text-[#D32F2F]">
+                ৳ {activeDayData.deficitAmount.toLocaleString()}
+              </strong>{' '}
+              নিজের পকেট থেকে দিয়ে থাকলে &quot;মালিক খরচ/জমা&quot; থেকে{' '}
+              <strong>&quot;নতুন পুঁজি জমা&quot;</strong> হিসেবে লিখে রাখুন।
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ================= FULLY AUTOMATED DAILY CASH RECONCILIATION ================= */}
       <div className="bg-white rounded-[24px] p-4 sm:p-5 border border-[#E2E8F0] shadow-xs space-y-4">
         {/* Header */}
@@ -608,24 +661,6 @@ export const CashReconciliationManager: React.FC<Props> = ({
             </span>
           </div>
         </div>
-
-            {/* Non-Negative Safety Warning Banner if Expenses > Cash Available */}
-            {activeDayData.isDeficitWarning && (
-              <div className="p-4 rounded-2xl bg-[#FFEBEE] border-2 border-[#D32F2F] flex items-start gap-3 text-[#D32F2F] shadow-2xs">
-                <AlertTriangle className="w-6 h-6 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <h5 className="text-xs sm:text-sm font-black">
-                    সতর্কবার্তা: আজকের মোট খরচ ও পরিশোধের পরিমাণ জমার চেয়ে ৳{' '}
-                    {activeDayData.deficitAmount.toLocaleString()} বেশি হয়েছে!
-                  </h5>
-                  <p className="text-xs font-semibold text-[#102A43]">
-                    ক্যাশ বাক্সের ব্যালেন্স কখনোই মাইনাস (নেগেটিভ) হতে পারে না, তাই ক্যাশ বাক্সে থাকার কথা{' '}
-                    <strong>৳ ০</strong> দেখানো হচ্ছে। আপনি যদি নিজের পকেট থেকে এই বাড়তি টাকা দিয়ে থাকেন, তবে নিচে{' '}
-                    <strong>&quot;মালিকের নতুন পুঁজি জমা&quot;</strong> হিসেবে লিখে রাখুন।
-                  </p>
-                </div>
-              </div>
-            )}
 
             {/* Step 1: সকালের ক্যাশ (Opening Balance) */}
             <div className="p-3.5 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-2">
@@ -859,7 +894,11 @@ export const CashReconciliationManager: React.FC<Props> = ({
                       {automatedDailyHistory.map((row) => (
                         <div
                           key={row.date}
-                          className="rounded-2xl p-3 sm:p-3.5 border-2 border-[#80CBC4] bg-[#F0FDF4] space-y-1 shadow-2xs"
+                          className={`rounded-2xl p-3 sm:p-3.5 border-2 space-y-1 shadow-2xs ${
+                            row.isDeficit
+                              ? 'border-[#EF9A9A] bg-[#FFEBEE]/70'
+                              : 'border-[#80CBC4] bg-[#F0FDF4]'
+                          }`}
                         >
                           <div className="flex items-center justify-between flex-wrap gap-2">
                             <div className="flex items-center gap-2 flex-wrap">
@@ -887,6 +926,14 @@ export const CashReconciliationManager: React.FC<Props> = ({
                           <div className="text-xs sm:text-sm font-black text-[#0E6B6B]">
                             ক্যাশ বাক্সে থাকার কথা: ৳{row.closingCash.toLocaleString()}
                           </div>
+                          {row.isDeficit && (
+                            <div className="mt-1 px-2.5 py-1.5 rounded-xl bg-[#FFEBEE] border border-[#D32F2F]/40 text-[11px] font-extrabold text-[#D32F2F] flex items-center gap-1.5">
+                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                              <span>
+                                ওইদিন ক্যাশের চেয়ে ৳{row.deficitAmount.toLocaleString()} বেশি খরচ হয়েছে
+                              </span>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
