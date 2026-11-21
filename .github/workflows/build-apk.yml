@@ -61,3 +61,20 @@ jobs:
           name: SahojDokan.apk
           path: SahojDokan.apk
           compression-level: 0
+
+      - name: Build Signed Android App Bundle (.aab)
+        run: |
+          cd android
+          ./gradlew bundleRelease --stacktrace --no-daemon
+
+          RAW_AAB=$(find app/build/outputs/bundle/release -name "*.aab" | head -n 1)
+          cp "$RAW_AAB" ../SahojDokan.aab
+          jarsigner -verify -certs ../SahojDokan.aab || true
+
+      - name: Upload Signed SahojDokan.aab Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SahojDokan.aab
+          path: SahojDokan.aab
+          compression-level: 0
+          if-no-files-found: error
