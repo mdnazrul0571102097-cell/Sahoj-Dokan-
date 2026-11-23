@@ -615,17 +615,22 @@ export const QuickSaleModal: React.FC<Props> = ({
                 </div>
               </div>
 
-              {/* ৪. বিবরণ ফিল্ড (নিচের ট্যাগ চিপস ছাড়া স্লিম ইনপুট) */}
+              {/* ৪. বিবরণ ফিল্ড (মাল্টি-লাইন অটো-এক্সপ্যান্ডিং টেক্সটএরিয়া) */}
               <div className="space-y-1">
                 <label className="block text-[11px] font-extrabold text-[#102A43] leading-none">
                   ২. কী বিক্রি করলেন / বিবরণ (ঐচ্ছিক)
                 </label>
-                <input
-                  type="text"
+                <textarea
+                  rows={2}
+                  enterKeyHint="enter"
                   value={noteInput}
-                  onChange={(e) => setNoteInput(e.target.value)}
-                  placeholder="যেমন: খুচরা বিক্রি, মুদি মাল, চা-বিস্কুট..."
-                  className="w-full px-3 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-semibold text-[#102A43] focus:outline-none focus:border-[#0E6B6B] focus:bg-white"
+                  onChange={(e) => {
+                    setNoteInput(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 96)}px`;
+                  }}
+                  placeholder="যেমন: চাল ১ কেজি, তেল ১ লিটার (নিচের লাইনে যেতে ↵ চাপুন)..."
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-semibold text-[#102A43] leading-relaxed resize-none overflow-y-auto max-h-24 focus:outline-none focus:border-[#0E6B6B] focus:bg-white"
                 />
               </div>
 
@@ -1010,12 +1015,17 @@ export const QuickSaleModal: React.FC<Props> = ({
                   </div>
                 )}
 
-                <input
-                  type="text"
+                <textarea
+                  rows={2}
+                  enterKeyHint="enter"
                   value={returnNoteInput}
-                  onChange={(e) => setReturnNoteInput(e.target.value)}
+                  onChange={(e) => {
+                    setReturnNoteInput(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 96)}px`;
+                  }}
                   placeholder="ফেরতের কারণ বা পণ্যের নাম (ঐচ্ছিক)..."
-                  className="w-full px-3 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-semibold text-[#102A43] focus:outline-none focus:border-[#D32F2F] focus:bg-white"
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs font-semibold text-[#102A43] leading-relaxed resize-none overflow-y-auto max-h-24 focus:outline-none focus:border-[#D32F2F] focus:bg-white"
                 />
               </div>
             </>

@@ -20,6 +20,7 @@ import {
   Building,
   Calendar,
   Search,
+  Home,
 } from 'lucide-react';
 
 interface Props {
@@ -36,6 +37,7 @@ const EXPENSE_CATEGORIES: {
   name: string;
   icon: any;
 }[] = [
+  { id: 'family', name: 'সংসার খরচ', icon: Home },
   { id: 'transport', name: 'পরিবহন ও ভাড়া', icon: Truck },
   { id: 'food', name: 'আপ্যায়ন ও চা-নাস্তা', icon: Coffee },
   { id: 'packaging', name: 'পলিথিন ও প্যাকিং ব্যাগ', icon: Package },
@@ -44,6 +46,21 @@ const EXPENSE_CATEGORIES: {
   { id: 'salary', name: 'কর্মচারীর বেতন', icon: DollarSign },
   { id: 'maintenance', name: 'মেরামত ও রক্ষণাবেক্ষণ', icon: Wrench },
   { id: 'other', name: 'অন্যান্য বিবিধ খরচ', icon: HelpCircle },
+];
+
+const CATEGORY_FILTER_PILLS: {
+  id: 'all' | ExpenseCategory;
+  label: string;
+}[] = [
+  { id: 'all', label: 'সব' },
+  { id: 'family', label: '🏠 সংসার খরচ' },
+  { id: 'salary', label: '💵 কর্মচারীর বেতন' },
+  { id: 'rent', label: '🏢 দোকান ভাড়া' },
+  { id: 'transport', label: '🚚 পরিবহন ও ভাড়া' },
+  { id: 'electricity', label: '⚡ বিদ্যুৎ ও পানির বিল' },
+  { id: 'food', label: '☕ আপ্যায়ন ও চা-নাস্তা' },
+  { id: 'packaging', label: '📦 পলিথিন ও প্যাকিং ব্যাগ' },
+  { id: 'other', label: '⚙️ অন্যান্য' },
 ];
 
 export const ExpenseManager: React.FC<Props> = ({
@@ -84,6 +101,7 @@ export const ExpenseManager: React.FC<Props> = ({
   // Date filters: 'today', 'yesterday', 'all', 'custom'
   const [filterMode, setFilterMode] = useState<'today' | 'yesterday' | 'all' | 'custom'>('today');
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+  const [categoryFilter, setCategoryFilter] = useState<'all' | ExpenseCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Modals
@@ -124,6 +142,19 @@ export const ExpenseManager: React.FC<Props> = ({
       });
     }
 
+    // Category pill filtering
+    if (categoryFilter !== 'all') {
+      list = list.filter((exp) => {
+        if (categoryFilter === 'other') {
+          return exp.category === 'other' || exp.category === 'maintenance';
+        }
+        if (categoryFilter === 'family') {
+          return exp.category === 'family' || exp.categoryName === 'সংসার খরচ';
+        }
+        return exp.category === categoryFilter;
+      });
+    }
+
     // Search query matching category, note, amount, and date string
     const q = searchQuery.trim().toLowerCase();
     if (q) {
@@ -139,7 +170,7 @@ export const ExpenseManager: React.FC<Props> = ({
     }
 
     return list.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [expenses, filterMode, effectiveFilterDate, searchQuery]);
+  }, [expenses, filterMode, effectiveFilterDate, categoryFilter, searchQuery]);
 
   // Statistics
   const todayTotal = useMemo(() => {
@@ -258,24 +289,24 @@ export const ExpenseManager: React.FC<Props> = ({
   return (
     <div className="flex-1 flex flex-col">
       {/* Main Summary Card for দোকান খরচ */}
-      <div className="bg-white rounded-[24px] p-4 shadow-sm border border-[#E2E8F0] mb-3 shrink-0">
-        <div className="grid grid-cols-2 divide-x divide-[#E2E8F0] mb-3.5">
+      <div className="bg-white rounded-[20px] px-3.5 py-2.5 shadow-sm border border-[#E2E8F0] mb-2 shrink-0">
+        <div className="grid grid-cols-2 divide-x divide-[#E2E8F0] mb-2">
           {/* Left: আজকের মোট দোকান খরচ */}
           <div className="text-center pr-2">
-            <p className="text-xs font-semibold text-[#64748B] mb-1">
+            <p className="text-[11px] font-semibold text-[#64748B] mb-0.5 leading-tight">
               আজকের মোট দোকান খরচ
             </p>
-            <p className="text-xl sm:text-2xl font-extrabold text-[#D32F2F] tracking-tight">
+            <p className="text-lg sm:text-xl font-extrabold text-[#D32F2F] tracking-tight leading-tight">
               ৳ {todayTotal.toLocaleString()}
             </p>
           </div>
 
           {/* Right: চলতি মাসের মোট দোকান খরচ */}
           <div className="text-center pl-2">
-            <p className="text-xs font-semibold text-[#64748B] mb-1">
+            <p className="text-[11px] font-semibold text-[#64748B] mb-0.5 leading-tight">
               চলতি মাসের মোট দোকান খরচ
             </p>
-            <p className="text-xl sm:text-2xl font-extrabold text-[#102A43] tracking-tight">
+            <p className="text-lg sm:text-xl font-extrabold text-[#102A43] tracking-tight leading-tight">
               ৳ {monthTotal.toLocaleString()}
             </p>
           </div>
@@ -284,7 +315,7 @@ export const ExpenseManager: React.FC<Props> = ({
         <button
           type="button"
           onClick={handleOpenAddModal}
-          className="w-full py-2.5 px-4 rounded-2xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
+          className="w-full py-2 px-4 rounded-xl bg-[#0E6B6B] hover:bg-[#0B5656] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
           <span>নতুন দোকান খরচ লিখুন</span>
@@ -292,17 +323,17 @@ export const ExpenseManager: React.FC<Props> = ({
       </div>
 
       {/* Filters and List Section */}
-      <div className="bg-white rounded-[24px] p-4 shadow-xs border border-[#E2E8F0] flex-1 flex flex-col min-h-[300px]">
-        {/* Date Filter Bar: আজ, গতকাল, সব খরচ এবং মেনুয়ালি তারিখ পিক করার ড্রপডাউন/ক্যালেন্ডার */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 mb-3 border-b border-[#E2E8F0]">
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-wrap">
+      <div className="bg-white rounded-[20px] p-3 shadow-xs border border-[#E2E8F0] flex-1 flex flex-col min-h-[300px]">
+        {/* Date Filter Bar: আজ, গতকাল, সব খরচ এবং তারিখ পিকার এক সিরিয়ালে */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pb-2 mb-2 border-b border-[#E2E8F0]">
+          <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <button
               type="button"
               onClick={() => {
                 setFilterMode('today');
                 setSelectedDate(todayStr);
               }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer border ${
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition cursor-pointer border ${
                 filterMode === 'today'
                   ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-2xs'
                   : 'bg-[#EDF2F7] text-[#64748B] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
@@ -316,7 +347,7 @@ export const ExpenseManager: React.FC<Props> = ({
                 setFilterMode('yesterday');
                 setSelectedDate(yesterdayStr);
               }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer border ${
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition cursor-pointer border ${
                 filterMode === 'yesterday'
                   ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-2xs'
                   : 'bg-[#EDF2F7] text-[#64748B] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
@@ -327,7 +358,7 @@ export const ExpenseManager: React.FC<Props> = ({
             <button
               type="button"
               onClick={() => setFilterMode('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer border ${
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition cursor-pointer border ${
                 filterMode === 'all'
                   ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-2xs'
                   : 'bg-[#EDF2F7] text-[#64748B] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
@@ -335,8 +366,8 @@ export const ExpenseManager: React.FC<Props> = ({
             >
               সব খরচ
             </button>
-            <div className="flex items-center gap-1 bg-[#EDF2F7] px-2 py-0.5 rounded-xl border border-[#E2E8F0]">
-              <Calendar className="w-3.5 h-3.5 text-[#0E6B6B]" />
+            <div className="flex items-center gap-1 bg-[#EDF2F7] px-2 py-0.5 rounded-xl border border-[#E2E8F0] shrink-0">
+              <Calendar className="w-3 h-3 text-[#0E6B6B] shrink-0" />
               <input
                 type="date"
                 value={selectedDate}
@@ -344,12 +375,12 @@ export const ExpenseManager: React.FC<Props> = ({
                   setFilterMode('custom');
                   setSelectedDate(e.target.value);
                 }}
-                className="bg-transparent text-[#102A43] text-xs font-bold focus:outline-none cursor-pointer"
+                className="bg-transparent text-[#102A43] text-[11px] font-bold focus:outline-none cursor-pointer w-[108px]"
               />
             </div>
           </div>
 
-          <div className="text-right text-xs font-bold text-[#64748B]">
+          <div className="text-right text-xs font-bold text-[#64748B] leading-tight">
             মোট খরচ:{' '}
             <span className="font-mono text-[#D32F2F] text-sm font-black">
               ৳{filteredTotal.toLocaleString()}
@@ -358,25 +389,48 @@ export const ExpenseManager: React.FC<Props> = ({
           </div>
         </div>
 
+        {/* Horizontal Scrollable Category Filter Pills (ডানে-বামে স্লাইডার) */}
+        <div className="flex flex-row flex-nowrap items-center gap-1.5 overflow-x-auto no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-0.5 mb-2 shrink-0">
+          {CATEGORY_FILTER_PILLS.map((pill) => {
+            const isActive = categoryFilter === pill.id;
+            return (
+              <button
+                key={pill.id}
+                type="button"
+                onClick={() => setCategoryFilter(pill.id)}
+                className={`px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap shrink-0 transition cursor-pointer border active:scale-95 ${
+                  isActive
+                    ? 'bg-[#0E6B6B] text-white border-[#0E6B6B] shadow-2xs'
+                    : 'bg-[#F1F5F9] text-[#475569] border-[#E2E8F0] hover:bg-[#E0F2F1] hover:text-[#0E6B6B]'
+                }`}
+              >
+                {pill.label}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Optional Search Input */}
-        <div className="relative mb-3 shrink-0">
-          <Search className="w-4 h-4 absolute left-3.5 top-3 text-[#9AA5B1]" />
+        <div className="relative mb-2 shrink-0">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#9AA5B1]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="খরচের খাত, বিবরণ বা তারিখ দিয়ে খুঁজুন..."
-            className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-1 focus:ring-[#0E6B6B]"
+            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-1 focus:ring-[#0E6B6B]"
           />
         </div>
 
         {/* Expenses List */}
-        <div className="space-y-2.5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-2.5">
+        <div className="space-y-2 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-2">
           {filteredExpenses.length === 0 ? (
             <div className="lg:col-span-2 py-12 flex flex-col items-center justify-center text-center p-6 text-[#64748B]">
               <Wallet className="w-12 h-12 text-[#9AA5B1] mb-2 stroke-1" />
               <p className="text-xs sm:text-sm font-bold text-[#102A43]">
-                এই তারিখে কোনো দোকান খরচের রেকর্ড নেই
+                {categoryFilter !== 'all'
+                  ? 'এই খাতে কোনো খরচের রেকর্ড নেই'
+                  : 'এই তারিখে কোনো দোকান খরচের রেকর্ড নেই'}
               </p>
               <button
                 type="button"
@@ -518,13 +572,13 @@ export const ExpenseManager: React.FC<Props> = ({
               </button>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="p-4 space-y-3.5">
+            <form onSubmit={handleFormSubmit} className="p-3.5 space-y-2.5">
               {/* Category selector */}
               <div>
-                <label className="block text-xs font-bold text-[#102A43] mb-1.5">
+                <label className="block text-xs font-bold text-[#102A43] mb-1">
                   খরচের খাত নির্বাচন করুন *
                 </label>
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                <div className="grid grid-cols-2 gap-1.5 max-h-44 overflow-y-auto pr-0.5">
                   {EXPENSE_CATEGORIES.map((cat) => {
                     const Icon = cat.icon;
                     const isSelected = selectedCategory === cat.id;
@@ -534,16 +588,16 @@ export const ExpenseManager: React.FC<Props> = ({
                         key={cat.id}
                         type="button"
                         onClick={() => setSelectedCategory(cat.id)}
-                        className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition cursor-pointer ${
+                        className={`px-2 py-1.5 rounded-xl border text-left flex items-center gap-1.5 transition cursor-pointer ${
                           isSelected
                             ? 'border-[#0E6B6B] bg-[#E0F2F1] text-[#0E6B6B] font-bold ring-2 ring-[#0E6B6B]/20'
                             : 'border-[#E2E8F0] bg-[#F8FAFC] text-[#102A43] hover:bg-[#EDF2F7]'
                         }`}
                       >
-                        <div className="p-1.5 rounded-lg bg-white text-[#0E6B6B] border border-[#E2E8F0]">
-                          <Icon className="w-4 h-4" />
+                        <div className="w-6 h-6 rounded-lg bg-white text-[#0E6B6B] border border-[#E2E8F0] flex items-center justify-center shrink-0">
+                          <Icon className="w-3.5 h-3.5" />
                         </div>
-                        <span className="text-xs truncate">{cat.name}</span>
+                        <span className="text-xs truncate leading-tight">{cat.name}</span>
                       </button>
                     );
                   })}

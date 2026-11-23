@@ -205,6 +205,7 @@ export interface SupplierTransaction {
 
 // ================= DAILY SHOP EXPENSES (দোকানের দৈনন্দিন খরচ) =================
 export type ExpenseCategory =
+  | 'family'       // সংসার খরচ
   | 'rent'         // দোকান ভাড়া
   | 'electricity'  // বিদ্যুৎ বিল
   | 'salary'       // কর্মচারীর বেতন

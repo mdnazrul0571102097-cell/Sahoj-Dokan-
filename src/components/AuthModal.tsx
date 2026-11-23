@@ -3,11 +3,7 @@ import { ShopProfile, Language } from '../types';
 import { translations } from '../i18n/translations';
 import {
   Lock,
-  Store,
   Phone,
-  User,
-  Mail,
-  MapPin,
   KeyRound,
   CheckCircle2,
   AlertCircle,
@@ -15,11 +11,8 @@ import {
   ArrowLeft,
   ShieldCheck,
   Save,
-  Cloud,
   CloudDownload,
   RefreshCw,
-  Sparkles,
-  Smartphone,
 } from 'lucide-react';
 import { CloudSync } from '../services/cloudSync';
 import { DB } from '../storage/db';
@@ -45,14 +38,14 @@ export const AuthModal: React.FC<Props> = ({
 }) => {
   const t = translations[language];
 
-  // Active view: 'phone_login' | 'register' | 'unlock' | 'forgot_pin'
-  const [mode, setMode] = useState<'unlock' | 'phone_login' | 'register' | 'forgot_pin'>(
+  // Active view: 'phone_login' (unified onboarding/login) | 'unlock' | 'forgot_pin'
+  const [mode, setMode] = useState<'unlock' | 'phone_login' | 'forgot_pin'>(
     isRegistered && (profile.pinEnabled || profile.isPinLockEnabled) && (profile.appLockPin || profile.pin)
       ? 'unlock'
       : 'phone_login'
   );
 
-  // Phone Login State (Smart Cloud-Aware Login & Restore)
+  // Unified Phone Login & Instant Onboarding State (Smart Cloud-Aware)
   const [loginPhone, setLoginPhone] = useState(
     profile.phone || (typeof localStorage !== 'undefined' ? localStorage.getItem('sd_registered_phone') || '' : '')
   );
@@ -61,15 +54,7 @@ export const AuthModal: React.FC<Props> = ({
   const [loginShopNameHint, setLoginShopNameHint] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-
-  // Registration Form State (Zero PIN fields — silent default pin: "1234", pinEnabled: false)
-  const [shopName, setShopName] = useState(profile.shopName || '');
-  const [ownerName, setOwnerName] = useState(profile.ownerName || '');
-  const [phone, setPhone] = useState(profile.phone || '');
-  const [email, setEmail] = useState(profile.email || '');
-  const [address, setAddress] = useState(profile.address || '');
-  const [regError, setRegError] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
+  const [isRestoringCloud, setIsRestoringCloud] = useState(false);
 
   // Unlock PIN State
   const [enteredPin, setEnteredPin] = useState('');
@@ -86,24 +71,9 @@ export const AuthModal: React.FC<Props> = ({
   const [newPin, setNewPin] = useState('');
   const [confirmNewPin, setConfirmNewPin] = useState('');
 
-  // Cloud restore on reinstall state
-  const [showRestorePrompt, setShowRestorePrompt] = useState(false);
-  const [detectedCloudData, setDetectedCloudData] = useState<{
-    hasCloudData: boolean;
-    profile?: any;
-    stats?: { products: number; sales: number; customers: number };
-    lastSyncedAt?: string;
-  } | null>(null);
-  const [isCheckingCloud, setIsCheckingCloud] = useState(false);
-  const [isRestoringCloud, setIsRestoringCloud] = useState(false);
-  const [showDirectCloudRestore, setShowDirectCloudRestore] = useState(false);
-  const [directPhone, setDirectPhone] = useState('');
-  const [directError, setDirectError] = useState('');
-
   // Execute cloud restore with cloud-aware PIN handling
   const handleExecuteCloudRestore = async (phoneToRestore: string, pinToCheck?: string) => {
     setIsRestoringCloud(true);
-    setDirectError('');
     setLoginError('');
     try {
       const cleanPin = (pinToCheck || '').trim();
@@ -117,19 +87,16 @@ export const AuthModal: React.FC<Props> = ({
         }
         onUnlock();
       } else if (res.requiresPin) {
-        // Cloud account has PIN Lock explicitly enabled -> reveal PIN step in Smart Login
+        // Cloud account has PIN Lock explicitly enabled -> reveal PIN step
         setMode('phone_login');
         setLoginPhone(phoneToRestore);
         setShowLoginPinStep(true);
         setLoginError(cleanPin ? res.message : '');
-        setDirectError(res.message);
       } else {
-        setDirectError(res.message);
         setLoginError(res.message);
       }
     } catch (err: any) {
       const msg = 'ক্লাউড থেকে তথ্য পুনরুদ্ধারে ত্রুটি: ' + err.message;
-      setDirectError(msg);
       setLoginError(msg);
     } finally {
       setIsRestoringCloud(false);
@@ -137,18 +104,19 @@ export const AuthModal: React.FC<Props> = ({
     }
   };
 
-  // Smart Mobile Login Handler (Cloud-aware Case A vs Case B)
+  // Unified Mobile Number Action (Existing User -> Restore/PIN | New User -> Auto-Create & Enter Home)
   const handlePhoneLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
 
-    const clean = loginPhone.replace(/\D/g, '');
+    const trimmedPhone = loginPhone.trim();
+    const clean = trimmedPhone.replace(/\D/g, '');
     if (clean.length < 10) {
-      setLoginError('সঠিক ১০ বা ১১ ডিজিটের মোবাইল নম্বর দিন।');
+      setLoginError('সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন।');
       return;
     }
 
-    // Step 2: PIN box is already revealed (Case B) -> verify PIN and restore
+    // Step 2: PIN box is already revealed (Existing user with PIN Lock enabled) -> verify PIN and restore
     if (showLoginPinStep) {
       const cleanPin = loginPin.trim();
       if (cleanPin.length !== 4) {
@@ -156,63 +124,71 @@ export const AuthModal: React.FC<Props> = ({
         return;
       }
       setIsLoggingIn(true);
-      await handleExecuteCloudRestore(loginPhone, cleanPin);
+      await handleExecuteCloudRestore(trimmedPhone, cleanPin);
       return;
     }
 
-    // Step 1: Check shop record in Firebase first
+    // Step 1: Check shop record in Firebase
     setIsLoggingIn(true);
     try {
-      const checkRes = await CloudSync.checkCloudBackup(loginPhone);
-      if (!checkRes.hasCloudData) {
-        setLoginError(
-          checkRes.error ||
-            'এই মোবাইল নম্বরে কোনো দোকান পাওয়া যায়নি। নতুন দোকান খুলতে "নতুন দোকান খুলুন" ট্যাবে যান।'
+      const checkRes = await CloudSync.checkCloudBackup(trimmedPhone);
+
+      // (a) Existing number in Firebase -> keep exact current PIN & restore behavior
+      if (checkRes.hasCloudData) {
+        const isCloudPinLocked = Boolean(
+          checkRes.pinEnabled === true ||
+            checkRes.profile?.pinEnabled === true ||
+            checkRes.profile?.isPinLockEnabled === true
         );
-        setIsLoggingIn(false);
+
+        if (isCloudPinLocked) {
+          // Existing user with PIN Lock enabled -> prompt for 4-digit PIN + Forget PIN
+          setLoginShopNameHint(checkRes.profile?.shopName || '');
+          setShowLoginPinStep(true);
+          setLoginPin('');
+          setLoginError('');
+          setIsLoggingIn(false);
+          return;
+        }
+
+        // Existing user without PIN Lock -> load all existing shop data and go straight to Home
+        await handleExecuteCloudRestore(trimmedPhone);
         return;
       }
 
-      const isCloudPinLocked = Boolean(
-        checkRes.pinEnabled === true ||
-          checkRes.profile?.pinEnabled === true ||
-          checkRes.profile?.isPinLockEnabled === true
-      );
+      // (b) New number (not in Firebase) -> auto-create profile with defaults & go directly to Home
+      try {
+        await CloudSync.ensurePermanentTrial(trimmedPhone);
+      } catch (_) {}
 
-      if (isCloudPinLocked) {
-        // Case B: pinEnabled is explicitly true -> reveal 4-digit PIN input + Forget PIN
-        setLoginShopNameHint(checkRes.profile?.shopName || '');
-        setShowLoginPinStep(true);
-        setLoginPin('');
-        setLoginError('');
-        setIsLoggingIn(false);
-        return;
+      const newShopProfile: ShopProfile = {
+        ...DB.getProfile(),
+        shopName: 'আমার দোকান',
+        ownerName: '',
+        phone: trimmedPhone,
+        email: '',
+        address: '',
+        pin: '1234',
+        pinEnabled: false,
+        appLockPin: '',
+        isPinLockEnabled: false,
+        isRegistered: true,
+        language: language,
+      };
+
+      onSaveProfile(newShopProfile);
+      DB.saveProfile(newShopProfile);
+      // Sync new user record to Firebase immediately in background without blocking entry
+      CloudSync.syncNow().catch(() => {});
+
+      if (onDataRestored) {
+        onDataRestored();
       }
-
-      // Case A: pinEnabled is false or not set -> log in & restore immediately using ONLY mobile number
-      await handleExecuteCloudRestore(loginPhone);
+      setIsLoggingIn(false);
+      onUnlock();
     } catch (err: any) {
       setLoginError('লগইন যাচাই করতে সমস্যা হয়েছে: ' + (err?.message || 'আবার চেষ্টা করুন'));
       setIsLoggingIn(false);
-    }
-  };
-
-  // Check cloud backup when phone is entered in registration
-  const handleCheckPhoneForCloud = async (phoneToCheck: string) => {
-    const clean = phoneToCheck.replace(/\D/g, '');
-    if (clean.length >= 10) {
-      setIsCheckingCloud(true);
-      try {
-        const checkRes = await CloudSync.checkCloudBackup(phoneToCheck);
-        if (checkRes.hasCloudData) {
-          setDetectedCloudData(checkRes);
-          setShowRestorePrompt(true);
-        }
-      } catch (_) {
-        // ignore network error
-      } finally {
-        setIsCheckingCloud(false);
-      }
     }
   };
 
@@ -253,92 +229,6 @@ export const AuthModal: React.FC<Props> = ({
     setEnteredPin((prev) => prev.slice(0, -1));
     setUnlockError('');
     setIsWrongPin(false);
-  };
-
-  // Handle Initial Registration Submission (PIN-free: sets pinEnabled: false & silent default pin: "1234")
-  const handleRegisterSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setRegError('');
-
-    if (!shopName.trim()) {
-      setRegError(t.shopNameRequired);
-      return;
-    }
-    if (!ownerName.trim()) {
-      setRegError(t.ownerNameRequired);
-      return;
-    }
-    const cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.length < 10) {
-      setRegError(t.invalidPhone);
-      return;
-    }
-
-    setIsRegistering(true);
-    try {
-      // Check if cloud backup already exists for this phone
-      try {
-        const cloudCheck = await CloudSync.checkCloudBackup(phone);
-        if (cloudCheck.hasCloudData) {
-          const isCloudPinLocked = Boolean(
-            cloudCheck.pinEnabled === true ||
-              cloudCheck.profile?.pinEnabled === true ||
-              cloudCheck.profile?.isPinLockEnabled === true
-          );
-          if (isCloudPinLocked) {
-            // Existing shop with PIN Lock ON -> guide cleanly to Smart Mobile Login PIN step
-            setMode('phone_login');
-            setLoginPhone(phone.trim());
-            setLoginShopNameHint(cloudCheck.profile?.shopName || '');
-            setShowLoginPinStep(true);
-            setLoginPin('');
-            setLoginError('এই মোবাইল নম্বরে পূর্বের দোকানে পিন লক চালু আছে। লগইন করতে ৪ সংখ্যার পিন দিন।');
-            setIsRegistering(false);
-            return;
-          }
-
-          // Existing shop without PIN Lock -> restore seamlessly
-          const restoreRes = await CloudSync.restoreFromCloud(phone);
-          if (restoreRes.success) {
-            await CloudSync.ensurePermanentTrial(phone);
-            if (onDataRestored) {
-              onDataRestored();
-            }
-            onUnlock();
-            setIsRegistering(false);
-            return;
-          }
-        }
-        await CloudSync.ensurePermanentTrial(phone);
-      } catch (_) {}
-
-      const updatedProfile: ShopProfile = {
-        ...DB.getProfile(),
-        shopName: shopName.trim(),
-        ownerName: ownerName.trim(),
-        phone: phone.trim(),
-        email: email.trim(),
-        address: address.trim(),
-        pin: '1234',
-        pinEnabled: false,
-        appLockPin: '',
-        isPinLockEnabled: false,
-        isRegistered: true,
-        language: language,
-      };
-
-      onSaveProfile(updatedProfile);
-      DB.saveProfile(updatedProfile);
-      // Save pinEnabled: false & default pin: "1234" in Firebase profile immediately
-      CloudSync.syncNow().catch(() => {});
-
-      if (onDataRestored) {
-        onDataRestored();
-      }
-      onUnlock();
-    } finally {
-      setIsRegistering(false);
-    }
   };
 
   // Step 1: Verify Registered Phone in Forgot PIN (works for both local App Lock & Cloud Mobile Login)
@@ -458,7 +348,6 @@ export const AuthModal: React.FC<Props> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-3 sm:p-4 backdrop-blur-md overflow-y-auto">
       <div className="w-full max-w-md md:max-w-xl my-auto overflow-hidden rounded-3xl bg-white shadow-2xl border border-emerald-100 dark:bg-slate-900 dark:border-emerald-900/40">
-        
         {/* Top Header with App Logo & Instant Language Switcher */}
         <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-green-900 p-5 sm:p-6 text-white text-center relative shadow-sm">
           {/* Language Switcher in top-right */}
@@ -501,56 +390,16 @@ export const AuthModal: React.FC<Props> = ({
               ? profile.shopName || t.appName
               : mode === 'forgot_pin'
               ? t.forgotPinTitle
-              : mode === 'phone_login'
-              ? 'মোবাইল নম্বর দিয়ে লগইন'
-              : t.registerTitle}
+              : t.appName}
           </h2>
           <p className="text-xs text-emerald-100/90 mt-1 max-w-xs mx-auto">
             {mode === 'unlock'
               ? t.loginSubtitle
               : mode === 'forgot_pin'
               ? t.forgotPinSubtitle
-              : mode === 'phone_login'
-              ? 'মোবাইল নম্বর দিয়ে লগইন করলেই সমস্ত পুরনো তথ্য স্বয়ংক্রিয়ভাবে ফিরে আসবে'
-              : t.registerSubtitle}
+              : 'মোবাইল নম্বর দিয়ে সাথে সাথে শুরু করুন বা লগইন করুন'}
           </p>
         </div>
-
-        {/* Tab Switcher for Phone Login vs New Store Registration */}
-        {(mode === 'phone_login' || mode === 'register') && (
-          <div className="p-2.5 bg-slate-100 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 flex gap-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                setMode('phone_login');
-                setLoginError('');
-              }}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                mode === 'phone_login'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <Smartphone className="w-4 h-4" />
-              <span>মোবাইল দিয়ে লগইন</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMode('register');
-                setRegError('');
-              }}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                mode === 'register'
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <Store className="w-4 h-4" />
-              <span>নতুন দোকান খুলুন</span>
-            </button>
-          </div>
-        )}
 
         {/* ======================================================== */}
         {/* 1. UNLOCK MODE: 4-Digit PIN Keypad Screen                */}
@@ -664,20 +513,23 @@ export const AuthModal: React.FC<Props> = ({
         )}
 
         {/* ======================================================== */}
-        {/* 2. PHONE LOGIN MODE: Direct Mobile Login & Cloud Restore */}
+        {/* 2. UNIFIED PHONE ONBOARDING & LOGIN SCREEN               */}
         {/* ======================================================== */}
         {mode === 'phone_login' && (
           <div className="p-5 sm:p-6 space-y-4">
-            <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-center space-y-1">
-              <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center mx-auto shadow-sm">
-                <CloudDownload className="w-5 h-5" />
+            <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 space-y-2">
+              <div className="flex flex-col items-center text-center gap-1.5">
+                <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+                  <CloudDownload className="w-5 h-5" />
+                </div>
+                <h3 className="text-sm font-black text-emerald-900 dark:text-emerald-200">
+                  সহজ প্রবেশ ও ব্যাকআপ
+                </h3>
               </div>
-              <h3 className="text-sm font-black text-emerald-900 dark:text-emerald-200">
-                পূর্বের দোকানের সমস্ত ডেটা ফিরে পান
-              </h3>
-              <p className="text-xs text-emerald-700 dark:text-emerald-300 leading-relaxed">
-                মোবাইল নম্বর দিয়ে লগইন করলেই আপনার ১৪টি পণ্য, বাকি খাতা ও বিক্রির সমস্ত তথ্য সাথে সাথে লোড হবে।
-              </p>
+              <div className="text-xs text-emerald-800 dark:text-emerald-300 leading-relaxed space-y-1 text-left">
+                <p>• নতুন ব্যবহারকারী: শুধু আপনার মোবাইল নম্বর দিয়েই সাথে সাথে শুরু করুন।</p>
+                <p>• পুরনো ব্যবহারকারী: আগের নম্বরটি দিলেই আপনার সব পণ্য, বাকি খাতা ও হিসাব ফিরে পাবেন।</p>
+              </div>
             </div>
 
             {loginError && (
@@ -690,7 +542,7 @@ export const AuthModal: React.FC<Props> = ({
             <form onSubmit={handlePhoneLoginSubmit} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  দোকানের রেজিস্টার্ড মোবাইল নম্বর *
+                  মোবাইল নম্বর *
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -715,7 +567,7 @@ export const AuthModal: React.FC<Props> = ({
                 </div>
               </div>
 
-              {/* Case B ONLY: Reveal 4-digit PIN box & Forget PIN if pinEnabled === true in Firebase */}
+              {/* Existing User with PIN Lock ON: Reveal 4-digit PIN box & Forget PIN */}
               {showLoginPinStep && (
                 <div className="space-y-2.5 p-3.5 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 animate-in fade-in duration-150">
                   <div className="flex items-center gap-2 text-xs font-bold text-amber-900 dark:text-amber-200">
@@ -781,7 +633,7 @@ export const AuthModal: React.FC<Props> = ({
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
                       <span>
-                        {showLoginPinStep ? 'পিন যাচাই ও ডেটা লোড হচ্ছে...' : 'ক্লাউড যাচাই ও ডেটা লোড হচ্ছে...'}
+                        {showLoginPinStep ? 'পিন যাচাই ও ডেটা লোড হচ্ছে...' : 'যাচাই ও লোড হচ্ছে...'}
                       </span>
                     </>
                   ) : (
@@ -790,283 +642,15 @@ export const AuthModal: React.FC<Props> = ({
                       <span>
                         {showLoginPinStep
                           ? 'পিন যাচাই করে লগইন করুন'
-                          : 'লগইন করুন ও পূর্বের সমস্ত ডেটা লোড করুন'}
+                          : 'শুরু করুন / লগইন করুন'}
                       </span>
                     </>
                   )}
                 </button>
               </div>
             </form>
-
-            <div className="pt-2 text-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('register');
-                  setRegError('');
-                }}
-                className="text-xs text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-400 underline font-semibold cursor-pointer"
-              >
-                নতুন দোকান? এখানে ক্লিক করে নতুন দোকান খুলুন
-              </button>
-            </div>
           </div>
         )}
-
-
-        {/* ======================================================== */}
-        {/* 2. REGISTRATION MODE: First Install Registration Screen   */}
-        {/* ======================================================== */}
-        {mode === 'register' && (
-          <div className="p-5 sm:p-6 space-y-4">
-            {/* Quick Cloud Restore on Reinstall (পুনরায় ইনস্টল বা ফোন পরিবর্তনের পর ক্লাউড রিস্টোর) */}
-            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 dark:from-blue-950/40 dark:via-indigo-950/40 dark:to-blue-950/40 border border-blue-200 dark:border-blue-900/60 flex items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-blue-600 text-white shrink-0 shadow-sm">
-                  <CloudDownload className="w-4 h-4" />
-                </div>
-                <div className="text-left">
-                  <span className="block text-xs font-bold text-blue-900 dark:text-blue-100">
-                    পূর্বের দোকানের হিসাব আছে?
-                  </span>
-                  <span className="block text-[10px] text-blue-700/90 dark:text-blue-300">
-                    মোবাইল নম্বর দিয়ে ক্লাউড ব্যাকআপ রিস্টোর করুন
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowDirectCloudRestore(!showDirectCloudRestore);
-                  setDirectPhone(phone || '');
-                  setDirectError('');
-                }}
-                className="px-3.5 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold shadow-sm transition active:scale-95 shrink-0 cursor-pointer"
-              >
-                {showDirectCloudRestore ? 'ফর্ম দেখুন' : 'রিস্টোর'}
-              </button>
-            </div>
-
-            {/* Direct Cloud Restore Box */}
-            {showDirectCloudRestore ? (
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-blue-300 dark:border-blue-700 space-y-3 animate-in fade-in duration-150">
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-white">
-                  <Sparkles className="w-4 h-4 text-blue-600" />
-                  <span>ক্লাউড থেকে তাৎক্ষণিক ডেটা রিস্টোর</span>
-                </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  পূর্বে ব্যবহৃত মোবাইল নম্বর দিন। আপনার পণ্য, দৈনিক বিক্রি ও বাকির খাতার সকল তথ্য ফিরে আসবে।
-                </p>
-
-                {directError && (
-                  <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 text-rose-700 dark:text-rose-300 text-xs font-semibold">
-                    {directError}
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <input
-                    type="tel"
-                    value={directPhone}
-                    onChange={(e) => setDirectPhone(e.target.value)}
-                    placeholder="017xxxxxxxx"
-                    className="flex-1 p-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button
-                    type="button"
-                    disabled={isRestoringCloud}
-                    onClick={() => handleExecuteCloudRestore(directPhone)}
-                    className="px-4 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white text-xs font-bold shrink-0 transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
-                  >
-                    {isRestoringCloud ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>রিস্টোর হচ্ছে...</span>
-                      </>
-                    ) : (
-                      <>
-                        <CloudDownload className="w-3.5 h-3.5" />
-                        <span>রিস্টোর করুন</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            {/* Detected Cloud Backup Notification Banner */}
-            {showRestorePrompt && detectedCloudData?.hasCloudData && (
-              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-400 dark:border-emerald-700 text-left space-y-2.5 animate-in fade-in duration-200">
-                <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-xs">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>এই নম্বরে পূর্বের ক্লাউড ব্যাকআপ পাওয়া গেছে!</span>
-                </div>
-                {detectedCloudData.profile && (
-                  <p className="text-xs text-slate-700 dark:text-slate-200 font-semibold">
-                    দোকানের নাম: <strong>{detectedCloudData.profile.shopName}</strong> (পণ্য: {detectedCloudData.stats?.products || 0} টি, বিক্রি: {detectedCloudData.stats?.sales || 0} টি)
-                  </p>
-                )}
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    disabled={isRestoringCloud}
-                    onClick={() => handleExecuteCloudRestore(phone)}
-                    className="flex-1 py-2 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    {isRestoringCloud ? (
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <CloudDownload className="w-3.5 h-3.5" />
-                    )}
-                    <span>হ্যাঁ, পূর্বের ডাটা ফিরিয়ে আনুন</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowRestorePrompt(false)}
-                    className="py-2 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold hover:bg-slate-100 transition cursor-pointer"
-                  >
-                    না
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
-              {regError && (
-                <div className="flex items-center gap-2 p-3 bg-rose-50 text-rose-700 text-xs font-semibold rounded-2xl border border-rose-200 dark:bg-rose-950/40 dark:border-rose-900/60 dark:text-rose-300">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{regError}</span>
-                </div>
-              )}
-
-              {/* 1. দোকানের নাম (Shop Name) * */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  {t.shopName} *
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <Store className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={shopName}
-                    onChange={(e) => setShopName(e.target.value)}
-                    placeholder={t.shopNamePlaceholder}
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* 2. মালিকের নাম (Owner Name) * */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  {t.ownerName} *
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <User className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={ownerName}
-                    onChange={(e) => setOwnerName(e.target.value)}
-                    placeholder={t.ownerNamePlaceholder}
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* 3. মোবাইল নম্বর (Mobile Number) * */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  {t.phone} *
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <Phone className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="tel"
-                    required
-                    value={phone}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setPhone(val);
-                      if (val.replace(/\D/g, '').length === 11) {
-                        handleCheckPhoneForCloud(val);
-                      }
-                    }}
-                    onBlur={() => handleCheckPhoneForCloud(phone)}
-                    placeholder={t.phonePlaceholder}
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-            {/* 4. ইমেইল (ঐচ্ছিক) (Email - optional) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                {t.email}
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <Mail className="w-4 h-4" />
-                </div>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder={t.emailPlaceholder}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            {/* 5. দোকানের ঠিকানা (Shop Address) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                {t.address}
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <MapPin className="w-4 h-4" />
-                </div>
-                <input
-                  type="text"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder={t.addressPlaceholder}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Submit Button: 'তথ্য সংরক্ষণ করুন' */}
-            <div className="pt-3">
-              <button
-                type="submit"
-                disabled={isRegistering}
-                className="w-full py-3.5 px-4 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white font-bold rounded-2xl shadow-lg shadow-emerald-700/25 transition active:scale-[0.99] flex items-center justify-center gap-2 text-sm cursor-pointer"
-              >
-                {isRegistering ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>দোকান তৈরি হচ্ছে...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    <span>{t.saveInfoBtn}</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
 
         {/* ======================================================== */}
         {/* 3. FORGOT PIN MODE: Reset PIN with Mobile Number (NO OTP) */}

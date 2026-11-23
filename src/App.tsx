@@ -38,6 +38,7 @@ import { AuthModal } from './components/AuthModal';
 import { LanguageSelectorModal } from './components/LanguageSelectorModal';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
+import { ForceUpdateModal } from './components/ForceUpdateModal';
 import { TrialBanner } from './components/TrialBanner';
 import { MenuHubView, MenuTileTarget } from './components/MenuHubView';
 import { AllReportsView } from './components/AllReportsView';
@@ -181,6 +182,11 @@ export default function App() {
     };
 
     const handleBackAction = (): string => {
+      // Block hardware/gesture back button completely while Force Update Lock is active
+      if ((window as any).__sdForceUpdateLocked) {
+        return 'BLOCKED_FORCE_UPDATE';
+      }
+
       const now = Date.now();
       // Prevent duplicate execution if both popstate and Android native callback fire simultaneously
       if (now - lastBackEventHandledRef.current < 180) {
@@ -2022,6 +2028,9 @@ export default function App() {
 
       {/* Global In-App Toast Notifications */}
       <ToastContainer />
+
+      {/* Mandatory Force Update Overlay (checks Firestore app_settings/version_control when online) */}
+      <ForceUpdateModal />
 
       {/* Double-Tap Back to Exit Toast Notification */}
       {exitToastVisible && (

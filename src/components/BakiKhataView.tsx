@@ -217,6 +217,7 @@ export const BakiKhataView: React.FC<Props> = ({
   const [showDueFormModal, setShowDueFormModal] = useState(false);
   const [dueFormCustomerName, setDueFormCustomerName] = useState('');
   const [dueFormCustomerPhone, setDueFormCustomerPhone] = useState('');
+  const [dueFormCustomerAddress, setDueFormCustomerAddress] = useState('');
   const [dueFormMatchedCustomerId, setDueFormMatchedCustomerId] = useState<string | null>(null);
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
   const [dueFormDate, setDueFormDate] = useState<string>(() => getLocalDateStr(new Date()));
@@ -250,10 +251,12 @@ export const BakiKhataView: React.FC<Props> = ({
     if (cust) {
       setDueFormCustomerName(cust.name);
       setDueFormCustomerPhone(cust.phone === '---' ? '' : cust.phone || '');
+      setDueFormCustomerAddress(cust.address || '');
       setDueFormMatchedCustomerId(cust.id);
     } else {
       setDueFormCustomerName('');
       setDueFormCustomerPhone('');
+      setDueFormCustomerAddress('');
       setDueFormMatchedCustomerId(null);
     }
     setDueFormDate(getLocalDateStr(new Date()));
@@ -429,14 +432,22 @@ export const BakiKhataView: React.FC<Props> = ({
     let createdSale: Sale | null | void = null;
 
     if (matchedDueCustomer) {
-      // Update phone silently if customer previously had no phone and user typed one
-      if (
+      // Update phone or father's name / village address if provided/changed
+      const nextPhone =
         dueFormCustomerPhone.trim() &&
         (!matchedDueCustomer.phone || matchedDueCustomer.phone === '---')
-      ) {
+          ? dueFormCustomerPhone.trim()
+          : matchedDueCustomer.phone;
+      const trimmedAddress = dueFormCustomerAddress.trim();
+      const shouldUpdateAddress =
+        Boolean(trimmedAddress) && trimmedAddress !== (matchedDueCustomer.address || '').trim();
+      const shouldUpdatePhone = nextPhone !== matchedDueCustomer.phone;
+
+      if (shouldUpdatePhone || shouldUpdateAddress) {
         onUpdateCustomer({
           ...matchedDueCustomer,
-          phone: dueFormCustomerPhone.trim(),
+          phone: nextPhone,
+          address: shouldUpdateAddress ? trimmedAddress : matchedDueCustomer.address,
         });
       }
 
@@ -459,6 +470,8 @@ export const BakiKhataView: React.FC<Props> = ({
       if (selectedCustomer && selectedCustomer.id === matchedDueCustomer.id) {
         setSelectedCustomer({
           ...selectedCustomer,
+          phone: nextPhone,
+          address: shouldUpdateAddress ? trimmedAddress : selectedCustomer.address,
           totalDue: newBalance,
         });
       }
@@ -467,7 +480,7 @@ export const BakiKhataView: React.FC<Props> = ({
         id: `cust_${Date.now()}`,
         name: trimmedName,
         phone: dueFormCustomerPhone.trim() || '---',
-        address: '',
+        address: dueFormCustomerAddress.trim(),
         totalDue: remDue,
         createdAt: selectedDateIso,
       };
@@ -487,6 +500,7 @@ export const BakiKhataView: React.FC<Props> = ({
     setShowDueFormModal(false);
     setDueFormCustomerName('');
     setDueFormCustomerPhone('');
+    setDueFormCustomerAddress('');
     setDueFormMatchedCustomerId(null);
     setDueFormTotalAmount('');
     setDueFormCashPaid('');
@@ -497,6 +511,55 @@ export const BakiKhataView: React.FC<Props> = ({
       setLastCreatedMemo(createdSale);
       setReceiptSale(createdSale);
     }
+  };
+
+  // Normalize phone number for WhatsApp (supports Bangla digits, 01xxx, 1xxx, +880xxx, and international numbers)
+  const formatWhatsAppPhone = (rawPhone?: string): string => {
+    if (!rawPhone || rawPhone.trim() === '---') return '';
+    const bnMap: Record<string, string> = {
+      '০': '0',
+      '১': '1',
+      '২': '2',
+      '৩': '3',
+      '৪': '4',
+      '৫': '5',
+      '৬': '6',
+      '৭': '7',
+      '৮': '8',
+      '৯': '9',
+    };
+    const ascii = rawPhone.trim().replace(/[০-৯]/g, (d) => bnMap[d] || d);
+    const hasIntlPrefix = ascii.startsWith('+') || ascii.startsWith('00');
+    let digits = ascii.replace(/\D/g, '');
+    if (!digits) return '';
+    if (ascii.startsWith('00')) {
+      digits = digits.slice(2);
+    }
+
+    // Bangladesh formats: 8801XXXXXXXXX (13), 01XXXXXXXXX (11), 1XXXXXXXXX (10)
+    if (digits.startsWith('880') && digits.length === 13) return digits;
+    if (digits.startsWith('01') && digits.length === 11) return `88${digits}`;
+    if (digits.startsWith('1') && digits.length === 10) return `880${digits}`;
+
+    // International numbers with explicit + / 00 or >= 10 digits
+    if (hasIntlPrefix && digits.length >= 8) return digits;
+    if (digits.length >= 10) return digits;
+    return '';
+  };
+
+  const buildWhatsAppUrl = (customer: Customer): string => {
+    const dueAmt = Number(customer.totalDue) || 0;
+    const shopPhonePart = profile.phone ? ` (ফোন: ${profile.phone})` : '';
+    const msg =
+      dueAmt > 0
+        ? `আসসালামু আলাইকুম ${customer.name} ভাই,\n*${profile.shopName}* থেকে জানানো যাচ্ছে যে আপনার বর্তমান বাকি হিসাব ৳${dueAmt} টাকা।\nসুবিধামতো সময়ে বাকি পরিশোধ করার জন্য অনুরোধ করা হলো।\nধন্যবাদ!\n- ${profile.shopName}${shopPhonePart}`
+        : `আসসালামু আলাইকুম ${customer.name} ভাই,\n*${profile.shopName}* থেকে যোগাযোগ করছি। বর্তমানে আপনার কোনো বাকি নেই।\nধন্যবাদ!\n- ${profile.shopName}${shopPhonePart}`;
+
+    const fullPhone = formatWhatsAppPhone(customer.phone);
+    const encodedMsg = encodeURIComponent(msg);
+    return fullPhone
+      ? `https://wa.me/${fullPhone}?text=${encodedMsg}`
+      : `https://wa.me/?text=${encodedMsg}`;
   };
 
   // WhatsApp Reminder message (Locked in Normal Mode after 60 days)
@@ -513,18 +576,7 @@ export const BakiKhataView: React.FC<Props> = ({
       return;
     }
 
-    const msg = `আসসালামু আলাইকুম ${customer.name} ভাই,
-*${profile.shopName}* থেকে জানানো যাচ্ছে যে আপনার বর্তমান বাকি হিসাব ৳${customer.totalDue} টাকা।
-সুবিধামতো সময়ে বাকি পরিশোধ করার জন্য অনুরোধ করা হলো।
-ধন্যবাদ! 
-- ${profile.shopName} (ফোন: ${profile.phone})`;
-
-    const cleanPhone = (customer.phone || '').replace(/\D/g, '').slice(-11);
-    const fullPhone = cleanPhone.startsWith('88') ? cleanPhone : `88${cleanPhone}`;
-    const url =
-      fullPhone.length >= 10
-        ? `https://api.whatsapp.com/send?phone=${fullPhone}&text=${encodeURIComponent(msg)}`
-        : `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+    const url = buildWhatsAppUrl(customer);
 
     if (typeof window !== 'undefined' && (window as any).AndroidApp?.openWhatsApp) {
       try {
@@ -532,7 +584,19 @@ export const BakiKhataView: React.FC<Props> = ({
         return;
       } catch (_) {}
     }
-    window.open(url, '_blank');
+
+    // Native anchor click fallback (reliable across Mobile Chrome, iOS Safari, PWA & WebViews)
+    try {
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (_) {
+      window.location.href = url;
+    }
   };
 
   // Filter mode for Summary card: 'all' (সর্বমোট) vs 'today' (আজ)
@@ -962,32 +1026,44 @@ export const BakiKhataView: React.FC<Props> = ({
                               <Edit2 className="w-4 h-4" />
                             </button>
 
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSendReminder(cust);
-                              }}
-                              className={`px-2.5 py-2 rounded-xl border text-xs font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer ${
-                                appMode === 'normal'
-                                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300'
-                                  : 'bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] border-[#B2DFDB]'
-                              }`}
-                              title={
-                                appMode === 'normal'
-                                  ? 'হোয়াটসঅ্যাপ মেসেজ পাঠাতে Pro আনলক করুন'
-                                  : 'কাস্টমারের হোয়াটসঅ্যাপে তাগাদা মেসেজ পাঠান'
-                              }
-                            >
-                              {appMode === 'normal' ? (
-                                <>
-                                  <Lock className="w-3.5 h-3.5 text-amber-600" />
-                                  <span className="text-[10px]">Pro</span>
-                                </>
-                              ) : (
+                            {appMode === 'normal' ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSendReminder(cust);
+                                }}
+                                className="px-2.5 py-2 rounded-xl border text-xs font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300"
+                                title="হোয়াটসঅ্যাপ মেসেজ পাঠাতে Pro আনলক করুন"
+                              >
+                                <Lock className="w-3.5 h-3.5 text-amber-600" />
+                                <span className="text-[10px]">Pro</span>
+                              </button>
+                            ) : (
+                              <a
+                                href={buildWhatsAppUrl(cust)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (
+                                    typeof window !== 'undefined' &&
+                                    (window as any).AndroidApp?.openWhatsApp
+                                  ) {
+                                    e.preventDefault();
+                                    try {
+                                      (window as any).AndroidApp.openWhatsApp(buildWhatsAppUrl(cust));
+                                    } catch (_) {
+                                      window.location.href = buildWhatsAppUrl(cust);
+                                    }
+                                  }
+                                }}
+                                className="px-2.5 py-2 rounded-xl border text-xs font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer bg-[#E0F2F1] hover:bg-[#B2DFDB] text-[#0E6B6B] border-[#B2DFDB]"
+                                title="কাস্টমারের হোয়াটসঅ্যাপে তাগাদা মেসেজ পাঠান"
+                              >
                                 <MessageCircle className="w-4 h-4" />
-                              )}
-                            </button>
+                              </a>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1111,37 +1187,53 @@ export const BakiKhataView: React.FC<Props> = ({
                     <span>{t.receivePayment}</span>
                   </button>
 
-                  <button
-                    onClick={() => handleSendReminder(selectedCustomer)}
-                    disabled={
-                      appMode !== 'normal' &&
-                      (selectedCustomer.totalDue <= 0 ||
-                        !selectedCustomer.phone ||
-                        selectedCustomer.phone === '---')
-                    }
-                    className={`py-2.5 px-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 shadow-xs transition active:scale-95 ${
-                      appMode === 'normal'
-                        ? 'bg-amber-500 hover:bg-amber-600 text-slate-950'
-                        : 'bg-[#0E6B6B] hover:bg-[#094747] disabled:opacity-40 text-white'
-                    }`}
-                    title={
-                      appMode === 'normal'
-                        ? 'হোয়াটসঅ্যাপ তাগাদা পাঠাতে Pro সাবস্ক্রিপশন নিন'
-                        : 'তাগাদা পাঠান'
-                    }
-                  >
-                    {appMode === 'normal' ? (
-                      <>
-                        <Lock className="w-3.5 h-3.5" />
-                        <span>তাগাদা (Pro)</span>
-                      </>
-                    ) : (
-                      <>
-                        <Share2 className="w-3.5 h-3.5" />
-                        <span>তাগাদা</span>
-                      </>
-                    )}
-                  </button>
+                  {appMode === 'normal' ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSendReminder(selectedCustomer)}
+                      className="py-2.5 px-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 shadow-xs transition active:scale-95 bg-amber-500 hover:bg-amber-600 text-slate-950 cursor-pointer"
+                      title="হোয়াটসঅ্যাপ তাগাদা পাঠাতে Pro সাবস্ক্রিপশন নিন"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>তাগাদা (Pro)</span>
+                    </button>
+                  ) : formatWhatsAppPhone(selectedCustomer.phone) ? (
+                    <a
+                      href={buildWhatsAppUrl(selectedCustomer)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => {
+                        if (
+                          typeof window !== 'undefined' &&
+                          (window as any).AndroidApp?.openWhatsApp
+                        ) {
+                          e.preventDefault();
+                          try {
+                            (window as any).AndroidApp.openWhatsApp(
+                              buildWhatsAppUrl(selectedCustomer)
+                            );
+                          } catch (_) {
+                            window.location.href = buildWhatsAppUrl(selectedCustomer);
+                          }
+                        }
+                      }}
+                      className="py-2.5 px-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 shadow-xs transition active:scale-95 bg-[#0E6B6B] hover:bg-[#094747] text-white cursor-pointer"
+                      title="তাগাদা পাঠান"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>তাগাদা</span>
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="py-2.5 px-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 shadow-xs bg-[#0E6B6B] opacity-40 text-white"
+                      title="সঠিক মোবাইল নম্বর সেভ করা নেই"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>তাগাদা</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1295,6 +1387,7 @@ export const BakiKhataView: React.FC<Props> = ({
                         if (exact) {
                           setDueFormMatchedCustomerId(exact.id);
                           setDueFormCustomerPhone(exact.phone === '---' ? '' : exact.phone || '');
+                          setDueFormCustomerAddress(exact.address || '');
                         } else {
                           setDueFormMatchedCustomerId(null);
                         }
@@ -1310,6 +1403,7 @@ export const BakiKhataView: React.FC<Props> = ({
                           setDueFormError('');
                           setDueFormCustomerName('');
                           setDueFormCustomerPhone('');
+                          setDueFormCustomerAddress('');
                           setDueFormMatchedCustomerId(null);
                           setShowCustomerSuggestions(true);
                         }}
@@ -1328,7 +1422,8 @@ export const BakiKhataView: React.FC<Props> = ({
                             if (!q) return true;
                             return (
                               c.name.toLowerCase().includes(q) ||
-                              (c.phone && c.phone.includes(q))
+                              (c.phone && c.phone.includes(q)) ||
+                              (c.address && c.address.toLowerCase().includes(q))
                             );
                           })
                           .map((c) => (
@@ -1341,11 +1436,19 @@ export const BakiKhataView: React.FC<Props> = ({
                                 setDueFormMatchedCustomerId(c.id);
                                 setDueFormCustomerName(c.name);
                                 setDueFormCustomerPhone(c.phone === '---' ? '' : c.phone || '');
+                                setDueFormCustomerAddress(c.address || '');
                                 setShowCustomerSuggestions(false);
                               }}
                               className="w-full px-3 py-2 text-left text-xs font-bold flex items-center justify-between hover:bg-[#E0F2F1] text-[#102A43] cursor-pointer"
                             >
-                              <span className="truncate pr-2">{c.name}</span>
+                              <div className="min-w-0 pr-2">
+                                <span className="truncate block">{c.name}</span>
+                                {c.address && (
+                                  <span className="truncate block text-[10px] font-medium text-[#64748B]">
+                                    {c.address}
+                                  </span>
+                                )}
+                              </div>
                               <span className={`text-[10px] font-mono font-extrabold shrink-0 ${c.totalDue > 0 ? 'text-[#D32F2F]' : 'text-[#2E7D32]'}`}>
                                 {c.totalDue > 0 ? `বাকি: ৳${c.totalDue.toLocaleString()}` : '৳০'}
                               </span>
@@ -1364,6 +1467,17 @@ export const BakiKhataView: React.FC<Props> = ({
                       className="w-full px-2.5 py-2 rounded-xl border border-[#CBD5E1] bg-white text-xs font-mono font-semibold text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]"
                     />
                   </div>
+                </div>
+
+                {/* Optional Father's Name / Village Address */}
+                <div>
+                  <input
+                    type="text"
+                    value={dueFormCustomerAddress}
+                    onChange={(e) => setDueFormCustomerAddress(e.target.value)}
+                    placeholder="পিতার নাম / গ্রামের ঠিকানা (ঐচ্ছিক)"
+                    className="w-full px-3 py-2 rounded-xl border border-[#CBD5E1] bg-white text-xs font-semibold text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]"
+                  />
                 </div>
               </div>
 
@@ -1486,16 +1600,21 @@ export const BakiKhataView: React.FC<Props> = ({
                 <label className="block text-xs font-bold text-[#102A43] mb-1">
                   বিবরণ (ঐচ্ছিক)
                 </label>
-                <input
-                  type="text"
+                <textarea
+                  rows={2}
+                  enterKeyHint="enter"
                   value={dueFormNote}
-                  onChange={(e) => setDueFormNote(e.target.value)}
+                  onChange={(e) => {
+                    setDueFormNote(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 96)}px`;
+                  }}
                   placeholder={
                     dueFormMode === 'adjustment'
                       ? 'যেমন: পুরোনো খাতার পূর্বের জের'
-                      : 'যেমন: চাল, ডাল ও তেল'
+                      : 'যেমন: চাল, ডাল ও তেল (নিচের লাইনে যেতে ↵ চাপুন)'
                   }
-                  className="w-full p-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs text-[#102A43] placeholder-[#9AA5B1] focus:outline-none focus:ring-2 focus:ring-[#0E6B6B]"
+                  className="w-full p-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs text-[#102A43] placeholder-[#9AA5B1] leading-relaxed resize-none overflow-y-auto max-h-24 focus:outline-none focus:ring-2 focus:ring-[#0E6B6B] focus:bg-white"
                 />
               </div>
 

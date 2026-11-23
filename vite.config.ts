@@ -10,6 +10,71 @@ import { defineConfig, Plugin } from 'vite';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 
+function detectAppMetadata(): { version: string; androidPackage: string } {
+  let version = '';
+  let androidPackage = '';
+
+  // 1. Read Android package name from capacitor.config.json
+  try {
+    const capPath = path.resolve(__dirname, 'capacitor.config.json');
+    if (fs.existsSync(capPath)) {
+      const capJson = JSON.parse(fs.readFileSync(capPath, 'utf8'));
+      if (capJson?.appId) {
+        androidPackage = String(capJson.appId).trim();
+      }
+    }
+  } catch {}
+
+  // 2. Read versionName (and fallback applicationId) from android/app/build.gradle
+  try {
+    const gradlePath = path.resolve(__dirname, 'android/app/build.gradle');
+    if (fs.existsSync(gradlePath)) {
+      const gradleContent = fs.readFileSync(gradlePath, 'utf8');
+
+      if (!androidPackage) {
+        const appIdMatch = gradleContent.match(/applicationId\s+["']([^"']+)["']/);
+        if (appIdMatch?.[1]) {
+          androidPackage = appIdMatch[1].trim();
+        }
+      }
+
+      const defaultRunNumMatch = gradleContent.match(
+        /def\s+autoRunNum\s*=.*:\s*(\d+)/
+      );
+      const envRunNum = process.env.GITHUB_RUN_NUMBER;
+      const runNum =
+        envRunNum && /^\d+$/.test(envRunNum)
+          ? envRunNum
+          : defaultRunNumMatch?.[1] || '1';
+
+      const versionNameMatch = gradleContent.match(/versionName\s+["']([^"']+)["']/);
+      if (versionNameMatch?.[1]) {
+        version = versionNameMatch[1].replace(/\$\{autoRunNum\}|\$autoRunNum/g, runNum).trim();
+      }
+    }
+  } catch {}
+
+  // 3. Fallback to package.json version if not found in build.gradle
+  if (!version) {
+    try {
+      const pkgPath = path.resolve(__dirname, 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        const pkgJson = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        if (pkgJson?.version && pkgJson.version !== '0.0.0') {
+          version = String(pkgJson.version).trim();
+        }
+      }
+    } catch {}
+  }
+
+  return {
+    version: version || '5.1.39',
+    androidPackage: androidPackage || 'com.sahojdokan.pos',
+  };
+}
+
+const detectedAppMetadata = detectAppMetadata();
+
 function unwrapCssLayers(input: string): string {
   let s = input.replace(/@layer\s+[^{;]+;/g, '');
   while (/@layer\s+[^{]+\{/.test(s)) {
@@ -124,6 +189,10 @@ function universalAndroidWebviewPlugin(): Plugin {
 
 export default defineConfig({
   base: './',
+  define: {
+    __APP_VERSION__: JSON.stringify(detectedAppMetadata.version),
+    __APP_ANDROID_PACKAGE__: JSON.stringify(detectedAppMetadata.androidPackage),
+  },
   plugins: [
     react(),
     tailwindcss(),
