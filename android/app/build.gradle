@@ -53,13 +53,13 @@ android {
             v2SigningEnabled true
         }
         release {
-            def playKsPath = System.getenv("PLAY_KEYSTORE_FILE")
+            def releaseKsPath = System.getenv("KEYSTORE_FILE")
             def keystorePropsFile = rootProject.file("keystore.properties")
-            if (playKsPath && file(playKsPath).exists()) {
-                storeFile file(playKsPath)
-                storePassword System.getenv("PLAY_KEYSTORE_PASSWORD")
-                keyAlias System.getenv("PLAY_KEY_ALIAS")
-                keyPassword System.getenv("PLAY_KEY_PASSWORD") ?: System.getenv("PLAY_KEYSTORE_PASSWORD")
+            if (releaseKsPath && file(releaseKsPath).exists()) {
+                storeFile file(releaseKsPath)
+                storePassword System.getenv("STORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD") ?: System.getenv("STORE_PASSWORD")
             } else if (keystorePropsFile.exists()) {
                 def keystoreProps = new Properties()
                 keystorePropsFile.withInputStream { keystoreProps.load(it) }

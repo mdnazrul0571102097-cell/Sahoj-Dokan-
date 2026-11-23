@@ -64,30 +64,30 @@ jobs:
 
       - name: Build Signed Android App Bundle (.aab)
         env:
-          PLAY_KEYSTORE_BASE64: ${{ secrets.KEYSTORE || secrets.PLAY_KEYSTORE_BASE64 }}
-          PLAY_KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD || secrets.PLAY_KEYSTORE_PASSWORD }}
-          PLAY_KEY_ALIAS: ${{ secrets.KEY_ALIAS || secrets.PLAY_KEY_ALIAS }}
-          PLAY_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || secrets.PLAY_KEY_PASSWORD }}
+          KEYSTORE: ${{ secrets.KEYSTORE }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -z "$PLAY_KEYSTORE_BASE64" ] || [ -z "$PLAY_KEYSTORE_PASSWORD" ] || [ -z "$PLAY_KEY_ALIAS" ]; then
-            echo "::error::Missing Play Store release signing secrets. Please add KEYSTORE, STORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD in GitHub Repo Settings -> Secrets and variables -> Actions."
+          if [ -z "$KEYSTORE" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
+            echo "::error::Missing release signing secrets: KEYSTORE, STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD."
             exit 1
           fi
 
           cd android
-          PLAY_KS_ABS="$PWD/app/play-upload-keystore.jks"
-          trap 'rm -f "$PLAY_KS_ABS"' EXIT
+          KS_FILE="$PWD/app/release-upload.jks"
+          trap 'rm -f "$KS_FILE"' EXIT
 
-          printf '%s' "$PLAY_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > "$PLAY_KS_ABS"
+          printf '%s' "$KEYSTORE" | tr -d '\r\n ' | base64 --decode > "$KS_FILE"
 
-          CERT_INFO=$(keytool -list -v -keystore "$PLAY_KS_ABS" -storepass "$PLAY_KEYSTORE_PASSWORD" -alias "$PLAY_KEY_ALIAS")
+          CERT_INFO=$(keytool -list -v -keystore "$KS_FILE" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS")
           if echo "$CERT_INFO" | grep -qi "CN=Android Debug"; then
-            echo "::error::The keystore in KEYSTORE is an Android Debug certificate. Google Play requires a non-debug release upload keystore."
+            echo "::error::The keystore in KEYSTORE is an Android Debug certificate. Google Play requires a non-debug release keystore."
             exit 1
           fi
 
-          export PLAY_KEYSTORE_FILE="$PLAY_KS_ABS"
-          export PLAY_KEY_PASSWORD="${PLAY_KEY_PASSWORD:-$PLAY_KEYSTORE_PASSWORD}"
+          export KEYSTORE_FILE="$KS_FILE"
+          export KEY_PASSWORD="${KEY_PASSWORD:-$STORE_PASSWORD}"
 
           ./gradlew bundleRelease --stacktrace --no-daemon
 
