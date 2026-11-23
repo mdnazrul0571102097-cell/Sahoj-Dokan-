@@ -10,12 +10,12 @@ def autoRunNum = System.getenv("GITHUB_RUN_NUMBER") ? System.getenv("GITHUB_RUN_
 
 android {
     namespace "com.sahojdokan.pos"
-    compileSdkVersion 34
+    compileSdkVersion 36
 
     defaultConfig {
         applicationId "com.sahojdokan.pos"
         minSdkVersion 24
-        targetSdkVersion 33
+        targetSdkVersion 36
         versionCode 1000 + autoRunNum
         versionName "5.1.${autoRunNum}"
         multiDexEnabled true
