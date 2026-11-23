@@ -53,11 +53,33 @@ android {
             v2SigningEnabled true
         }
         release {
-            storeFile permanentKsFile
-            storePassword "android"
-            keyAlias "androiddebugkey"
-            keyPassword "android"
-            storeType "PKCS12"
+            def playKsPath = System.getenv("PLAY_KEYSTORE_FILE")
+            def keystorePropsFile = rootProject.file("keystore.properties")
+            if (playKsPath && file(playKsPath).exists()) {
+                storeFile file(playKsPath)
+                storePassword System.getenv("PLAY_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("PLAY_KEY_ALIAS")
+                keyPassword System.getenv("PLAY_KEY_PASSWORD") ?: System.getenv("PLAY_KEYSTORE_PASSWORD")
+            } else if (keystorePropsFile.exists()) {
+                def keystoreProps = new Properties()
+                keystorePropsFile.withInputStream { keystoreProps.load(it) }
+                def configuredStoreFile = keystoreProps.getProperty("storeFile")?.trim()
+                def resolvedStoreFile = configuredStoreFile ? (file(configuredStoreFile).exists() ? file(configuredStoreFile) : rootProject.file(configuredStoreFile)) : null
+                if (resolvedStoreFile && resolvedStoreFile.exists()) {
+                    storeFile resolvedStoreFile
+                    storePassword keystoreProps.getProperty("storePassword")?.trim()
+                    keyAlias keystoreProps.getProperty("keyAlias")?.trim()
+                    keyPassword (keystoreProps.getProperty("keyPassword")?.trim() ?: keystoreProps.getProperty("storePassword")?.trim())
+                } else {
+                    throw new GradleException("Release keystore file not found: '${configuredStoreFile}'. Check storeFile in android/keystore.properties.")
+                }
+            } else {
+                storeFile permanentKsFile
+                storePassword "android"
+                keyAlias "androiddebugkey"
+                keyPassword "android"
+                storeType "PKCS12"
+            }
             v1SigningEnabled true
             v2SigningEnabled true
         }
