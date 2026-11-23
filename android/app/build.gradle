@@ -56,10 +56,13 @@ android {
             def releaseKsPath = System.getenv("KEYSTORE_FILE")
             def keystorePropsFile = rootProject.file("keystore.properties")
             if (releaseKsPath && file(releaseKsPath).exists()) {
+                def cleanStorePass = (System.getenv("STORE_PASSWORD") ?: "").replaceAll(/[\r\n]/, "")
+                def cleanKeyAlias = (System.getenv("KEY_ALIAS") ?: "").replaceAll(/[\r\n]/, "").trim()
+                def cleanKeyPass = (System.getenv("KEY_PASSWORD") ?: "").replaceAll(/[\r\n]/, "") ?: cleanStorePass
                 storeFile file(releaseKsPath)
-                storePassword System.getenv("STORE_PASSWORD")
-                keyAlias System.getenv("KEY_ALIAS")
-                keyPassword System.getenv("KEY_PASSWORD") ?: System.getenv("STORE_PASSWORD")
+                storePassword cleanStorePass
+                keyAlias cleanKeyAlias
+                keyPassword cleanKeyPass
             } else if (keystorePropsFile.exists()) {
                 def keystoreProps = new Properties()
                 keystorePropsFile.withInputStream { keystoreProps.load(it) }

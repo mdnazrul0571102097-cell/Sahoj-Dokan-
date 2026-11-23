@@ -69,6 +69,10 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          KEY_ALIAS=$(printf '%s' "$KEY_ALIAS" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          STORE_PASSWORD=$(printf '%s' "$STORE_PASSWORD" | tr -d '\r\n')
+          KEY_PASSWORD=$(printf '%s' "${KEY_PASSWORD:-$STORE_PASSWORD}" | tr -d '\r\n')
+
           if [ -z "$KEYSTORE" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
             echo "::error::Missing release signing secrets: KEYSTORE, STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD."
             exit 1
@@ -78,23 +82,38 @@ jobs:
           KS_FILE="$PWD/app/release-upload.jks"
           trap 'rm -f "$KS_FILE"' EXIT
 
-          printf '%s' "$KEYSTORE" | tr -d '\r\n ' | base64 --decode > "$KS_FILE"
+          if ! printf '%s' "$KEYSTORE" | tr -d '[:space:]' | base64 --decode > "$KS_FILE"; then
+            echo "::error::Failed to Base64-decode KEYSTORE secret."
+            exit 1
+          fi
 
-          CERT_INFO=$(keytool -list -v -keystore "$KS_FILE" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS")
+          if ! CERT_INFO=$(keytool -list -v -keystore "$KS_FILE" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" 2>&1); then
+            echo "::error::keytool failed to read keystore with STORE_PASSWORD / KEY_ALIAS:"
+            echo "$CERT_INFO"
+            exit 1
+          fi
+
           if echo "$CERT_INFO" | grep -qi "CN=Android Debug"; then
             echo "::error::The keystore in KEYSTORE is an Android Debug certificate. Google Play requires a non-debug release keystore."
             exit 1
           fi
 
           export KEYSTORE_FILE="$KS_FILE"
-          export KEY_PASSWORD="${KEY_PASSWORD:-$STORE_PASSWORD}"
+          export STORE_PASSWORD="$STORE_PASSWORD"
+          export KEY_ALIAS="$KEY_ALIAS"
+          export KEY_PASSWORD="$KEY_PASSWORD"
 
           ./gradlew bundleRelease --stacktrace --no-daemon
 
           RAW_AAB=$(find app/build/outputs/bundle/release -name "*.aab" | head -n 1)
           cp "$RAW_AAB" ../SahojDokan.aab
 
-          AAB_VERIFY=$(jarsigner -verify -verbose -certs ../SahojDokan.aab)
+          if ! AAB_VERIFY=$(jarsigner -verify -verbose -certs ../SahojDokan.aab 2>&1); then
+            echo "::error::jarsigner verification failed on SahojDokan.aab:"
+            echo "$AAB_VERIFY"
+            exit 1
+          fi
+
           if echo "$AAB_VERIFY" | grep -qi "CN=Android Debug"; then
             echo "::error::Generated SahojDokan.aab is signed with Android Debug! Aborting upload."
             exit 1
